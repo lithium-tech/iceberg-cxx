@@ -95,13 +95,13 @@ IncludeCategories:
     Priority:        3
     SortPriority:    2
     CaseSensitive:   false
-  - Regex:           '"(arrow|parquet)/.*'
+  - Regex:           '"tea/.*'
     Priority:        4
-    SortPriority:    3
+    SortPriority:    4
     CaseSensitive:   false
   - Regex:           '.*'
     Priority:        5
-    SortPriority:    4
+    SortPriority:    3
     CaseSensitive:   false
 IncludeIsMainRegex: '([-_](test|unittest))?$'
 IncludeIsMainSourceRegex: ''
