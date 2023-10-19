@@ -1,6 +1,9 @@
+# BasedOnStyle:  Google
+IndentWidth:     2
+ColumnLimit:     80
+UseTab:          Never
 ---
 Language:        Cpp
-# BasedOnStyle:  Google
 AccessModifierOffset: -1
 AlignAfterOpenBracket: Align
 AlignArrayOfStructures: None
@@ -57,7 +60,6 @@ BreakConstructorInitializersBeforeComma: false
 BreakConstructorInitializers: BeforeColon
 BreakAfterJavaFieldAnnotations: false
 BreakStringLiterals: true
-ColumnLimit:     80
 CommentPragmas:  '^ IWYU pragma:'
 QualifierAlignment: Leave
 CompactNamespaces: false
@@ -112,7 +114,6 @@ IndentGotoLabels: true
 IndentPPDirectives: None
 IndentExternBlock: AfterExternBlock
 IndentRequires:  false
-IndentWidth:     2
 IndentWrappedFunctionNames: false
 InsertTrailingCommas: None
 JavaScriptQuotes: Leave
@@ -219,7 +220,6 @@ StatementMacros:
   - QT_REQUIRE_VERSION
 TabWidth:        8
 UseCRLF:         false
-UseTab:          Never
 WhitespaceSensitiveMacros:
   - STRINGIZE
   - PP_STRINGIZE
@@ -227,4 +227,6 @@ WhitespaceSensitiveMacros:
   - NS_SWIFT_NAME
   - CF_SWIFT_NAME
 ...
-
+---
+Language: Proto
+DisableFormat:   false
