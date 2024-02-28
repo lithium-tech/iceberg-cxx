@@ -1,4 +1,9 @@
+if(ICEBERG_LOCAL_TESTS)
+    add_compile_definitions(ICEBERG_LOCAL_TESTS)
+endif()
+
 add_executable(iceberg_test
+    hive_client_test.cpp
     manifest_entry_test.cpp
     manifest_metadata_test.cpp
     table_metadata_test.cpp
