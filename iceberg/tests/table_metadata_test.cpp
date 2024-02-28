@@ -1,5 +1,6 @@
+#include "iceberg/src/table_metadata.h"
+
 #include "gtest/gtest.h"
-#include "iceberg/src/metadata.h"
 
 namespace iceberg {
 
@@ -178,7 +179,7 @@ TEST(Metadata, SanityCheck) {
   } ]
 })EOF";
 
-  const TableMetadataV2 metadata = MakeMetadata(json);
+  const TableMetadataV2 metadata = MakeTableMetadataV2(json);
   EXPECT_EQ(metadata.location, "./lineitem_iceberg");
   EXPECT_EQ(metadata.table_uuid, "a319422b-6f8c-44d0-90ba-96242d9a1d7b");
   EXPECT_EQ(metadata.last_sequence_number, 2);

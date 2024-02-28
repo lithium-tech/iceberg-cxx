@@ -1,4 +1,4 @@
-#include "iceberg/src/metadata.h"
+#include "iceberg/src/table_metadata.h"
 
 #include <functional>
 
@@ -304,13 +304,13 @@ TableMetadataV2 TableMetadataV2Builder::Build() && {
       std::move(metadata_log), default_sort_order_id.value());
 }
 
-TableMetadataV2 MakeMetadata(const std::string& json) {
+TableMetadataV2 MakeTableMetadataV2(const std::string& json) {
   TableMetadataV2Builder builder;
 
   rapidjson::Document document;
   document.Parse(json.c_str(), json.size());
   if (!document.IsObject()) {
-    throw std::runtime_error("MakeMetadata: !document.IsObject()");
+    throw std::runtime_error("MakeTableMetadataV2: !document.IsObject()");
   }
 
   builder.table_uuid = ExtractStringField(document, "table-uuid");

@@ -88,6 +88,6 @@ struct TableMetadataV2Builder {
   std::optional<int32_t> default_sort_order_id;
 };
 
-TableMetadataV2 MakeMetadata(const std::string& json);
+TableMetadataV2 MakeTableMetadataV2(const std::string& json);
 
 }  // namespace iceberg
