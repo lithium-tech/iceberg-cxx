@@ -1,0 +1,2 @@
+add_executable(hive_metastore_client hive_metastore_client.cpp)
+target_link_libraries(hive_metastore_client PUBLIC _hivemetastore _thrift)
