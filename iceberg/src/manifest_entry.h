@@ -10,9 +10,9 @@ namespace iceberg {
 
 struct DataFile {
   enum class Content {
-    DATA = 0,
-    POSITION_DELETES = 1,
-    EQUALITY_DELETES = 2,
+    kData = 0,
+    kPositionDelete = 1,
+    kEqualityDelete = 2,
   };
 
   Content content;
@@ -52,9 +52,9 @@ struct DataFile {
 
 struct ManifestEntry {
   enum class Status {
-    EXISTING = 0,
-    ADDED = 1,
-    DELETED = 2,
+    kExisting = 0,
+    kAdded = 1,
+    kDeleted = 2,
   };
 
   Status status;

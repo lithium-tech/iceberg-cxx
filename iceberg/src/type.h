@@ -6,23 +6,23 @@
 namespace iceberg {
 
 enum class Type {
-  BOOLEAN = 0,
-  INT = 1,
-  LONG = 2,
-  FLOAT = 3,
-  DOUBLE = 4,
-  DECIMAL = 5,
-  DATE = 6,
-  TIME = 7,
-  TIMESTAMP = 8,
-  TIMESTAMPTZ = 9,
-  STRING = 10,
-  UUID = 11,
-  FIXED = 12,
-  BINARY = 13,
-  STRUCT = 14,
-  LIST = 15,
-  MAP = 16
+  kBoolean = 0,
+  kInt = 1,
+  kLong = 2,
+  kFloat = 3,
+  kDouble = 4,
+  kDecimal = 5,
+  kDate = 6,
+  kTime = 7,
+  kTimestamp = 8,
+  kTimestamptz = 9,
+  kString = 10,
+  kUuid = 11,
+  kFixed = 12,
+  kBinary = 13,
+  kStruct = 14,
+  kList = 15,
+  kMap = 16
 };
 
 class DataType {
@@ -30,7 +30,7 @@ class DataType {
   DataType(Type id) : id_(id) {}
   virtual ~DataType() = default;
 
-  bool IsDecimal() const { return id_ == Type::DECIMAL; }
+  bool IsDecimal() const { return id_ == Type::kDecimal; }
 
  protected:
   Type id_;
@@ -44,7 +44,7 @@ class PrimitiveDataType final : public DataType {
 class DecimalDataType final : public DataType {
  public:
   DecimalDataType(int32_t precision, int32_t scale)
-      : DataType(Type::DECIMAL), precision_(precision), scale_(scale) {
+      : DataType(Type::kDecimal), precision_(precision), scale_(scale) {
     if (precision <= 0) {
       throw std::runtime_error("PrimitiveDataType: precision = " +
                                std::to_string(precision));

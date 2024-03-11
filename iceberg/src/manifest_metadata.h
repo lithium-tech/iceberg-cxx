@@ -6,8 +6,8 @@
 namespace iceberg {
 
 enum class ContentType {
-  DATA = 0,
-  DELETES = 1,
+  kData = 0,
+  kDelete = 1,
 };
 
 struct ManifestMetadata {

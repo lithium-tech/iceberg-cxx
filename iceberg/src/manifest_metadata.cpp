@@ -21,7 +21,7 @@ std::vector<ManifestMetadata> MakeManifestList(const std::string& data) {
     manifest.manifest_length = manifest_file.manifest_length;
     manifest.partition_spec_id = manifest_file.partition_spec_id;
     manifest.content_type =
-        manifest_file.content == 0 ? ContentType::DATA : ContentType::DELETES;
+        manifest_file.content == 0 ? ContentType::kData : ContentType::kDelete;
     manifest.sequence_number = manifest_file.sequence_number;
     manifest.min_sequence_number = manifest_file.min_sequence_number;
     manifest.added_snapshot_id = manifest_file.added_snapshot_id;

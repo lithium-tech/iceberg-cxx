@@ -18,12 +18,12 @@ TEST(ManifestEntryTest, Test) {
   std::vector<ManifestEntry> entries = MakeManifestEntries(data);
   EXPECT_EQ(entries.size(), 1);
   const auto& entry = entries[0];
-  EXPECT_EQ(entry.status, ManifestEntry::Status::DELETED);
+  EXPECT_EQ(entry.status, ManifestEntry::Status::kDeleted);
   EXPECT_EQ(entry.snapshot_id, 7635660646343998149);
   EXPECT_EQ(entry.sequence_number, std::nullopt);
   EXPECT_EQ(entry.file_sequence_number, std::nullopt);
   const auto& data_file = entry.data_file;
-  EXPECT_EQ(data_file.content, DataFile::Content::DATA);
+  EXPECT_EQ(data_file.content, DataFile::Content::kData);
   EXPECT_EQ(data_file.file_path,
             "lineitem_iceberg/data/"
             "00000-411-0792dcfe-4e25-4ca3-8ada-175286069a47-00001.parquet");
@@ -58,12 +58,12 @@ TEST(ManifestEntryTest, Test2) {
   std::vector<ManifestEntry> entries = MakeManifestEntries(data);
   EXPECT_EQ(entries.size(), 1);
   const auto& entry = entries[0];
-  EXPECT_EQ(entry.status, ManifestEntry::Status::ADDED);
+  EXPECT_EQ(entry.status, ManifestEntry::Status::kAdded);
   EXPECT_EQ(entry.snapshot_id, 7635660646343998149);
   EXPECT_EQ(entry.sequence_number, std::nullopt);
   EXPECT_EQ(entry.file_sequence_number, std::nullopt);
   const auto& data_file = entry.data_file;
-  EXPECT_EQ(data_file.content, DataFile::Content::DATA);
+  EXPECT_EQ(data_file.content, DataFile::Content::kData);
   EXPECT_EQ(data_file.file_path,
             "lineitem_iceberg/data/"
             "00041-414-f3c73457-bbd6-4b92-9c15-17b241171b16-00001.parquet");

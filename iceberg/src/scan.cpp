@@ -103,14 +103,14 @@ arrow::Result<std::vector<ManifestEntry>> GetAllEntries(
     std::vector<ManifestEntry> entries_input =
         MakeManifestEntries(entries_content);
     for (auto&& entry : entries_input) {
-      if (entry.status == ManifestEntry::Status::DELETED) {
+      if (entry.status == ManifestEntry::Status::kDeleted) {
         continue;
       }
 
       int64_t data_sequence_number;
       if (entry.sequence_number.has_value()) {
         data_sequence_number = entry.sequence_number.value();
-      } else if (entry.status == ManifestEntry::Status::ADDED) {
+      } else if (entry.status == ManifestEntry::Status::kAdded) {
         data_sequence_number = manifest_metadata.sequence_number;
       } else {
         return arrow::Status::ExecutionError("no sequence_number");
