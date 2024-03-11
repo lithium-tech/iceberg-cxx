@@ -4,6 +4,7 @@
 #include <thrift/transport/TTransportUtils.h>
 
 #include <iostream>
+#include <stdexcept>
 
 using namespace std;
 using namespace apache::thrift;
@@ -11,32 +12,58 @@ using namespace apache::thrift::protocol;
 using namespace apache::thrift::transport;
 using namespace Apache::Hadoop::Hive;
 
+namespace {
+
+enum class Mode {
+  kGetTables,
+  kGetTable,
+  kGetDatabases,
+  kUnknown,
+};
+
+struct ModeStringEntry {
+  std::string_view name;
+  Mode mode;
+};
+
+constexpr ModeStringEntry kModeStringEntries[] = {
+    {"get-tables", Mode::kGetTables},
+    {"get-table", Mode::kGetTable},
+    {"get-databases", Mode::kGetDatabases}};
+
+Mode StringToMode(const std::string& str) {
+  for (const auto& [name, mode] : kModeStringEntries) {
+    if (name == str) {
+      return mode;
+    }
+  }
+  return Mode::kUnknown;
+}
+
+void PrintSupportModes(std::ostream& os) {
+  os << "Supported modes: ";
+  for (const auto& [name, mode] : kModeStringEntries) {
+    os << name << " ";
+  }
+  os << std::endl;
+}
+
+}  // namespace
+
 int main(int argc, char** argv) {
   if (argc < 4) {
-    std::cerr << "Supportet modes: get-tables, get-table" << std::endl;
     std::cerr << "Usage: " << argv[0] << " <mode> <endpoint> <port> ..."
               << std::endl;
+    PrintSupportModes(std::cerr);
     return 1;
   }
-  const std::string mode = argv[1];
+  const Mode mode = StringToMode(argv[1]);
   const std::string endpoint = argv[2];
   const int port = std::stoi(argv[3]);
-  if (mode != "get-tables" && mode != "get-table") {
-    std::cerr << "Supportet modes: get-tables, get-table" << std::endl;
+  if (mode == Mode::kUnknown) {
+    PrintSupportModes(std::cerr);
     return 1;
   }
-  if (mode == "get-tables" && argc != 5) {
-    std::cerr << "Usage: " << argv[0]
-              << " get-tables <endpoint> <port> <db_name>" << std::endl;
-    return 1;
-  }
-  if (mode == "get-table" && argc != 6) {
-    std::cerr << "Usage: " << argv[0]
-              << " get-table <endpoint> <port> <db_name> <table_name>"
-              << std::endl;
-    return 1;
-  }
-  const std::string db_name = argv[4];
   std::shared_ptr<TTransport> socket(new TSocket(endpoint, port));
   std::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
   std::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
@@ -44,20 +71,52 @@ int main(int argc, char** argv) {
 
   try {
     transport->open();
-    if (mode == "get-tables") {
-      std::vector<std::string> tables;
-      client.get_tables(tables, db_name, "*");
+    switch (mode) {
+      case Mode::kGetTables: {
+        if (argc != 5) {
+          std::cerr << "Usage: " << argv[0]
+                    << " get-tables <endpoint> <port> <db_name>" << std::endl;
+          return 1;
+        }
+        const std::string db_name = argv[4];
+        std::vector<std::string> tables;
+        client.get_tables(tables, db_name, "*");
 
-      for (const auto& table_name : tables) {
-        std::cout << table_name << std::endl;
+        for (const auto& table_name : tables) {
+          std::cout << table_name << std::endl;
+        }
+        break;
       }
-    } else /* mode == get-table */ {
-      const std::string table_name = argv[5];
-      Table table;
-      client.get_table(table, db_name, table_name);
-      table.printTo(std::cout);
+      case Mode::kGetTable: {
+        if (argc != 6) {
+          std::cerr << "Usage: " << argv[0]
+                    << " get-table <endpoint> <port> <db_name> <table_name>"
+                    << std::endl;
+          return 1;
+        }
+        const std::string db_name = argv[4];
+        const std::string table_name = argv[5];
+        Table table;
+        client.get_table(table, db_name, table_name);
+        table.printTo(std::cout);
+        break;
+      }
+      case Mode::kGetDatabases: {
+        if (argc != 4) {
+          std::cerr << "Usage: " << argv[0] << " get-table <endpoint> <port>"
+                    << std::endl;
+          return 1;
+        }
+        std::vector<std::string> databases;
+        client.get_all_databases(databases);
+        for (const auto& name : databases) {
+          std::cout << name << std::endl;
+        }
+        break;
+      }
+      default:
+        throw std::runtime_error("Unknown mode");
     }
-
     transport->close();
   } catch (TException& tx) {
     cout << "ERROR: " << tx.what() << endl;
