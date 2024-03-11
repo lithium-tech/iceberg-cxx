@@ -45,8 +45,8 @@ HiveClient::HiveClient(const std::string& host, int port)
 
 HiveClient::~HiveClient() = default;
 
-std::string HiveClient::GetMetadataLocation(const std::string& db_name,
-                                            const std::string& table_name) {
+std::string HiveClient::GetMetadataLocation(
+    const std::string& db_name, const std::string& table_name) const {
   return impl_->GetMetadataLocation(db_name, table_name);
 }
 

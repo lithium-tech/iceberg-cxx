@@ -14,7 +14,7 @@ class HiveClient {
   ~HiveClient();
 
   std::string GetMetadataLocation(const std::string& db_name,
-                                  const std::string& table_name);
+                                  const std::string& table_name) const;
 
  private:
   std::unique_ptr<HiveClientImpl> impl_;

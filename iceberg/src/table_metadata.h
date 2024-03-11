@@ -40,6 +40,8 @@ struct TableMetadataV2 {
         metadata_log(std::move(metadata_log)),
         default_sort_order_id(default_sort_order_id) {}
 
+  std::optional<std::string> GetCurrentManifestListPath() const;
+
   std::string table_uuid;
   std::string location;
   int64_t last_sequence_number;

@@ -273,6 +273,18 @@ std::optional<std::map<std::string, std::string>> ExtractProperties(
 }
 }  // namespace
 
+std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
+  if (!current_snapshot_id.has_value() || !snapshots.has_value()) {
+    return std::nullopt;
+  }
+  for (const auto& snapshot : *snapshots) {
+    if (snapshot.snapshot_id == current_snapshot_id.value()) {
+      return snapshot.manifest_list;
+    }
+  }
+  return std::nullopt;
+}
+
 TableMetadataV2 TableMetadataV2Builder::Build() && {
 #define ASSERT_HAS_VALUE(field)                                       \
   do {                                                                \

@@ -7,6 +7,8 @@ add_library(iceberg
     manifest_entry_schema.h
     manifest_metadata.cpp
     manifest_metadata.h
+    scan.cpp
+    scan.h
     schema.h
     snapshot.h
     table_metadata.cpp
@@ -16,4 +18,5 @@ add_library(iceberg
 )
 
 target_link_libraries(iceberg PRIVATE rapidjson _avrocpp _boost_iostreams _hivemetastore)
+target_link_libraries(iceberg PUBLIC Arrow::arrow_static)
 target_include_directories(iceberg PUBLIC "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/vendor/boost")
