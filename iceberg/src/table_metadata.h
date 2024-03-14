@@ -42,6 +42,8 @@ struct TableMetadataV2 {
 
   std::optional<std::string> GetCurrentManifestListPath() const;
 
+  Schema GetCurrentSchema() const;
+
   std::string table_uuid;
   std::string location;
   int64_t last_sequence_number;

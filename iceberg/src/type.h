@@ -30,7 +30,11 @@ class DataType {
   DataType(Type id) : id_(id) {}
   virtual ~DataType() = default;
 
-  bool IsDecimal() const { return id_ == Type::kDecimal; }
+  virtual bool IsDecimal() const { return false; }
+
+  virtual bool IsPrimitive() const { return false; }
+
+  virtual std::string ToString() const = 0;
 
  protected:
   Type id_;
@@ -39,6 +43,10 @@ class DataType {
 class PrimitiveDataType final : public DataType {
  public:
   PrimitiveDataType(Type id) : DataType(id) {}
+
+  bool IsPrimitive() const override { return true; }
+
+  std::string ToString() const override;
 };
 
 class DecimalDataType final : public DataType {
@@ -55,6 +63,10 @@ class DecimalDataType final : public DataType {
     }
   }
 
+  bool IsDecimal() const override { return true; }
+
+  std::string ToString() const override;
+
   int32_t Precision() const { return precision_; }
   int32_t Scale() const { return scale_; }
 
@@ -66,5 +78,7 @@ class DecimalDataType final : public DataType {
 };
 
 std::shared_ptr<const DataType> StringToDataType(const std::string& str);
+
+std::string DataTypeToString(std::shared_ptr<const DataType> data_type);
 
 }  // namespace iceberg

@@ -69,7 +69,7 @@ arrow::Result<std::string> ReadFile(const std::string& path,
 
 }  // namespace
 
-arrow::Result<std::vector<ManifestEntry>> GetAllEntries(
+arrow::Result<ScanMetadata> GetScanMetadata(
     const std::string& db_name, const std::string& table_name,
     std::shared_ptr<arrow::fs::S3FileSystem> s3fs,
     const HiveClient& hive_client) {
@@ -96,6 +96,8 @@ arrow::Result<std::vector<ManifestEntry>> GetAllEntries(
       MakeManifestList(manifest_metadatas_content);
 
   std::vector<ManifestEntry> entries_output;
+  Schema schema = table_metadata.GetCurrentSchema();
+
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.manifest_path;
     ARROW_ASSIGN_OR_RAISE(const std::string entries_content,
@@ -119,7 +121,9 @@ arrow::Result<std::vector<ManifestEntry>> GetAllEntries(
       entries_output.emplace_back(std::move(entry));
     }
   }
-  return entries_output;
+
+  return ScanMetadata{.schema = std::move(schema),
+                      .entries = std::move(entries_output)};
 }
 
 }  // namespace iceberg

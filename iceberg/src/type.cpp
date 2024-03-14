@@ -1,7 +1,9 @@
 #include "iceberg/src/type.h"
 
+#include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 
 namespace iceberg {
 
@@ -35,6 +37,21 @@ std::optional<Type> NameToType(const std::string& name_to_find) {
   return std::nullopt;
 }
 }  // namespace
+
+std::string PrimitiveDataType::ToString() const {
+  for (const auto& [name, type] : kStringToPrimitiveTypeId) {
+    if (type == id_) {
+      return std::string(name);
+    }
+  }
+  throw std::runtime_error(
+      "Internal error in tea. PrimitiveDataType::ToString()");
+}
+
+std::string DecimalDataType::ToString() const {
+  return "decimal(" + std::to_string(precision_) + ", " +
+         std::to_string(scale_) + ")";
+}
 
 std::shared_ptr<const DataType> StringToDataType(const std::string& str) {
   if (auto maybe_value = NameToType(str); maybe_value.has_value()) {

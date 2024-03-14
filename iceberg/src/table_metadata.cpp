@@ -1,6 +1,7 @@
 #include "iceberg/src/table_metadata.h"
 
 #include <functional>
+#include <stdexcept>
 
 #include "iceberg/src/field.h"
 #include "rapidjson/document.h"
@@ -283,6 +284,31 @@ std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
     }
   }
   return std::nullopt;
+}
+
+Schema TableMetadataV2::GetCurrentSchema() const {
+  if (!current_snapshot_id.has_value() || !snapshots.has_value()) {
+    throw std::runtime_error("GetCurrentSchema: no current snapshot");
+  }
+  std::optional<int64_t> schema_id;
+  for (const auto& snapshot : *snapshots) {
+    if (snapshot.snapshot_id == current_snapshot_id.value()) {
+      if (!snapshot.schema_id.has_value()) {
+        throw std::runtime_error("GetCurrentSchema: no schema id");
+      }
+      schema_id = snapshot.schema_id.value();
+    }
+  }
+  if (!schema_id.has_value()) {
+    throw std::runtime_error("GetCurrentSchema: no current snapshot");
+  }
+  for (const auto& schema : schemas) {
+    if (schema.GetSchemaId() == schema_id.value()) {
+      return schema;
+    }
+  }
+  throw std::runtime_error(
+      "GetCurrentSchema: no schema with current schema id");
 }
 
 TableMetadataV2 TableMetadataV2Builder::Build() && {

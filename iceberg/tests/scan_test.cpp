@@ -57,15 +57,17 @@ arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> MakeS3FileSystem(
 #ifdef ICEBERG_LOCAL_TESTS
 TEST(Scan, Test) {
   auto maybe_config = MakeDefaultConfig();
-  ASSERT_TRUE(maybe_config.ok());
+  ASSERT_EQ(maybe_config.status(), arrow::Status::OK());
   auto config = maybe_config.ValueUnsafe();
   auto s3fs = MakeS3FileSystem(config.s3);
   ASSERT_TRUE(s3fs.ok());
   auto fs = s3fs.ValueUnsafe();
   HiveClient hive_client("localhost", 9083);
-  auto maybe_entries = GetAllEntries("test_wrk", "ashv_test3", fs, hive_client);
-  ASSERT_TRUE(maybe_entries.ok());
-  auto entries = maybe_entries.ValueUnsafe();
+  auto maybe_scan_metadata =
+      GetScanMetadata("test_wrk", "ashv_test3", fs, hive_client);
+  ASSERT_TRUE(maybe_scan_metadata.ok());
+  auto entries = maybe_scan_metadata.ValueUnsafe().entries;
+  auto schema = maybe_scan_metadata.ValueUnsafe().schema;
   SortEntries(entries);
   ASSERT_EQ(entries.size(), 6);
   {
@@ -86,6 +88,10 @@ TEST(Scan, Test) {
               "s3a://iceberg.test-wrk.ashv-test3/ashv_test3/diff.613/"
               "out_1_0_DATA.parquet");
   }
+
+  EXPECT_EQ(schema.GetSchemaId(), 0);
+  EXPECT_EQ(schema.GetFields().size(), 3);
+
   ASSERT_EQ(arrow::fs::FinalizeS3(), arrow::Status::OK());
 }
 #endif

@@ -2,6 +2,8 @@ add_library(iceberg
     field.h
     hive_client.cpp
     hive_client.h
+    json.cpp
+    json.h
     manifest_entry.cpp
     manifest_entry.h
     manifest_entry_schema.h
