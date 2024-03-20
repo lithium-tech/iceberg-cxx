@@ -1,4 +1,5 @@
 #include <ThriftHiveMetastore.h>
+#include <hive_metastore_types.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/transport/TSocket.h>
 #include <thrift/transport/TTransportUtils.h>
@@ -18,6 +19,7 @@ enum class Mode {
   kGetTables,
   kGetTable,
   kGetDatabases,
+  kCreateTable,
   kUnknown,
 };
 
@@ -29,7 +31,8 @@ struct ModeStringEntry {
 constexpr ModeStringEntry kModeStringEntries[] = {
     {"get-tables", Mode::kGetTables},
     {"get-table", Mode::kGetTable},
-    {"get-databases", Mode::kGetDatabases}};
+    {"get-databases", Mode::kGetDatabases},
+    {"create-table", Mode::kCreateTable}};
 
 Mode StringToMode(const std::string& str) {
   for (const auto& [name, mode] : kModeStringEntries) {
@@ -80,8 +83,7 @@ int main(int argc, char** argv) {
         }
         const std::string db_name = argv[4];
         std::vector<std::string> tables;
-        client.get_tables(tables, db_name, "*");
-
+        client.get_all_tables(tables, db_name);
         for (const auto& table_name : tables) {
           std::cout << table_name << std::endl;
         }
@@ -112,6 +114,24 @@ int main(int argc, char** argv) {
         for (const auto& name : databases) {
           std::cout << name << std::endl;
         }
+        break;
+      }
+      case Mode::kCreateTable: {
+        if (argc != 7) {
+          std::cerr << "Usage: " << argv[0]
+                    << " create-table <endpoint> <port> <db_name> <table_name> "
+                       "<metadata_location>"
+                    << std::endl;
+          return 1;
+        }
+        const std::string db_name = argv[4];
+        const std::string table_name = argv[5];
+        const std::string metadata_location = argv[6];
+        Table table;
+        table.dbName = db_name;
+        table.tableName = table_name;
+        table.parameters["metadata_location"] = metadata_location;
+        client.create_table(table);
         break;
       }
       default:
