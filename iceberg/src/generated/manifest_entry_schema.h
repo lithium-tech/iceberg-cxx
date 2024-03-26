@@ -265,4 +265,4 @@ constexpr std::string_view kMetadataEntrySchemaJson = R"EOF(
     ]
 })EOF";
 
-}
+}  // namespace iceberg

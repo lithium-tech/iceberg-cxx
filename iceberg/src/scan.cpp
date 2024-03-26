@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <memory>
+#include <utility>
 
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/filesystem/s3fs.h"

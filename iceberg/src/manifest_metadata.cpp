@@ -1,6 +1,7 @@
 #include "iceberg/src/manifest_metadata.h"
 
 #include <sstream>
+#include <utility>
 
 #include "avro/DataFile.hh"
 #include "iceberg/src/generated/manifest_file.hh"

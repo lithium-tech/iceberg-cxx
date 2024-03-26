@@ -7,12 +7,6 @@
 #include <iostream>
 #include <stdexcept>
 
-using namespace std;
-using namespace apache::thrift;
-using namespace apache::thrift::protocol;
-using namespace apache::thrift::transport;
-using namespace Apache::Hadoop::Hive;
-
 namespace {
 
 enum class Mode {
@@ -54,6 +48,15 @@ void PrintSupportModes(std::ostream& os) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  using Apache::Hadoop::Hive::Table;
+  using Apache::Hadoop::Hive::ThriftHiveMetastoreClient;
+  using apache::thrift::TException;
+  using apache::thrift::protocol::TBinaryProtocol;
+  using apache::thrift::protocol::TProtocol;
+  using apache::thrift::transport::TBufferedTransport;
+  using apache::thrift::transport::TSocket;
+  using apache::thrift::transport::TTransport;
+
   if (argc < 4) {
     std::cerr << "Usage: " << argv[0] << " <mode> <endpoint> <port> ..."
               << std::endl;
@@ -139,6 +142,6 @@ int main(int argc, char** argv) {
     }
     transport->close();
   } catch (TException& tx) {
-    cout << "ERROR: " << tx.what() << endl;
+    std::cout << "ERROR: " << tx.what() << std::endl;
   }
 }

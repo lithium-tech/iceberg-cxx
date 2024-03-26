@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cassert>
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 
 namespace iceberg {
 
@@ -22,19 +25,28 @@ enum class Type {
   kBinary = 13,
   kStruct = 14,
   kList = 15,
-  kMap = 16
+  kMap = 16,
+  kUnknown = 17
 };
+
+std::optional<Type> NameToType(const std::string& name);
+
+std::optional<std::string> TypeToName(Type type);
 
 class DataType {
  public:
-  DataType(Type id) : id_(id) {}
+  explicit DataType(Type id) : id_(id) {}
   virtual ~DataType() = default;
 
   virtual bool IsDecimal() const { return false; }
 
   virtual bool IsPrimitive() const { return false; }
 
+  virtual bool IsList() const { return false; }
+
   virtual std::string ToString() const = 0;
+
+  Type Id() const { return id_; }
 
  protected:
   Type id_;
@@ -44,9 +56,13 @@ class PrimitiveDataType final : public DataType {
  public:
   PrimitiveDataType(Type id) : DataType(id) {}
 
-  bool IsPrimitive() const override { return true; }
+  std::string ToString() const override {
+    std::optional<std::string> result = TypeToName(id_).value();
+    assert(result.has_value());
+    return result.value();
+  }
 
-  std::string ToString() const override;
+  bool IsPrimitive() const override { return true; }
 };
 
 class DecimalDataType final : public DataType {
@@ -63,9 +79,12 @@ class DecimalDataType final : public DataType {
     }
   }
 
-  bool IsDecimal() const override { return true; }
+  std::string ToString() const override {
+    return "decimal(" + std::to_string(precision_) + ", " +
+           std::to_string(scale_) + ")";
+  }
 
-  std::string ToString() const override;
+  bool IsDecimal() const override { return true; }
 
   int32_t Precision() const { return precision_; }
   int32_t Scale() const { return scale_; }
@@ -77,8 +96,31 @@ class DecimalDataType final : public DataType {
   int32_t scale_;
 };
 
-std::shared_ptr<const DataType> StringToDataType(const std::string& str);
+class ListDataType final : public DataType {
+ public:
+  ListDataType(int32_t element_id, bool element_required,
+               std::shared_ptr<const DataType> element_type)
+      : DataType(Type::kList),
+        element_id_(element_id),
+        element_required_(element_required),
+        element_type_(std::move(element_type)) {}
 
-std::string DataTypeToString(std::shared_ptr<const DataType> data_type);
+  int32_t ElementId() const { return element_id_; }
+
+  bool ElementRequired() const { return element_required_; }
+
+  std::shared_ptr<const DataType> ElementType() const { return element_type_; }
+
+  bool IsList() const override { return true; }
+
+  std::string ToString() const override {
+    return "list(" + element_type_->ToString() + ")";
+  }
+
+ private:
+  int32_t element_id_;
+  bool element_required_;
+  std::shared_ptr<const DataType> element_type_;
+};
 
 }  // namespace iceberg

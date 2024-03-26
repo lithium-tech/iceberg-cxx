@@ -1,6 +1,8 @@
 #pragma once
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "arrow/filesystem/s3fs.h"
 #include "arrow/result.h"

@@ -6,16 +6,14 @@
 
 namespace iceberg {
 
-// TODO(gmusya)
-#ifdef ICEBERG_LOCAL_TESTS
+#ifdef USE_ICEBERG
 TEST(HiveClient, Test) {
-  HiveClient hive_client("localhost", 9083);
+  HiveClient hive_client("127.0.0.1", 9090);
   const std::string metadata_location =
-      hive_client.GetMetadataLocation("user", "bigcat");
-  ASSERT_EQ(
-      metadata_location,
-      "s3://datalake/user.db/bigcat-51d602c06af049c3888ebe678b5ebe15/"
-      "metadata/00004-793695fb-d629-4855-8990-0efea814203a.metadata.json");
+      hive_client.GetMetadataLocation("gperov", "test");
+  ASSERT_EQ(metadata_location,
+            "s3://warehouse/gperov/test/metadata/"
+            "00003-aaa5649c-d0a0-4bdd-bf89-1a63bba01b37.metadata.json");
 }
 #endif
 

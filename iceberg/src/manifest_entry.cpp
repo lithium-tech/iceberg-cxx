@@ -6,17 +6,20 @@
 #include "avro/Compiler.hh"
 #include "avro/DataFile.hh"
 #include "avro/ValidSchema.hh"
-#include "iceberg/src/manifest_entry_schema.h"
 #include "iceberg/src/generated/manifest_entry.hh"
+#include "iceberg/src/generated/manifest_entry_schema.h"
 
 namespace iceberg {
 
 namespace {
+
+// clang-format off
 template <typename KV>
 concept KeyValue = requires(KV a) {
-  { a.key };
-  { a.value };
-};
+                     { a.key };
+                     { a.value };
+                   };
+// clang-format on
 
 template <typename K, typename V, KeyValue KV>
 std::pair<K, V> KVToPair(KV kv) {

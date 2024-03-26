@@ -5,6 +5,7 @@
 #include <thrift/transport/TSocket.h>
 #include <thrift/transport/TTransportUtils.h>
 
+#include <map>
 #include <stdexcept>
 
 namespace iceberg {

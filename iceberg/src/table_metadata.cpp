@@ -1,9 +1,12 @@
 #include "iceberg/src/table_metadata.h"
 
 #include <functional>
+#include <memory>
+#include <sstream>
 #include <stdexcept>
 
 #include "iceberg/src/field.h"
+#include "iceberg/src/type.h"
 #include "rapidjson/document.h"
 
 namespace iceberg {
@@ -88,12 +91,60 @@ bool ExtractBooleanField(const rapidjson::Value& document,
   return document[c_str].GetBool();
 }
 
+std::shared_ptr<const DataType> JsonToDataType(const rapidjson::Value& value) {
+  if (value.IsString()) {
+    std::string str = value.GetString();
+    if (auto maybe_value = NameToType(str); maybe_value.has_value()) {
+      return std::make_shared<PrimitiveDataType>(maybe_value.value());
+    }
+    if (str.starts_with("decimal")) {
+      // decimal(P, S)
+      std::stringstream ss(str);
+      ss.ignore(std::string("decimal(").size());
+      int32_t precision = -1;
+      int32_t scale = -1;
+      ss >> precision;
+      ss.ignore(1);  // skip comma
+      ss >> scale;
+      return std::make_shared<DecimalDataType>(precision, scale);
+    }
+    throw std::runtime_error("JsonToDataType: unknown type '" + str + "'");
+  }
+  if (value.IsObject()) {
+    if (!value.HasMember("type")) {
+      throw std::runtime_error("JsonToDataType: !value.HasMember(\"type\"");
+    }
+
+    std::string type = ExtractStringField(value, "type");
+    if (type == "list") {
+      int32_t element_field_id = ExtractInt32Field(value, "element-id");
+      bool element_required = ExtractBooleanField(value, "element-required");
+
+      if (!value.HasMember("element")) {
+        throw std::runtime_error(
+            "JsonToDataType: !value.HasMember(\"element\"");
+      }
+      std::shared_ptr<const DataType> element_type =
+          JsonToDataType(value["element"]);
+
+      return std::make_shared<ListDataType>(element_field_id, element_required,
+                                            element_type);
+    }
+  }
+  throw std::runtime_error("Unknown type");
+}
+
 Field JsonToField(const rapidjson::Value& document) {
   Field result;
   result.id = ExtractInt32Field(document, "id");
   result.name = ExtractStringField(document, "name");
   result.is_required = ExtractBooleanField(document, "required");
-  result.type = StringToDataType(ExtractStringField(document, "type"));
+
+  if (!document.HasMember("type")) {
+    throw std::runtime_error("JsonToField: document.HasMember(\"type\")");
+  }
+
+  result.type = JsonToDataType(document["type"]);
   return result;
 }
 
