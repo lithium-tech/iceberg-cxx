@@ -26,11 +26,11 @@ struct ManifestMetadata {
   // Snapshot ID that added the manifest
   int64_t added_snapshot_id;
   // Added entry count
-  int32_t added_data_files_count;
+  int32_t added_files_count;
   // Existing entry count
-  int32_t existing_data_files_count;
+  int32_t existing_files_count;
   // Deleted entry count
-  int32_t deleted_data_files_count;
+  int32_t deleted_files_count;
   // Added rows count
   int64_t added_rows_count;
   // Existing rows count

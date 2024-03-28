@@ -9,6 +9,6 @@ add_executable(iceberg_test
 target_link_libraries(iceberg_test PRIVATE gtest iceberg dl)
 
 ADD_CUSTOM_TARGET(test_data_symlink ALL
-    COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/data" "${CMAKE_CURRENT_BINARY_DIR}/data"
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/metadata" "${CMAKE_CURRENT_BINARY_DIR}/metadata"
 )
 add_dependencies(iceberg_test test_data_symlink)

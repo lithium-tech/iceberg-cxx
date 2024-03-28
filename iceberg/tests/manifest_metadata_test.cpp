@@ -10,43 +10,44 @@ namespace iceberg {
 
 TEST(Manifest, SanityCheck) {
   std::ifstream input(
-      "data/"
-      "snap-7635660646343998149-1-10eaca8a-1e1c-421e-ad6d-b232e5ee23d3.avro");
+      "metadata/"
+      "snap-765518724043979080-1-5c8077bc-bb60-406d-ace2-586694e7ebea.avro");
+
   std::stringstream ss;
   ss << input.rdbuf();
   std::string manifest_data = ss.str();
   std::vector<ManifestMetadata> manifest_list = MakeManifestList(manifest_data);
   EXPECT_EQ(manifest_list.size(), 2);
-  EXPECT_EQ(
-      manifest_list[0].manifest_path,
-      "lineitem_iceberg/metadata/10eaca8a-1e1c-421e-ad6d-b232e5ee23d3-m1.avro");
-  EXPECT_EQ(manifest_list[0].manifest_length, 7692);
+  EXPECT_EQ(manifest_list[0].manifest_path,
+            "s3://warehouse/gperov/test/metadata/"
+            "0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro");
+  EXPECT_EQ(manifest_list[0].manifest_length, 6824);
   EXPECT_EQ(manifest_list[0].partition_spec_id, 0);
   EXPECT_EQ(manifest_list[0].content_type, ContentType::kData);
   EXPECT_EQ(manifest_list[0].sequence_number, 2);
   EXPECT_EQ(manifest_list[0].min_sequence_number, 2);
-  EXPECT_EQ(manifest_list[0].added_snapshot_id, 7635660646343998149);
-  EXPECT_EQ(manifest_list[0].added_data_files_count, 1);
-  EXPECT_EQ(manifest_list[0].existing_data_files_count, 0);
-  EXPECT_EQ(manifest_list[0].deleted_data_files_count, 0);
-  EXPECT_EQ(manifest_list[0].added_rows_count, 51793);
+  EXPECT_EQ(manifest_list[0].added_snapshot_id, 2635333433439510679);
+  EXPECT_EQ(manifest_list[0].added_files_count, 6);
+  EXPECT_EQ(manifest_list[0].existing_files_count, 0);
+  EXPECT_EQ(manifest_list[0].deleted_files_count, 0);
+  EXPECT_EQ(manifest_list[0].added_rows_count, 10000);
   EXPECT_EQ(manifest_list[0].existing_rows_count, 0);
   EXPECT_EQ(manifest_list[0].deleted_rows_count, 0);
-  EXPECT_EQ(
-      manifest_list[1].manifest_path,
-      "lineitem_iceberg/metadata/10eaca8a-1e1c-421e-ad6d-b232e5ee23d3-m0.avro");
-  EXPECT_EQ(manifest_list[1].manifest_length, 7687);
+  EXPECT_EQ(manifest_list[1].manifest_path,
+            "s3://warehouse/gperov/test/metadata/"
+            "5c8077bc-bb60-406d-ace2-586694e7ebea-m0.avro");
+  EXPECT_EQ(manifest_list[1].manifest_length, 6712);
   EXPECT_EQ(manifest_list[1].partition_spec_id, 0);
-  EXPECT_EQ(manifest_list[1].content_type, ContentType::kData);
-  EXPECT_EQ(manifest_list[1].sequence_number, 2);
-  EXPECT_EQ(manifest_list[1].min_sequence_number, 2);
-  EXPECT_EQ(manifest_list[1].added_snapshot_id, 7635660646343998149);
-  EXPECT_EQ(manifest_list[1].added_data_files_count, 0);
-  EXPECT_EQ(manifest_list[1].existing_data_files_count, 0);
-  EXPECT_EQ(manifest_list[1].deleted_data_files_count, 1);
-  EXPECT_EQ(manifest_list[1].added_rows_count, 0);
+  EXPECT_EQ(manifest_list[1].content_type, ContentType::kDelete);
+  EXPECT_EQ(manifest_list[1].sequence_number, 3);
+  EXPECT_EQ(manifest_list[1].min_sequence_number, 3);
+  EXPECT_EQ(manifest_list[1].added_snapshot_id, 765518724043979080);
+  EXPECT_EQ(manifest_list[1].added_files_count, 1);
+  EXPECT_EQ(manifest_list[1].existing_files_count, 0);
+  EXPECT_EQ(manifest_list[1].deleted_files_count, 0);
+  EXPECT_EQ(manifest_list[1].added_rows_count, 1);
   EXPECT_EQ(manifest_list[1].existing_rows_count, 0);
-  EXPECT_EQ(manifest_list[1].deleted_rows_count, 60175);
+  EXPECT_EQ(manifest_list[1].deleted_rows_count, 0);
 }
 
 }  // namespace iceberg

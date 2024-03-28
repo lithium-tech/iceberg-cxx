@@ -1,3 +1,10 @@
+#pragma once
+
+#include <string_view>
+
+namespace iceberg {
+
+constexpr std::string_view kManifestListSchemaJson = R"EOF(
 {
     "type": "record",
     "name": "manifest_file",
@@ -121,4 +128,6 @@
             "default": null
         }
     ]
-}
+})EOF";
+
+}  // namespace iceberg
