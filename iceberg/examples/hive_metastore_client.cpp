@@ -22,11 +22,10 @@ struct ModeStringEntry {
   Mode mode;
 };
 
-constexpr ModeStringEntry kModeStringEntries[] = {
-    {"get-tables", Mode::kGetTables},
-    {"get-table", Mode::kGetTable},
-    {"get-databases", Mode::kGetDatabases},
-    {"create-table", Mode::kCreateTable}};
+constexpr ModeStringEntry kModeStringEntries[] = {{"get-tables", Mode::kGetTables},
+                                                  {"get-table", Mode::kGetTable},
+                                                  {"get-databases", Mode::kGetDatabases},
+                                                  {"create-table", Mode::kCreateTable}};
 
 Mode StringToMode(const std::string& str) {
   for (const auto& [name, mode] : kModeStringEntries) {
@@ -58,8 +57,7 @@ int main(int argc, char** argv) {
   using apache::thrift::transport::TTransport;
 
   if (argc < 4) {
-    std::cerr << "Usage: " << argv[0] << " <mode> <endpoint> <port> ..."
-              << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <mode> <endpoint> <port> ..." << std::endl;
     PrintSupportModes(std::cerr);
     return 1;
   }
@@ -80,8 +78,7 @@ int main(int argc, char** argv) {
     switch (mode) {
       case Mode::kGetTables: {
         if (argc != 5) {
-          std::cerr << "Usage: " << argv[0]
-                    << " get-tables <endpoint> <port> <db_name>" << std::endl;
+          std::cerr << "Usage: " << argv[0] << " get-tables <endpoint> <port> <db_name>" << std::endl;
           return 1;
         }
         const std::string db_name = argv[4];
@@ -94,9 +91,7 @@ int main(int argc, char** argv) {
       }
       case Mode::kGetTable: {
         if (argc != 6) {
-          std::cerr << "Usage: " << argv[0]
-                    << " get-table <endpoint> <port> <db_name> <table_name>"
-                    << std::endl;
+          std::cerr << "Usage: " << argv[0] << " get-table <endpoint> <port> <db_name> <table_name>" << std::endl;
           return 1;
         }
         const std::string db_name = argv[4];
@@ -108,8 +103,7 @@ int main(int argc, char** argv) {
       }
       case Mode::kGetDatabases: {
         if (argc != 4) {
-          std::cerr << "Usage: " << argv[0] << " get-table <endpoint> <port>"
-                    << std::endl;
+          std::cerr << "Usage: " << argv[0] << " get-table <endpoint> <port>" << std::endl;
           return 1;
         }
         std::vector<std::string> databases;

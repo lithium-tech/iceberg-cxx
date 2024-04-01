@@ -18,9 +18,8 @@ struct ScanMetadata {
 };
 
 // TODO(gmusya): support arrow::fs::FileSystem
-arrow::Result<ScanMetadata> GetScanMetadata(
-    const std::string& db_name, const std::string& table_name,
-    std::shared_ptr<arrow::fs::S3FileSystem> s3fs,
-    const HiveClient& hive_client);
+arrow::Result<ScanMetadata> GetScanMetadata(const std::string& db_name, const std::string& table_name,
+                                            std::shared_ptr<arrow::fs::S3FileSystem> s3fs,
+                                            const HiveClient& hive_client);
 
 }  // namespace iceberg

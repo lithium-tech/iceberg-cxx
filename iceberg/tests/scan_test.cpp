@@ -16,13 +16,12 @@ namespace iceberg {
 namespace {
 
 void SortEntries(std::vector<ManifestEntry>& entries) {
-  std::sort(entries.begin(), entries.end(),
-            [](const auto& lhs, const auto& rhs) {
-              const auto& d_lhs = lhs.data_file;
-              const auto& d_rhs = rhs.data_file;
-              return std::tie(lhs.sequence_number.value(), d_lhs.file_path) <
-                     std::tie(rhs.sequence_number.value(), d_rhs.file_path);
-            });
+  std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
+    const auto& d_lhs = lhs.data_file;
+    const auto& d_rhs = rhs.data_file;
+    return std::tie(lhs.sequence_number.value(), d_lhs.file_path) <
+           std::tie(rhs.sequence_number.value(), d_rhs.file_path);
+  });
 }
 
 arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> MakeS3FileSystem() {
@@ -32,8 +31,7 @@ arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> MakeS3FileSystem() {
     ARROW_RETURN_NOT_OK(arrow::fs::InitializeS3(global_options));
   }
 
-  auto options =
-      arrow::fs::S3Options::FromAccessKey("minioadmin", "minioadmin");
+  auto options = arrow::fs::S3Options::FromAccessKey("minioadmin", "minioadmin");
   options.endpoint_override = "127.0.0.1:9000";
   options.scheme = "http";
   return arrow::fs::S3FileSystem::Make(options);

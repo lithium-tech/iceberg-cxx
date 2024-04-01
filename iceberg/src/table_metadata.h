@@ -12,18 +12,14 @@
 namespace iceberg {
 
 struct TableMetadataV2 {
-  TableMetadataV2(
-      std::string table_uuid, std::string location,
-      int64_t last_sequence_number, int64_t last_updated_ms,
-      int32_t last_column_id, std::vector<Schema> schemas,
-      int32_t current_schema_id, int32_t default_spec_id,
-      int32_t last_partition_id,
-      std::optional<std::map<std::string, std::string>> properties,
-      std::optional<int64_t> current_snapshot_id,
-      std::optional<std::vector<Snapshot>> snapshots,
-      std::optional<std::vector<std::pair<int64_t, int64_t>>> snapshot_log,
-      std::optional<std::vector<std::pair<int64_t, std::string>>> metadata_log,
-      int32_t default_sort_order_id)
+  TableMetadataV2(std::string table_uuid, std::string location, int64_t last_sequence_number, int64_t last_updated_ms,
+                  int32_t last_column_id, std::vector<Schema> schemas, int32_t current_schema_id,
+                  int32_t default_spec_id, int32_t last_partition_id,
+                  std::optional<std::map<std::string, std::string>> properties,
+                  std::optional<int64_t> current_snapshot_id, std::optional<std::vector<Snapshot>> snapshots,
+                  std::optional<std::vector<std::pair<int64_t, int64_t>>> snapshot_log,
+                  std::optional<std::vector<std::pair<int64_t, std::string>>> metadata_log,
+                  int32_t default_sort_order_id)
       : table_uuid(std::move(table_uuid)),
         location(std::move(location)),
         last_sequence_number(last_sequence_number),

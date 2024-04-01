@@ -67,21 +67,17 @@ class PrimitiveDataType final : public DataType {
 
 class DecimalDataType final : public DataType {
  public:
-  DecimalDataType(int32_t precision, int32_t scale)
-      : DataType(Type::kDecimal), precision_(precision), scale_(scale) {
+  DecimalDataType(int32_t precision, int32_t scale) : DataType(Type::kDecimal), precision_(precision), scale_(scale) {
     if (precision <= 0) {
-      throw std::runtime_error("PrimitiveDataType: precision = " +
-                               std::to_string(precision));
+      throw std::runtime_error("PrimitiveDataType: precision = " + std::to_string(precision));
     }
     if (precision > kMaxPrecision) {
-      throw std::runtime_error("PrimitiveDataType: precision = " +
-                               std::to_string(precision));
+      throw std::runtime_error("PrimitiveDataType: precision = " + std::to_string(precision));
     }
   }
 
   std::string ToString() const override {
-    return "decimal(" + std::to_string(precision_) + ", " +
-           std::to_string(scale_) + ")";
+    return "decimal(" + std::to_string(precision_) + ", " + std::to_string(scale_) + ")";
   }
 
   bool IsDecimal() const override { return true; }
@@ -98,8 +94,7 @@ class DecimalDataType final : public DataType {
 
 class ListDataType final : public DataType {
  public:
-  ListDataType(int32_t element_id, bool element_required,
-               std::shared_ptr<const DataType> element_type)
+  ListDataType(int32_t element_id, bool element_required, std::shared_ptr<const DataType> element_type)
       : DataType(Type::kList),
         element_id_(element_id),
         element_required_(element_required),
@@ -113,9 +108,7 @@ class ListDataType final : public DataType {
 
   bool IsList() const override { return true; }
 
-  std::string ToString() const override {
-    return "list(" + element_type_->ToString() + ")";
-  }
+  std::string ToString() const override { return "list(" + element_type_->ToString() + ")"; }
 
  private:
   int32_t element_id_;

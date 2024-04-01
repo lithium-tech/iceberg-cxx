@@ -14,8 +14,7 @@
 #include <iostream>
 #include <mutex>
 
-class ThriftHiveMetastoreHandler
-    : public Apache::Hadoop::Hive::ThriftHiveMetastoreNull {
+class ThriftHiveMetastoreHandler : public Apache::Hadoop::Hive::ThriftHiveMetastoreNull {
   void get_all_databases(std::vector<std::string>& _return) override {
     std::lock_guard lg(mutex_);
     std::cerr << __FUNCTION__ << std::endl;
@@ -25,8 +24,7 @@ class ThriftHiveMetastoreHandler
     }
   }
 
-  void get_all_tables(std::vector<std::string>& _return,
-                      const std::string& db_name) override {
+  void get_all_tables(std::vector<std::string>& _return, const std::string& db_name) override {
     std::lock_guard lg(mutex_);
     std::cerr << __FUNCTION__ << std::endl;
     _return.clear();
@@ -55,8 +53,7 @@ class ThriftHiveMetastoreHandler
   }
 
   std::mutex mutex_;
-  std::map<std::string, std::map<std::string, Apache::Hadoop::Hive::Table>>
-      tables_;
+  std::map<std::string, std::map<std::string, Apache::Hadoop::Hive::Table>> tables_;
 };
 
 int main(int argc, char** argv) {

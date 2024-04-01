@@ -22,14 +22,12 @@ class HiveClientImpl {
 
   ~HiveClientImpl() { transport_->close(); }
 
-  std::string GetMetadataLocation(const std::string& db_name,
-                                  const std::string& table_name) {
+  std::string GetMetadataLocation(const std::string& db_name, const std::string& table_name) {
     Apache::Hadoop::Hive::Table table;
     client_.get_table(table, db_name, table_name);
     const std::map<std::string, std::string>& params = table.parameters;
     if (!params.contains("metadata_location")) {
-      throw std::runtime_error(
-          "Table metadata does not contain metadata_location");
+      throw std::runtime_error("Table metadata does not contain metadata_location");
     }
     return params.at("metadata_location");
   }
@@ -41,13 +39,11 @@ class HiveClientImpl {
   Apache::Hadoop::Hive::ThriftHiveMetastoreClient client_;
 };
 
-HiveClient::HiveClient(const std::string& host, int port)
-    : impl_(std::make_unique<HiveClientImpl>(host, port)) {}
+HiveClient::HiveClient(const std::string& host, int port) : impl_(std::make_unique<HiveClientImpl>(host, port)) {}
 
 HiveClient::~HiveClient() = default;
 
-std::string HiveClient::GetMetadataLocation(
-    const std::string& db_name, const std::string& table_name) const {
+std::string HiveClient::GetMetadataLocation(const std::string& db_name, const std::string& table_name) const {
   return impl_->GetMetadataLocation(db_name, table_name);
 }
 

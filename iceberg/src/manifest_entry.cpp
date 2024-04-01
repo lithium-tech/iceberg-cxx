@@ -37,8 +37,7 @@ std::vector<ManifestEntry> MakeManifestEntries(const std::string& data) {
 
   std::stringstream ss(data);
   auto istream = avro::istreamInputStream(ss);
-  avro::DataFileReader<iceberg::manifest_entry> data_file_reader(
-      std::move(istream), manifest_entry_schema);
+  avro::DataFileReader<iceberg::manifest_entry> data_file_reader(std::move(istream), manifest_entry_schema);
   std::vector<ManifestEntry> result;
   iceberg::manifest_entry manifest_entry;
   while (data_file_reader.read(manifest_entry)) {
@@ -51,13 +50,11 @@ std::vector<ManifestEntry> MakeManifestEntries(const std::string& data) {
       entry.sequence_number = manifest_entry.sequence_number.get_long();
     }
     if (!manifest_entry.file_sequence_number.is_null()) {
-      entry.file_sequence_number =
-          manifest_entry.file_sequence_number.get_long();
+      entry.file_sequence_number = manifest_entry.file_sequence_number.get_long();
     }
     DataFile data_file;
     const auto& manifest_data_file = manifest_entry.data_file;
-    data_file.content =
-        static_cast<DataFile::Content>(manifest_data_file.content);
+    data_file.content = static_cast<DataFile::Content>(manifest_data_file.content);
     data_file.file_path = manifest_data_file.file_path;
     data_file.file_format = manifest_data_file.file_format;
     data_file.record_count = manifest_data_file.record_count;

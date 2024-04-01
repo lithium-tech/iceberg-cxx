@@ -28,11 +28,9 @@ TEST(ManifestEntryTest, Test) {
   EXPECT_EQ(data_file.file_format, "PARQUET");
   EXPECT_EQ(data_file.record_count, 1024);
   EXPECT_EQ(data_file.file_size_in_bytes, 3980);
-  std::vector<std::pair<int32_t, int64_t>> expected_column_sizes = {{1, 1715},
-                                                                    {2, 1673}};
+  std::vector<std::pair<int32_t, int64_t>> expected_column_sizes = {{1, 1715}, {2, 1673}};
   EXPECT_EQ(data_file.column_sizes, expected_column_sizes);
-  std::vector<std::pair<int32_t, int64_t>> expected_value_counts{{1, 1024},
-                                                                 {2, 1024}};
+  std::vector<std::pair<int32_t, int64_t>> expected_value_counts{{1, 1024}, {2, 1024}};
   EXPECT_EQ(data_file.value_counts, expected_value_counts);
   std::vector<int64_t> expected_split_offsets = {4};
   EXPECT_EQ(data_file.split_offsets, expected_split_offsets);
@@ -54,15 +52,13 @@ TEST(ManifestEntryTest, Test2) {
   EXPECT_EQ(entry.file_sequence_number, std::nullopt);
   const auto& data_file = entry.data_file;
   EXPECT_EQ(data_file.content, DataFile::Content::kPositionDelete);
-  EXPECT_EQ(
-      data_file.file_path,
-      "s3://warehouse/gperov/test/data/"
-      "00000-13-dacb3d8d-55e9-45af-b186-ce208da1f36a-00001-deletes.parquet");
+  EXPECT_EQ(data_file.file_path,
+            "s3://warehouse/gperov/test/data/"
+            "00000-13-dacb3d8d-55e9-45af-b186-ce208da1f36a-00001-deletes.parquet");
   EXPECT_EQ(data_file.file_format, "PARQUET");
   EXPECT_EQ(data_file.record_count, 1);
   EXPECT_EQ(data_file.file_size_in_bytes, 1393);
-  std::vector<std::pair<int32_t, int64_t>> expected_column_sizes = {
-      {2147483546, 123}, {2147483545, 40}};
+  std::vector<std::pair<int32_t, int64_t>> expected_column_sizes = {{2147483546, 123}, {2147483545, 40}};
   EXPECT_EQ(data_file.column_sizes, expected_column_sizes);
   EXPECT_EQ(data_file.value_counts, std::nullopt);
   std::vector<int64_t> expected_split_offsets = {4};

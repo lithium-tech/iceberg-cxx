@@ -44,8 +44,8 @@ UrlComponents SplitUrl(const std::string& url) {
   return result;
 }
 
-arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenUrl(
-    const std::string& url, std::shared_ptr<arrow::fs::FileSystem> fs) {
+arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenUrl(const std::string& url,
+                                                                    std::shared_ptr<arrow::fs::FileSystem> fs) {
   auto components = SplitUrl(url);
   std::string path;
   if (components.schema == "s3a" || components.schema == "s3") {
@@ -56,8 +56,7 @@ arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenUrl(
   return fs->OpenInputFile(path);
 }
 
-arrow::Result<std::string> ReadFile(const std::string& path,
-                                    std::shared_ptr<arrow::fs::FileSystem> fs) {
+arrow::Result<std::string> ReadFile(const std::string& path, std::shared_ptr<arrow::fs::FileSystem> fs) {
   ARROW_ASSIGN_OR_RAISE(auto file, OpenUrl(path, fs));
 
   std::string buffer;
@@ -70,17 +69,13 @@ arrow::Result<std::string> ReadFile(const std::string& path,
 
 }  // namespace
 
-arrow::Result<ScanMetadata> GetScanMetadata(
-    const std::string& db_name, const std::string& table_name,
-    std::shared_ptr<arrow::fs::S3FileSystem> s3fs,
-    const HiveClient& hive_client) {
-  const std::string metadata_location =
-      hive_client.GetMetadataLocation(db_name, table_name);
+arrow::Result<ScanMetadata> GetScanMetadata(const std::string& db_name, const std::string& table_name,
+                                            std::shared_ptr<arrow::fs::S3FileSystem> s3fs,
+                                            const HiveClient& hive_client) {
+  const std::string metadata_location = hive_client.GetMetadataLocation(db_name, table_name);
 
-  ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content,
-                        ReadFile(metadata_location, s3fs));
-  const TableMetadataV2 table_metadata =
-      MakeTableMetadataV2(table_metadata_content);
+  ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(metadata_location, s3fs));
+  const TableMetadataV2 table_metadata = MakeTableMetadataV2(table_metadata_content);
   if (!table_metadata.current_snapshot_id.has_value()) {
     return arrow::Status::ExecutionError("no current_snapshot_id");
   }
@@ -91,20 +86,16 @@ arrow::Result<ScanMetadata> GetScanMetadata(
   }
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
-  ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content,
-                        ReadFile(manifest_list_path, s3fs));
-  const std::vector<ManifestMetadata> manifest_metadatas =
-      MakeManifestList(manifest_metadatas_content);
+  ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(manifest_list_path, s3fs));
+  const std::vector<ManifestMetadata> manifest_metadatas = MakeManifestList(manifest_metadatas_content);
 
   std::vector<ManifestEntry> entries_output;
   Schema schema = table_metadata.GetCurrentSchema();
 
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.manifest_path;
-    ARROW_ASSIGN_OR_RAISE(const std::string entries_content,
-                          ReadFile(manifest_path, s3fs));
-    std::vector<ManifestEntry> entries_input =
-        MakeManifestEntries(entries_content);
+    ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(manifest_path, s3fs));
+    std::vector<ManifestEntry> entries_input = MakeManifestEntries(entries_content);
     for (auto&& entry : entries_input) {
       if (entry.status == ManifestEntry::Status::kDeleted) {
         continue;
@@ -123,8 +114,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(
     }
   }
 
-  return ScanMetadata{.schema = std::move(schema),
-                      .entries = std::move(entries_output)};
+  return ScanMetadata{.schema = std::move(schema), .entries = std::move(entries_output)};
 }
 
 }  // namespace iceberg

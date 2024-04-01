@@ -11,19 +11,18 @@ struct StringToTypeEntry {
   Type type;
 };
 
-constexpr StringToTypeEntry kStringToPrimitiveTypeId[] = {
-    {"boolean", Type::kBoolean},
-    {"int", Type::kInt},
-    {"long", Type::kLong},
-    {"float", Type::kFloat},
-    {"double", Type::kDouble},
-    {"date", Type::kDate},
-    {"time", Type::kTime},
-    {"timestamp", Type::kTimestamp},
-    {"timestamptz", Type::kTimestamptz},
-    {"string", Type::kString},
-    {"uuid", Type::kUuid},
-    {"binary", Type::kBinary}};
+constexpr StringToTypeEntry kStringToPrimitiveTypeId[] = {{"boolean", Type::kBoolean},
+                                                          {"int", Type::kInt},
+                                                          {"long", Type::kLong},
+                                                          {"float", Type::kFloat},
+                                                          {"double", Type::kDouble},
+                                                          {"date", Type::kDate},
+                                                          {"time", Type::kTime},
+                                                          {"timestamp", Type::kTimestamp},
+                                                          {"timestamptz", Type::kTimestamptz},
+                                                          {"string", Type::kString},
+                                                          {"uuid", Type::kUuid},
+                                                          {"binary", Type::kBinary}};
 
 std::optional<Type> NameToType(const std::string& name_to_find) {
   for (const auto& [name, type] : kStringToPrimitiveTypeId) {
