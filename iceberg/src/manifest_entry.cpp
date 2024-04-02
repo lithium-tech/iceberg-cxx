@@ -87,6 +87,47 @@ std::vector<ManifestEntry> MakeManifestEntries(const std::string& data) {
         data_file.equality_ids->emplace_back(id);
       }
     }
+    if (!manifest_data_file.lower_bounds.is_null()) {
+      data_file.lower_bounds = std::vector<std::pair<int32_t, std::vector<uint8_t>>>();
+      const auto& kv_array = manifest_data_file.lower_bounds.get_array();
+      for (const auto& kv : kv_array) {
+        data_file.lower_bounds->emplace_back(KVToPair<int32_t, std::vector<uint8_t>>(kv));
+      }
+    }
+    if (!manifest_data_file.upper_bounds.is_null()) {
+      data_file.upper_bounds = std::vector<std::pair<int32_t, std::vector<uint8_t>>>();
+      const auto& kv_array = manifest_data_file.upper_bounds.get_array();
+      for (const auto& kv : kv_array) {
+        data_file.upper_bounds->emplace_back(KVToPair<int32_t, std::vector<uint8_t>>(kv));
+      }
+    }
+    if (!manifest_data_file.null_value_counts.is_null()) {
+      data_file.null_value_counts = std::vector<std::pair<int32_t, int64_t>>();
+      const auto& kv_array = manifest_data_file.null_value_counts.get_array();
+      for (const auto& kv : kv_array) {
+        data_file.null_value_counts->emplace_back(KVToPair<int32_t, int64_t>(kv));
+      }
+    }
+    if (!manifest_data_file.nan_value_counts.is_null()) {
+      data_file.nan_value_counts = std::vector<std::pair<int32_t, int64_t>>();
+      const auto& kv_array = manifest_data_file.nan_value_counts.get_array();
+      for (const auto& kv : kv_array) {
+        data_file.nan_value_counts->emplace_back(KVToPair<int32_t, int64_t>(kv));
+      }
+    }
+    if (!manifest_data_file.distinct_counts.is_null()) {
+      data_file.distinct_counts = std::vector<std::pair<int32_t, int64_t>>();
+      const auto& kv_array = manifest_data_file.distinct_counts.get_array();
+      for (const auto& kv : kv_array) {
+        data_file.distinct_counts->emplace_back(KVToPair<int32_t, int64_t>(kv));
+      }
+    }
+    if (!manifest_data_file.key_metadata.is_null()) {
+      data_file.key_metadata = manifest_data_file.key_metadata.get_bytes();
+    }
+    if (!manifest_data_file.sort_order_id.is_null()) {
+      data_file.sort_order_id = manifest_data_file.sort_order_id.get_int();
+    }
     entry.data_file = std::move(data_file);
     result.emplace_back(std::move(entry));
   }

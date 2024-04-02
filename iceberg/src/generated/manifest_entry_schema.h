@@ -174,6 +174,30 @@ constexpr std::string_view kMetadataEntrySchemaJson = R"EOF(
                         "default": null
                     },
                     {
+                        "name": "distinct_counts",
+                        "type": [
+                            "null",
+                            {
+                                "type": "array",
+                                "items": {
+                                    "type": "record",
+                                    "name": "k123_v124",
+                                    "fields": [
+                                        {
+                                            "name": "key",
+                                            "type": "int"
+                                        },
+                                        {
+                                            "name": "value",
+                                            "type": "long"
+                                        }
+                                    ]
+                                }
+                            }
+                        ],
+                        "default": null
+                    },
+                    {
                         "name": "lower_bounds",
                         "type": [
                             "null",

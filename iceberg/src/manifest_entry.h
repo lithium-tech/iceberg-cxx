@@ -31,23 +31,23 @@ struct DataFile {
 
   std::optional<std::vector<std::pair<int32_t, int64_t>>> value_counts;
 
-  // std::optional<std::vector<std::pair<int32_t, int64_t>>> null_value_counts;
+  std::optional<std::vector<std::pair<int32_t, int64_t>>> null_value_counts;
 
-  // std::optional<std::vector<std::pair<int32_t, int64_t>>> nan_value_counts;
+  std::optional<std::vector<std::pair<int32_t, int64_t>>> nan_value_counts;
 
-  // std::optional<std::vector<std::pair<int32_t, std::vector<uint8_t>>>>
-  // lower_bounds;
+  std::optional<std::vector<std::pair<int32_t, int64_t>>> distinct_counts;
 
-  // std::optional<std::vector<std::pair<int32_t, std::vector<uint8_t>>>>
-  // upper_bounds;
+  std::optional<std::vector<std::pair<int32_t, std::vector<uint8_t>>>> lower_bounds;
 
-  // std::optional<std::vector<uint8_t>> key_metadata;
+  std::optional<std::vector<std::pair<int32_t, std::vector<uint8_t>>>> upper_bounds;
+
+  std::optional<std::vector<uint8_t>> key_metadata;
 
   std::optional<std::vector<int64_t>> split_offsets;
 
   std::optional<std::vector<int32_t>> equality_ids;
 
-  // std::optional<int32_t> sort_order_id;
+  std::optional<int32_t> sort_order_id;
 };
 
 struct ManifestEntry {

@@ -35,6 +35,20 @@ TEST(ManifestEntryTest, Test) {
   std::vector<int64_t> expected_split_offsets = {4};
   EXPECT_EQ(data_file.split_offsets, expected_split_offsets);
   EXPECT_EQ(data_file.equality_ids, std::nullopt);
+  std::vector<std::pair<int32_t, std::vector<uint8_t>>> expected_lower_bounds{{1, {0, 0, 0, 0, 0, 0, 0, 0}},
+                                                                              {2, {0, 0, 0, 0, 0, 0, 0, 0}}};
+  EXPECT_EQ(data_file.lower_bounds, expected_lower_bounds);
+  std::vector<std::pair<int32_t, std::vector<uint8_t>>> expected_upper_bounds{{1, {255, 3, 0, 0, 0, 0, 0, 0}},
+                                                                              {2, {254, 7, 0, 0, 0, 0, 0, 0}}};
+  EXPECT_EQ(data_file.upper_bounds, expected_upper_bounds);
+  std::vector<std::pair<int32_t, int64_t>> expected_null_value_counts = {{1, 0}, {2, 0}};
+  EXPECT_EQ(data_file.null_value_counts, expected_null_value_counts);
+  std::vector<std::pair<int32_t, int64_t>> expected_nan_value_counts = {};
+  EXPECT_EQ(data_file.nan_value_counts, expected_nan_value_counts);
+  std::vector<uint8_t> expected_key_metadata = {};
+  EXPECT_EQ(data_file.key_metadata, std::nullopt);
+  EXPECT_EQ(data_file.sort_order_id, 0);
+  EXPECT_EQ(data_file.distinct_counts, std::nullopt);
 }
 
 TEST(ManifestEntryTest, Test2) {
