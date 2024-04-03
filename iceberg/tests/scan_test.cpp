@@ -13,6 +13,7 @@
 
 namespace iceberg {
 
+#ifdef USE_ICEBERG
 namespace {
 
 void SortEntries(std::vector<ManifestEntry>& entries) {
@@ -39,7 +40,6 @@ arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> MakeS3FileSystem() {
 
 }  // namespace
 
-#ifdef USE_ICEBERG
 TEST(Scan, Test) {
   auto s3fs = MakeS3FileSystem();
   ASSERT_TRUE(s3fs.ok());
