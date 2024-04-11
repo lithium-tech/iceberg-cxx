@@ -30,6 +30,9 @@ struct ManifestFile {
   // TODO(gmusya): key metadata
 };
 
+namespace ice_tea {
+
 std::vector<ManifestFile> MakeManifestList(const std::string& data);
 
+}  // namespace ice_tea
 }  // namespace iceberg

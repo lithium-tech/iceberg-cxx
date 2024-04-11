@@ -1,15 +1,17 @@
 add_library(iceberg
+    catalog.h
     nested_field.h
-    hive_client.cpp
-    hive_client.h
+    tea_hive_catalog.cpp
+    tea_hive_catalog.h
     manifest_entry.cpp
     manifest_entry.h
-    manifest_metadata.cpp
-    manifest_metadata.h
-    scan.cpp
-    scan.h
+    tea_manifest_metadata.cpp
+    manifest_file.h
+    tea_scan.cpp
+    tea_scan.h
     schema.h
     snapshot.h
+    table.h
     table_metadata.cpp
     table_metadata.h
     type.cpp

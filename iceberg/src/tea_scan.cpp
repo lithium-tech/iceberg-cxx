@@ -1,4 +1,4 @@
-#include "iceberg/src/scan.h"
+#include "iceberg/src/tea_scan.h"
 
 #include <iostream>
 #include <memory>
@@ -10,12 +10,12 @@
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
 #include "iceberg/src/generated/manifest_file.hh"
-#include "iceberg/src/hive_client.h"
 #include "iceberg/src/manifest_entry.h"
-#include "iceberg/src/manifest_metadata.h"
+#include "iceberg/src/manifest_file.h"
 #include "iceberg/src/table_metadata.h"
+#include "iceberg/src/tea_hive_catalog.h"
 
-namespace iceberg {
+namespace iceberg::ice_tea {
 
 namespace {
 
@@ -70,11 +70,8 @@ arrow::Result<std::string> ReadFile(const std::string& path, std::shared_ptr<arr
 
 }  // namespace
 
-arrow::Result<ScanMetadata> GetScanMetadata(const std::string& db_name, const std::string& table_name,
-                                            std::shared_ptr<arrow::fs::S3FileSystem> s3fs,
-                                            const HiveClient& hive_client) {
-  const std::string metadata_location = hive_client.GetMetadataLocation(db_name, table_name);
-
+arrow::Result<ScanMetadata> GetScanMetadata(const std::string& metadata_location,
+                                            std::shared_ptr<arrow::fs::S3FileSystem> s3fs) {
   ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(metadata_location, s3fs));
   const TableMetadataV2 table_metadata = MakeTableMetadataV2(table_metadata_content);
   if (!table_metadata.current_snapshot_id.has_value()) {
@@ -88,7 +85,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(const std::string& db_name, const st
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
   ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(manifest_list_path, s3fs));
-  const std::vector<ManifestFile> manifest_metadatas = MakeManifestList(manifest_metadatas_content);
+  const std::vector<ManifestFile> manifest_metadatas = ice_tea::MakeManifestList(manifest_metadatas_content);
 
   std::vector<ManifestEntry> entries_output;
   Schema schema = table_metadata.GetCurrentSchema();
@@ -118,4 +115,4 @@ arrow::Result<ScanMetadata> GetScanMetadata(const std::string& db_name, const st
   return ScanMetadata{.schema = std::move(schema), .entries = std::move(entries_output)};
 }
 
-}  // namespace iceberg
+}  // namespace iceberg::ice_tea

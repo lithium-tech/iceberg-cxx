@@ -1,10 +1,9 @@
-#include "iceberg/src/manifest_metadata.h"
-
 #include <fstream>
 #include <sstream>
 #include <string>
 
 #include "gtest/gtest.h"
+#include "iceberg/src/manifest_file.h"
 
 namespace iceberg {
 
@@ -16,7 +15,7 @@ TEST(Manifest, SanityCheck) {
   std::stringstream ss;
   ss << input.rdbuf();
   std::string manifest_data = ss.str();
-  std::vector<ManifestFile> manifest_list = MakeManifestList(manifest_data);
+  std::vector<ManifestFile> manifest_list = ice_tea::MakeManifestList(manifest_data);
   EXPECT_EQ(manifest_list.size(), 2);
   EXPECT_EQ(manifest_list[0].path,
             "s3://warehouse/gperov/test/metadata/"

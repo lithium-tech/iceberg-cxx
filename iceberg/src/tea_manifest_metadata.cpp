@@ -1,5 +1,3 @@
-#include "iceberg/src/manifest_metadata.h"
-
 #include <sstream>
 #include <utility>
 
@@ -8,8 +6,9 @@
 #include "avro/ValidSchema.hh"
 #include "iceberg/src/generated/manifest_file.hh"
 #include "iceberg/src/generated/manifest_file_schema.h"
+#include "iceberg/src/manifest_file.h"
 
-namespace iceberg {
+namespace iceberg::ice_tea {
 
 std::vector<ManifestFile> MakeManifestList(const std::string& data) {
   avro::ValidSchema manifest_list_schema = []() {
@@ -45,4 +44,4 @@ std::vector<ManifestFile> MakeManifestList(const std::string& data) {
   return result;
 }
 
-}  // namespace iceberg
+}  // namespace iceberg::ice_tea

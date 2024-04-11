@@ -1,5 +1,3 @@
-#include "iceberg/src/scan.h"
-
 #include <algorithm>
 #include <exception>
 #include <string>
@@ -9,7 +7,8 @@
 #include "arrow/filesystem/s3fs.h"
 #include "arrow/status.h"
 #include "gtest/gtest.h"
-#include "iceberg/src/hive_client.h"
+#include "iceberg/src/tea_hive_catalog.h"
+#include "iceberg/src/tea_scan.h"
 
 namespace iceberg {
 
@@ -44,8 +43,9 @@ TEST(Scan, Test) {
   auto s3fs = MakeS3FileSystem();
   ASSERT_TRUE(s3fs.ok());
   auto fs = s3fs.ValueUnsafe();
-  HiveClient hive_client("127.0.0.1", 9090);
-  auto maybe_scan_metadata = GetScanMetadata("gperov", "test", fs, hive_client);
+  ice_tea::HiveCatalog hive_client("127.0.0.1", 9090);
+  auto table = hive_client.LoadTable(catalog::TableIdentifier{.db = "gperov", .name = "test"});
+  auto maybe_scan_metadata = ice_tea::GetScanMetadata(table->Location(), fs);
   ASSERT_TRUE(maybe_scan_metadata.ok());
   auto entries = maybe_scan_metadata.ValueUnsafe().entries;
   auto schema = maybe_scan_metadata.ValueUnsafe().schema;

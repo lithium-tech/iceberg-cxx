@@ -1,4 +1,4 @@
-#include "iceberg/src/hive_client.h"
+#include "iceberg/src/tea_hive_catalog.h"
 
 #include <ThriftHiveMetastore.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -8,7 +8,7 @@
 #include <map>
 #include <stdexcept>
 
-namespace iceberg {
+namespace iceberg::ice_tea {
 
 class HiveClientImpl {
  public:
@@ -39,12 +39,12 @@ class HiveClientImpl {
   Apache::Hadoop::Hive::ThriftHiveMetastoreClient client_;
 };
 
-HiveClient::HiveClient(const std::string& host, int port) : impl_(std::make_unique<HiveClientImpl>(host, port)) {}
+HiveCatalog::HiveCatalog(const std::string& host, int port) : impl_(std::make_unique<HiveClientImpl>(host, port)) {}
+HiveCatalog::~HiveCatalog() = default;
 
-HiveClient::~HiveClient() = default;
-
-std::string HiveClient::GetMetadataLocation(const std::string& db_name, const std::string& table_name) const {
-  return impl_->GetMetadataLocation(db_name, table_name);
+std::shared_ptr<Table> HiveCatalog::LoadTable(const catalog::TableIdentifier& identifier) {
+  auto location = impl_->GetMetadataLocation(identifier.db, identifier.name);
+  return std::make_shared<HiveTable>(identifier, location);
 }
 
-}  // namespace iceberg
+}  // namespace iceberg::ice_tea
