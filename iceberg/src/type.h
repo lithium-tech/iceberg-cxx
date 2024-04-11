@@ -8,7 +8,7 @@
 
 namespace iceberg {
 
-enum class Type {
+enum class TypeID {
   kBoolean = 0,
   kInt = 1,
   kLong = 2,
@@ -29,58 +29,64 @@ enum class Type {
   kUnknown = 17
 };
 
-std::optional<Type> NameToType(const std::string& name);
+namespace types {
 
-std::optional<std::string> TypeToName(Type type);
+std::optional<TypeID> NameToPrimitiveType(const std::string& name);
+std::optional<std::string> PrimitiveTypeToName(TypeID type);
 
-class DataType {
+inline bool IsDecimalType(TypeID type) { return type == TypeID::kDecimal; }
+inline bool IsBinaryType(TypeID type) { return type == TypeID::kBinary; }
+inline bool IsStringType(TypeID type) { return type == TypeID::kString; }
+inline bool IsFixedType(TypeID type) { return type == TypeID::kFixed; }
+inline bool IsUuidType(TypeID type) { return type == TypeID::kUuid; }
+
+class Type {
  public:
-  explicit DataType(Type id) : id_(id) {}
-  virtual ~DataType() = default;
+  explicit Type(TypeID id) : id_(id) {}
+  virtual ~Type() = default;
 
-  virtual bool IsDecimal() const { return false; }
-
-  virtual bool IsPrimitive() const { return false; }
-
-  virtual bool IsList() const { return false; }
+  virtual bool IsListType() const { return false; }
+  // virtual bool IsMapType() const { return false; }
+  // virtual bool IsNestedType() const { return false; }
+  virtual bool IsPrimitiveType() const { return false; }
+  // virtual bool IsStructType() const { return false; }
 
   virtual std::string ToString() const = 0;
 
-  Type Id() const { return id_; }
+  TypeID TypeId() const { return id_; }
 
  protected:
-  Type id_;
+  TypeID id_;
 };
 
-class PrimitiveDataType final : public DataType {
+class PrimitiveType : public Type {
  public:
-  PrimitiveDataType(Type id) : DataType(id) {}
+  explicit PrimitiveType(TypeID id) : Type(id) {}
 
   std::string ToString() const override {
-    std::optional<std::string> result = TypeToName(id_).value();
+    std::optional<std::string> result = PrimitiveTypeToName(id_).value();
     assert(result.has_value());
     return result.value();
   }
 
-  bool IsPrimitive() const override { return true; }
+  bool IsPrimitiveType() const override { return true; }
 };
 
-class DecimalDataType final : public DataType {
+class DecimalType final : public PrimitiveType {
  public:
-  DecimalDataType(int32_t precision, int32_t scale) : DataType(Type::kDecimal), precision_(precision), scale_(scale) {
+  DecimalType(int32_t precision, int32_t scale)
+      : PrimitiveType(TypeID::kDecimal), precision_(precision), scale_(scale) {
     if (precision <= 0) {
-      throw std::runtime_error("PrimitiveDataType: precision = " + std::to_string(precision));
+      throw std::runtime_error("DecimalType: precision = " + std::to_string(precision));
     }
     if (precision > kMaxPrecision) {
-      throw std::runtime_error("PrimitiveDataType: precision = " + std::to_string(precision));
+      throw std::runtime_error("DecimalType: precision = " + std::to_string(precision));
     }
   }
 
   std::string ToString() const override {
     return "decimal(" + std::to_string(precision_) + ", " + std::to_string(scale_) + ")";
   }
-
-  bool IsDecimal() const override { return true; }
 
   int32_t Precision() const { return precision_; }
   int32_t Scale() const { return scale_; }
@@ -92,10 +98,10 @@ class DecimalDataType final : public DataType {
   int32_t scale_;
 };
 
-class ListDataType final : public DataType {
+class ListType final : public Type {
  public:
-  ListDataType(int32_t element_id, bool element_required, std::shared_ptr<const DataType> element_type)
-      : DataType(Type::kList),
+  ListType(int32_t element_id, bool element_required, std::shared_ptr<const Type> element_type)
+      : Type(TypeID::kList),
         element_id_(element_id),
         element_required_(element_required),
         element_type_(std::move(element_type)) {}
@@ -104,16 +110,18 @@ class ListDataType final : public DataType {
 
   bool ElementRequired() const { return element_required_; }
 
-  std::shared_ptr<const DataType> ElementType() const { return element_type_; }
+  std::shared_ptr<const Type> ElementType() const { return element_type_; }
 
-  bool IsList() const override { return true; }
+  bool IsListType() const override { return true; }
+  // bool IsNestedType() const override { return true; }
 
   std::string ToString() const override { return "list(" + element_type_->ToString() + ")"; }
 
  private:
   int32_t element_id_;
   bool element_required_;
-  std::shared_ptr<const DataType> element_type_;
+  std::shared_ptr<const Type> element_type_;
 };
 
+}  // namespace types
 }  // namespace iceberg

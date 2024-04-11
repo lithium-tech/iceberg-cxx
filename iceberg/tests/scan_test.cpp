@@ -56,14 +56,14 @@ TEST(Scan, Test) {
     EXPECT_EQ(entries[0].data_file.file_path,
               "s3://warehouse/gperov/test/data/"
               "00000-6-9183b96d-8d9f-4514-b60d-1ea34766c578-0-00001.parquet");
-    EXPECT_EQ(entries[0].data_file.content, DataFile::Content::kData);
+    EXPECT_EQ(entries[0].data_file.content, DataFile::FileContent::kData);
   }
   {
     EXPECT_EQ(entries[3].data_file.file_size_in_bytes, 2768);
     EXPECT_EQ(entries[3].data_file.file_path,
               "s3://warehouse/gperov/test/data/"
               "00003-9-9183b96d-8d9f-4514-b60d-1ea34766c578-0-00001.parquet");
-    EXPECT_EQ(entries[3].data_file.content, DataFile::Content::kData);
+    EXPECT_EQ(entries[3].data_file.content, DataFile::FileContent::kData);
   }
   {
     EXPECT_EQ(entries[6].data_file.file_size_in_bytes, 1393);
@@ -71,10 +71,10 @@ TEST(Scan, Test) {
               "s3://warehouse/gperov/test/data/"
               "00000-13-dacb3d8d-55e9-45af-b186-ce208da1f36a-00001-deletes."
               "parquet");
-    EXPECT_EQ(entries[6].data_file.content, DataFile::Content::kPositionDelete);
+    EXPECT_EQ(entries[6].data_file.content, DataFile::FileContent::kPositionDeletes);
   }
-  EXPECT_EQ(schema.GetSchemaId(), 0);
-  EXPECT_EQ(schema.GetFields().size(), 2);
+  EXPECT_EQ(schema.SchemaId(), 0);
+  EXPECT_EQ(schema.Columns().size(), 2);
 }
 #endif
 

@@ -1,5 +1,5 @@
 add_library(iceberg
-    field.h
+    nested_field.h
     hive_client.cpp
     hive_client.h
     manifest_entry.cpp

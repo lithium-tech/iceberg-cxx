@@ -11,7 +11,7 @@
 
 namespace iceberg {
 
-std::vector<ManifestMetadata> MakeManifestList(const std::string& data) {
+std::vector<ManifestFile> MakeManifestList(const std::string& data) {
   avro::ValidSchema manifest_list_schema = []() {
     avro::ValidSchema result;
     std::stringstream in(kManifestListSchemaJson.data());
@@ -23,17 +23,17 @@ std::vector<ManifestMetadata> MakeManifestList(const std::string& data) {
   auto istream = avro::istreamInputStream(ss);
   avro::DataFileReader<iceberg::manifest_file> data_file_reader(std::move(istream), manifest_list_schema);
 
-  std::vector<ManifestMetadata> result;
+  std::vector<ManifestFile> result;
   iceberg::manifest_file manifest_file;
   while (data_file_reader.read(manifest_file)) {
-    ManifestMetadata manifest;
-    manifest.manifest_path = manifest_file.manifest_path;
-    manifest.manifest_length = manifest_file.manifest_length;
+    ManifestFile manifest;
+    manifest.path = manifest_file.manifest_path;
+    manifest.length = manifest_file.manifest_length;
     manifest.partition_spec_id = manifest_file.partition_spec_id;
-    manifest.content_type = manifest_file.content == 0 ? ContentType::kData : ContentType::kDelete;
+    manifest.content = manifest_file.content == 0 ? ManifestContent::kData : ManifestContent::kDeletes;
     manifest.sequence_number = manifest_file.sequence_number;
     manifest.min_sequence_number = manifest_file.min_sequence_number;
-    manifest.added_snapshot_id = manifest_file.added_snapshot_id;
+    manifest.snapshot_id = manifest_file.added_snapshot_id;
     manifest.added_files_count = manifest_file.added_files_count;
     manifest.existing_files_count = manifest_file.existing_files_count;
     manifest.deleted_files_count = manifest_file.deleted_files_count;

@@ -5,7 +5,7 @@
 #include <sstream>
 #include <stdexcept>
 
-#include "iceberg/src/field.h"
+#include "iceberg/src/nested_field.h"
 #include "iceberg/src/type.h"
 #include "rapidjson/document.h"
 
@@ -76,11 +76,11 @@ bool ExtractBooleanField(const rapidjson::Value& document, const std::string& fi
   return document[c_str].GetBool();
 }
 
-std::shared_ptr<const DataType> JsonToDataType(const rapidjson::Value& value) {
+std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value) {
   if (value.IsString()) {
     std::string str = value.GetString();
-    if (auto maybe_value = NameToType(str); maybe_value.has_value()) {
-      return std::make_shared<PrimitiveDataType>(maybe_value.value());
+    if (auto maybe_value = types::NameToPrimitiveType(str); maybe_value.has_value()) {
+      return std::make_shared<types::PrimitiveType>(maybe_value.value());
     }
     if (str.starts_with("decimal")) {
       // decimal(P, S)
@@ -91,7 +91,7 @@ std::shared_ptr<const DataType> JsonToDataType(const rapidjson::Value& value) {
       ss >> precision;
       ss.ignore(1);  // skip comma
       ss >> scale;
-      return std::make_shared<DecimalDataType>(precision, scale);
+      return std::make_shared<types::DecimalType>(precision, scale);
     }
     throw std::runtime_error("JsonToDataType: unknown type '" + str + "'");
   }
@@ -108,17 +108,17 @@ std::shared_ptr<const DataType> JsonToDataType(const rapidjson::Value& value) {
       if (!value.HasMember("element")) {
         throw std::runtime_error("JsonToDataType: !value.HasMember(\"element\"");
       }
-      std::shared_ptr<const DataType> element_type = JsonToDataType(value["element"]);
+      std::shared_ptr<const types::Type> element_type = JsonToDataType(value["element"]);
 
-      return std::make_shared<ListDataType>(element_field_id, element_required, element_type);
+      return std::make_shared<types::ListType>(element_field_id, element_required, element_type);
     }
   }
   throw std::runtime_error("Unknown type");
 }
 
-Field JsonToField(const rapidjson::Value& document) {
-  Field result;
-  result.id = ExtractInt32Field(document, "id");
+types::NestedField JsonToField(const rapidjson::Value& document) {
+  types::NestedField result;
+  result.field_id = ExtractInt32Field(document, "id");
   result.name = ExtractStringField(document, "name");
   result.is_required = ExtractBooleanField(document, "required");
 
@@ -130,13 +130,13 @@ Field JsonToField(const rapidjson::Value& document) {
   return result;
 }
 
-std::vector<Field> ExtractSchemaFields(const rapidjson::Value& document, const std::string& field_name) {
+std::vector<types::NestedField> ExtractSchemaFields(const rapidjson::Value& document, const std::string& field_name) {
   const char* c_str = field_name.c_str();
   if (!document.HasMember(c_str)) {
     throw std::runtime_error("ExtractSchemaFields: !document.HasMember(" + field_name + ")");
   }
 
-  std::vector<Field> result;
+  std::vector<types::NestedField> result;
   ProcessArray(document[c_str],
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToField(elem)); });
   return result;
@@ -148,7 +148,7 @@ Schema JsonToSchema(const rapidjson::Value& document) {
   }
 
   int32_t schema_id = ExtractInt32Field(document, "schema-id");
-  std::vector<Field> fields = ExtractSchemaFields(document, "fields");
+  std::vector<types::NestedField> fields = ExtractSchemaFields(document, "fields");
 
   return Schema(schema_id, fields);
 }
@@ -209,7 +209,7 @@ Snapshot JsonToSnapshot(const rapidjson::Value& document) {
                   .parent_snapshot_id = parent_snapshot_id,
                   .sequence_number = sequence_number,
                   .timestamp_ms = timestamp_ms,
-                  .manifest_list = std::move(manifest_list),
+                  .manifest_list_location = std::move(manifest_list),
                   .summary = std::move(summary),
                   .schema_id = schema_id};
 }
@@ -288,7 +288,7 @@ std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
   }
   for (const auto& snapshot : *snapshots) {
     if (snapshot.snapshot_id == current_snapshot_id.value()) {
-      return snapshot.manifest_list;
+      return snapshot.manifest_list_location;
     }
   }
   return std::nullopt;
@@ -311,7 +311,7 @@ Schema TableMetadataV2::GetCurrentSchema() const {
     throw std::runtime_error("GetCurrentSchema: no current snapshot");
   }
   for (const auto& schema : schemas) {
-    if (schema.GetSchemaId() == schema_id.value()) {
+    if (schema.SchemaId() == schema_id.value()) {
       return schema;
     }
   }

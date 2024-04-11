@@ -9,6 +9,7 @@
 #include "arrow/io/file.h"
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
+#include "iceberg/src/generated/manifest_file.hh"
 #include "iceberg/src/hive_client.h"
 #include "iceberg/src/manifest_entry.h"
 #include "iceberg/src/manifest_metadata.h"
@@ -87,13 +88,13 @@ arrow::Result<ScanMetadata> GetScanMetadata(const std::string& db_name, const st
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
   ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(manifest_list_path, s3fs));
-  const std::vector<ManifestMetadata> manifest_metadatas = MakeManifestList(manifest_metadatas_content);
+  const std::vector<ManifestFile> manifest_metadatas = MakeManifestList(manifest_metadatas_content);
 
   std::vector<ManifestEntry> entries_output;
   Schema schema = table_metadata.GetCurrentSchema();
 
   for (const auto& manifest_metadata : manifest_metadatas) {
-    const std::string manifest_path = manifest_metadata.manifest_path;
+    const std::string manifest_path = manifest_metadata.path;
     ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(manifest_path, s3fs));
     std::vector<ManifestEntry> entries_input = MakeManifestEntries(entries_content);
     for (auto&& entry : entries_input) {
