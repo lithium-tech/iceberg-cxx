@@ -9,7 +9,9 @@ namespace iceberg {
 
 class Schema {
  public:
-  Schema(int32_t schema_id, std::vector<types::NestedField> fields)
+  Schema(int32_t schema_id, const std::vector<types::NestedField>& fields) : schema_id_(schema_id), fields_(fields) {}
+
+  Schema(int32_t schema_id, std::vector<types::NestedField>&& fields)
       : schema_id_(schema_id), fields_(std::move(fields)) {}
 
   int32_t SchemaId() const { return schema_id_; }

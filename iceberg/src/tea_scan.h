@@ -13,12 +13,13 @@
 namespace iceberg::ice_tea {
 
 struct ScanMetadata {
-  Schema schema;
+  std::shared_ptr<Schema> schema;
   std::vector<ManifestEntry> entries;
 };
 
-// TODO(gmusya): support arrow::fs::FileSystem
-arrow::Result<ScanMetadata> GetScanMetadata(const std::string& metadata_location,
-                                            std::shared_ptr<arrow::fs::S3FileSystem> s3fs);
+arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& url);
+
+arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                            const std::string& metadata_location);
 
 }  // namespace iceberg::ice_tea

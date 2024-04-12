@@ -142,7 +142,7 @@ std::vector<types::NestedField> ExtractSchemaFields(const rapidjson::Value& docu
   return result;
 }
 
-Schema JsonToSchema(const rapidjson::Value& document) {
+std::shared_ptr<Schema> JsonToSchema(const rapidjson::Value& document) {
   if (!document.IsObject()) {
     throw std::runtime_error("JsonToSchema: !document.IsObject()");
   }
@@ -150,16 +150,16 @@ Schema JsonToSchema(const rapidjson::Value& document) {
   int32_t schema_id = ExtractInt32Field(document, "schema-id");
   std::vector<types::NestedField> fields = ExtractSchemaFields(document, "fields");
 
-  return Schema(schema_id, fields);
+  return std::make_shared<Schema>(schema_id, fields);
 }
 
-std::vector<Schema> ExtractSchemas(const rapidjson::Value& document) {
+std::vector<std::shared_ptr<Schema>> ExtractSchemas(const rapidjson::Value& document) {
   const std::string field_name = "schemas";
   const char* c_str = field_name.c_str();
   if (!document.HasMember(c_str)) {
     throw std::runtime_error("ExtractSchemas: !document.HasMember(" + field_name + ")");
   }
-  std::vector<Schema> result;
+  std::vector<std::shared_ptr<Schema>> result;
   ProcessArray(document[c_str],
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToSchema(elem)); });
   return result;
@@ -190,7 +190,7 @@ std::map<std::string, std::string> ExtractStringMap(const rapidjson::Value& docu
   return JsonToStringMap(document[c_str]);
 }
 
-Snapshot JsonToSnapshot(const rapidjson::Value& document) {
+std::shared_ptr<Snapshot> JsonToSnapshot(const rapidjson::Value& document) {
   if (!document.IsObject()) {
     throw std::runtime_error("JsonToSnapshot: !document.IsObject()");
   }
@@ -205,22 +205,22 @@ Snapshot JsonToSnapshot(const rapidjson::Value& document) {
     throw std::runtime_error("JsonToSnapshot:!summary.contains(\"operation\")");
   }
   std::optional<int64_t> schema_id = ExtractOptionalInt64Field(document, "schema-id");
-  return Snapshot{.snapshot_id = snapshot_id,
-                  .parent_snapshot_id = parent_snapshot_id,
-                  .sequence_number = sequence_number,
-                  .timestamp_ms = timestamp_ms,
-                  .manifest_list_location = std::move(manifest_list),
-                  .summary = std::move(summary),
-                  .schema_id = schema_id};
+  return std::make_shared<Snapshot>(Snapshot{.snapshot_id = snapshot_id,
+                                             .parent_snapshot_id = parent_snapshot_id,
+                                             .sequence_number = sequence_number,
+                                             .timestamp_ms = timestamp_ms,
+                                             .manifest_list_location = std::move(manifest_list),
+                                             .summary = std::move(summary),
+                                             .schema_id = schema_id});
 }
 
-std::optional<std::vector<Snapshot>> ExtractSnapshots(const rapidjson::Value& document) {
+std::optional<std::vector<std::shared_ptr<Snapshot>>> ExtractSnapshots(const rapidjson::Value& document) {
   const std::string field_name = "snapshots";
   const char* c_str = field_name.c_str();
   if (!document.HasMember(c_str)) {
     return std::nullopt;
   }
-  std::vector<Snapshot> result;
+  std::vector<std::shared_ptr<Snapshot>> result;
   ProcessArray(document[c_str],
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToSnapshot(elem)); });
   return result;
@@ -283,48 +283,46 @@ std::optional<std::map<std::string, std::string>> ExtractProperties(const rapidj
 }  // namespace
 
 std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
-  if (!current_snapshot_id.has_value() || !snapshots.has_value()) {
+  if (!current_snapshot_id.has_value() || snapshots.empty()) {
     return std::nullopt;
   }
-  for (const auto& snapshot : *snapshots) {
-    if (snapshot.snapshot_id == current_snapshot_id.value()) {
-      return snapshot.manifest_list_location;
+  for (const auto& snapshot : snapshots) {
+    if (snapshot->snapshot_id == current_snapshot_id.value()) {
+      return snapshot->manifest_list_location;
     }
   }
   return std::nullopt;
 }
 
-Schema TableMetadataV2::GetCurrentSchema() const {
-  if (!current_snapshot_id.has_value() || !snapshots.has_value()) {
+std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
+  if (!current_snapshot_id.has_value() || snapshots.empty()) {
     throw std::runtime_error("GetCurrentSchema: no current snapshot");
   }
   std::optional<int64_t> schema_id;
-  for (const auto& snapshot : *snapshots) {
-    if (snapshot.snapshot_id == current_snapshot_id.value()) {
-      if (!snapshot.schema_id.has_value()) {
+  for (const auto& snapshot : snapshots) {
+    if (snapshot->snapshot_id == current_snapshot_id.value()) {
+      if (!snapshot->schema_id.has_value()) {
         throw std::runtime_error("GetCurrentSchema: no schema id");
       }
-      schema_id = snapshot.schema_id.value();
+      schema_id = snapshot->schema_id.value();
     }
   }
   if (!schema_id.has_value()) {
     throw std::runtime_error("GetCurrentSchema: no current snapshot");
   }
   for (const auto& schema : schemas) {
-    if (schema.SchemaId() == schema_id.value()) {
+    if (schema->SchemaId() == schema_id.value()) {
       return schema;
     }
   }
   throw std::runtime_error("GetCurrentSchema: no schema with current schema id");
 }
 
-TableMetadataV2 TableMetadataV2Builder::Build() && {
-#define ASSERT_HAS_VALUE(field)                                                                              \
-  do {                                                                                                       \
-    if (!field.has_value()) {                                                                                \
-      throw std::runtime_error("TableMetadataV2Builder::Build(): !" + std::string(#field) + ".has_value()"); \
-    }                                                                                                        \
-  } while (false)
+std::shared_ptr<TableMetadataV2> TableMetadataV2Builder::Build() {
+#define ASSERT_HAS_VALUE(field)                                                                            \
+  if (!field.has_value()) {                                                                                \
+    throw std::runtime_error("TableMetadataV2Builder::Build(): !" + std::string(#field) + ".has_value()"); \
+  }
 
   ASSERT_HAS_VALUE(table_uuid);
   ASSERT_HAS_VALUE(location);
@@ -339,14 +337,29 @@ TableMetadataV2 TableMetadataV2Builder::Build() && {
 
 #undef ASSERT_HAS_VALUE
 
-  return TableMetadataV2(std::move(table_uuid.value()), std::move(location.value()), last_sequence_number.value(),
-                         last_updated_ms.value(), last_column_id.value(), schemas.value(), current_schema_id.value(),
-                         default_spec_id.value(), last_partition_id.value(), std::move(properties), current_snapshot_id,
-                         std::move(snapshots), std::move(snapshot_log), std::move(metadata_log),
-                         default_sort_order_id.value());
+#define ASSERT_GE(field, value)                                                                          \
+  if (field.has_value() && *field < value) {                                                             \
+    throw std::runtime_error("TableMetadataV2Builder::Build(): !" + std::string(#field) + " condition"); \
+  }
+
+  ASSERT_GE(last_sequence_number, 0);
+  ASSERT_GE(last_column_id, 0);
+  ASSERT_GE(current_schema_id, 0);
+  ASSERT_GE(default_spec_id, 0);
+  ASSERT_GE(last_partition_id, 0);
+  ASSERT_GE(current_snapshot_id, 0);
+  ASSERT_GE(default_sort_order_id, 0);
+
+#undef ASSERT_GE
+
+  return std::make_shared<TableMetadataV2>(
+      std::move(table_uuid.value()), std::move(location.value()), last_sequence_number.value(), last_updated_ms.value(),
+      last_column_id.value(), std::move(schemas.value()), current_schema_id.value(), default_spec_id.value(),
+      last_partition_id.value(), std::move(properties.value()), current_snapshot_id, std::move(snapshots.value()),
+      std::move(snapshot_log), std::move(metadata_log), default_sort_order_id.value());
 }
 
-TableMetadataV2 MakeTableMetadataV2(const std::string& json) {
+std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const std::string& json) {
   TableMetadataV2Builder builder;
 
   rapidjson::Document document;
@@ -364,23 +377,13 @@ TableMetadataV2 MakeTableMetadataV2(const std::string& json) {
   builder.current_schema_id = ExtractInt32Field(document, "current-schema-id");
   builder.default_spec_id = ExtractInt32Field(document, "default-spec-id");
   builder.last_partition_id = ExtractInt32Field(document, "last-partition-id");
-  if (auto maybe_value = ExtractProperties(document); maybe_value.has_value()) {
-    builder.properties = std::move(maybe_value.value());
-  }
-  if (auto maybe_value = ExtractOptionalInt64Field(document, "current-snapshot-id"); maybe_value.has_value()) {
-    builder.current_snapshot_id = maybe_value.value();
-  }
-  if (auto maybe_value = ExtractSnapshots(document); maybe_value.has_value()) {
-    builder.snapshots = std::move(maybe_value.value());
-  }
-  if (auto maybe_value = ExtractSnapshotLog(document); maybe_value.has_value()) {
-    builder.snapshot_log = std::move(maybe_value.value());
-  }
-  if (auto maybe_value = ExtractMetadataLog(document); maybe_value.has_value()) {
-    builder.metadata_log = std::move(maybe_value.value());
-  }
+  builder.properties = ExtractProperties(document);
+  builder.current_snapshot_id = ExtractOptionalInt64Field(document, "current-snapshot-id");
+  builder.snapshots = ExtractSnapshots(document);
+  builder.snapshot_log = ExtractSnapshotLog(document);
+  builder.metadata_log = ExtractMetadataLog(document);
   builder.default_sort_order_id = ExtractInt32Field(document, "default-sort-order-id");
-  return std::move(builder).Build();
+  return builder.Build();
 }
 
 }  // namespace iceberg

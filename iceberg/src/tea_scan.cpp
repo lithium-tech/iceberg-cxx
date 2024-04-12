@@ -45,20 +45,29 @@ UrlComponents SplitUrl(const std::string& url) {
   return result;
 }
 
-arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenUrl(const std::string& url,
-                                                                    std::shared_ptr<arrow::fs::FileSystem> fs) {
+bool IsKnownPrefix(const std::string& prefix) { return prefix == "s3a" || prefix == "s3"; }
+
+std::string UrlToPath(const std::string& url) {
   auto components = SplitUrl(url);
-  std::string path;
-  if (components.schema == "s3a" || components.schema == "s3") {
-    path = components.location + components.path;
-  } else {
-    return ::arrow::Status::ExecutionError("unknown fs prefix for file: ", url);
+  if (IsKnownPrefix(components.schema)) {
+    return components.location + components.path;
+  }
+  return {};
+}
+
+}  // namespace
+
+arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenFile(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                                                     const std::string& url) {
+  auto path = UrlToPath(url);
+  if (path.empty()) {
+    return ::arrow::Status::ExecutionError("bad url: ", url);
   }
   return fs->OpenInputFile(path);
 }
 
-arrow::Result<std::string> ReadFile(const std::string& path, std::shared_ptr<arrow::fs::FileSystem> fs) {
-  ARROW_ASSIGN_OR_RAISE(auto file, OpenUrl(path, fs));
+arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& url) {
+  ARROW_ASSIGN_OR_RAISE(auto file, OpenFile(fs, url));
 
   std::string buffer;
   ARROW_ASSIGN_OR_RAISE(auto size, file->GetSize());
@@ -68,31 +77,29 @@ arrow::Result<std::string> ReadFile(const std::string& path, std::shared_ptr<arr
   return buffer;
 }
 
-}  // namespace
-
-arrow::Result<ScanMetadata> GetScanMetadata(const std::string& metadata_location,
-                                            std::shared_ptr<arrow::fs::S3FileSystem> s3fs) {
-  ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(metadata_location, s3fs));
-  const TableMetadataV2 table_metadata = MakeTableMetadataV2(table_metadata_content);
-  if (!table_metadata.current_snapshot_id.has_value()) {
+arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                            const std::string& metadata_location) {
+  ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(fs, metadata_location));
+  auto table_metadata = MakeTableMetadataV2(table_metadata_content);
+  if (!table_metadata->current_snapshot_id.has_value()) {
     return arrow::Status::ExecutionError("no current_snapshot_id");
   }
 
-  auto maybe_manifest_list_path = table_metadata.GetCurrentManifestListPath();
+  auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   if (!maybe_manifest_list_path.has_value()) {
     return arrow::Status::ExecutionError("no manifest_list_path");
   }
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
-  ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(manifest_list_path, s3fs));
+  ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(fs, manifest_list_path));
   const std::vector<ManifestFile> manifest_metadatas = ice_tea::MakeManifestList(manifest_metadatas_content);
 
   std::vector<ManifestEntry> entries_output;
-  Schema schema = table_metadata.GetCurrentSchema();
+  std::shared_ptr<Schema> schema = table_metadata->GetCurrentSchema();
 
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
-    ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(manifest_path, s3fs));
+    ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs, manifest_path));
     std::vector<ManifestEntry> entries_input = MakeManifestEntries(entries_content);
     for (auto&& entry : entries_input) {
       if (entry.status == ManifestEntry::Status::kDeleted) {
@@ -112,7 +119,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(const std::string& metadata_location
     }
   }
 
-  return ScanMetadata{.schema = std::move(schema), .entries = std::move(entries_output)};
+  return ScanMetadata{.schema = schema, .entries = std::move(entries_output)};
 }
 
 }  // namespace iceberg::ice_tea
