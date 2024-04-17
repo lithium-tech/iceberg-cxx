@@ -6,47 +6,78 @@
 #include "iceberg/src/manifest_file.h"
 
 namespace iceberg {
+namespace {
+std::vector<ManifestFile> expected_list = {
+    ManifestFile{.added_files_count = 6,
+                 .added_rows_count = 10000,
+                 .content = ManifestContent::kData,
+                 .deleted_files_count = 0,
+                 .deleted_rows_count = 0,
+                 .existing_files_count = 0,
+                 .existing_rows_count = 0,
+                 .length = 6824,
+                 .min_sequence_number = 2,
+                 .partition_spec_id = 0,
+                 .path = "s3://warehouse/gperov/test/metadata/0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro",
+                 .sequence_number = 2,
+                 .snapshot_id = 2635333433439510679},
+    ManifestFile{.added_files_count = 1,
+                 .added_rows_count = 1,
+                 .content = ManifestContent::kDeletes,
+                 .deleted_files_count = 0,
+                 .deleted_rows_count = 0,
+                 .existing_files_count = 0,
+                 .existing_rows_count = 0,
+                 .length = 6712,
+                 .min_sequence_number = 3,
+                 .partition_spec_id = 0,
+                 .path = "s3://warehouse/gperov/test/metadata/5c8077bc-bb60-406d-ace2-586694e7ebea-m0.avro",
+                 .sequence_number = 3,
+                 .snapshot_id = 765518724043979080}};
 
-TEST(Manifest, SanityCheck) {
+void CheckEqual(const ManifestFile& m1, const ManifestFile& m2) {
+  EXPECT_EQ(m1.path, m2.path);
+  EXPECT_EQ(m1.length, m2.length);
+  EXPECT_EQ(m1.partition_spec_id, m2.partition_spec_id);
+  EXPECT_EQ(m1.content, m2.content);
+  EXPECT_EQ(m1.sequence_number, m2.sequence_number);
+  EXPECT_EQ(m1.min_sequence_number, m2.min_sequence_number);
+  EXPECT_EQ(m1.snapshot_id, m2.snapshot_id);
+  EXPECT_EQ(m1.added_files_count, m2.added_files_count);
+  EXPECT_EQ(m1.existing_files_count, m2.existing_files_count);
+  EXPECT_EQ(m1.deleted_files_count, m2.deleted_files_count);
+  EXPECT_EQ(m1.added_rows_count, m2.added_rows_count);
+  EXPECT_EQ(m1.existing_rows_count, m2.existing_rows_count);
+  EXPECT_EQ(m1.deleted_rows_count, m2.deleted_rows_count);
+}
+}  // namespace
+
+TEST(Manifest, ReadSanityCheck) {
   std::ifstream input(
       "metadata/"
       "snap-765518724043979080-1-5c8077bc-bb60-406d-ace2-586694e7ebea.avro");
 
-  std::stringstream ss;
-  ss << input.rdbuf();
-  std::string manifest_data = ss.str();
-  std::vector<ManifestFile> manifest_list = ice_tea::MakeManifestList(manifest_data);
+  std::vector<ManifestFile> manifest_list = ice_tea::ReadManifestList(input);
   EXPECT_EQ(manifest_list.size(), 2);
-  EXPECT_EQ(manifest_list[0].path,
-            "s3://warehouse/gperov/test/metadata/"
-            "0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro");
-  EXPECT_EQ(manifest_list[0].length, 6824);
-  EXPECT_EQ(manifest_list[0].partition_spec_id, 0);
-  EXPECT_EQ(manifest_list[0].content, ManifestContent::kData);
-  EXPECT_EQ(manifest_list[0].sequence_number, 2);
-  EXPECT_EQ(manifest_list[0].min_sequence_number, 2);
-  EXPECT_EQ(manifest_list[0].snapshot_id, 2635333433439510679);
-  EXPECT_EQ(manifest_list[0].added_files_count, 6);
-  EXPECT_EQ(manifest_list[0].existing_files_count, 0);
-  EXPECT_EQ(manifest_list[0].deleted_files_count, 0);
-  EXPECT_EQ(manifest_list[0].added_rows_count, 10000);
-  EXPECT_EQ(manifest_list[0].existing_rows_count, 0);
-  EXPECT_EQ(manifest_list[0].deleted_rows_count, 0);
-  EXPECT_EQ(manifest_list[1].path,
-            "s3://warehouse/gperov/test/metadata/"
-            "5c8077bc-bb60-406d-ace2-586694e7ebea-m0.avro");
-  EXPECT_EQ(manifest_list[1].length, 6712);
-  EXPECT_EQ(manifest_list[1].partition_spec_id, 0);
-  EXPECT_EQ(manifest_list[1].content, ManifestContent::kDeletes);
-  EXPECT_EQ(manifest_list[1].sequence_number, 3);
-  EXPECT_EQ(manifest_list[1].min_sequence_number, 3);
-  EXPECT_EQ(manifest_list[1].snapshot_id, 765518724043979080);
-  EXPECT_EQ(manifest_list[1].added_files_count, 1);
-  EXPECT_EQ(manifest_list[1].existing_files_count, 0);
-  EXPECT_EQ(manifest_list[1].deleted_files_count, 0);
-  EXPECT_EQ(manifest_list[1].added_rows_count, 1);
-  EXPECT_EQ(manifest_list[1].existing_rows_count, 0);
-  EXPECT_EQ(manifest_list[1].deleted_rows_count, 0);
+  CheckEqual(manifest_list[0], expected_list[0]);
+  CheckEqual(manifest_list[1], expected_list[1]);
+}
+
+TEST(Manifest, ReadWriteRead) {
+  std::ifstream input(
+      "metadata/"
+      "snap-765518724043979080-1-5c8077bc-bb60-406d-ace2-586694e7ebea.avro");
+
+  std::vector<ManifestFile> manifest_list = ice_tea::ReadManifestList(input);
+  auto manifest_data = ice_tea::WriteManifestList(manifest_list);
+  manifest_list.clear();
+
+  std::stringstream ss(manifest_data);
+  manifest_list = ice_tea::ReadManifestList(ss);
+
+  EXPECT_EQ(manifest_list.size(), 2);
+  CheckEqual(manifest_list[0], expected_list[0]);
+  CheckEqual(manifest_list[1], expected_list[1]);
 }
 
 }  // namespace iceberg

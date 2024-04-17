@@ -80,7 +80,7 @@ arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, c
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location) {
   ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(fs, metadata_location));
-  auto table_metadata = MakeTableMetadataV2(table_metadata_content);
+  auto table_metadata = ReadTableMetadataV2(table_metadata_content);
   if (!table_metadata->current_snapshot_id.has_value()) {
     return arrow::Status::ExecutionError("no current_snapshot_id");
   }
@@ -92,7 +92,9 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
   ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(fs, manifest_list_path));
-  const std::vector<ManifestFile> manifest_metadatas = ice_tea::MakeManifestList(manifest_metadatas_content);
+
+  std::stringstream ss(manifest_metadatas_content);
+  const std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
 
   std::vector<ManifestEntry> entries_output;
   std::shared_ptr<Schema> schema = table_metadata->GetCurrentSchema();

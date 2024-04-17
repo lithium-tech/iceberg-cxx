@@ -82,7 +82,7 @@ std::shared_ptr<Table> HiveCatalog::LoadTable(const catalog::TableIdentifier& id
   if (!res.ok()) {
     return {};
   }
-  return std::make_shared<HiveTable>(identifier, location, MakeTableMetadataV2(*res));
+  return std::make_shared<HiveTable>(identifier, location, ReadTableMetadataV2(*res));
 }
 
 static inline std::string GetOpt(const std::map<std::string, std::string>& properties, const std::string& key) {
