@@ -494,7 +494,7 @@ std::shared_ptr<PartitionSpec> JsonPartitionSpec(const rapidjson::Value& documen
   }
 
   int32_t schema_id = ExtractInt32Field(document, Names::spec_id);
-  return std::make_shared<PartitionSpec>(schema_id, ExtractPartitionFields(document));
+  return std::make_shared<PartitionSpec>(PartitionSpec{schema_id, ExtractPartitionFields(document)});
 }
 
 std::vector<std::shared_ptr<PartitionSpec>> ExtractPartitionSpecs(const rapidjson::Value& document) {
@@ -641,11 +641,11 @@ std::shared_ptr<SortOrder> JsonToSortOrders(const rapidjson::Value& document) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  int64_t order_id = ExtractInt32Field(document, Names::order_id);
+  int32_t order_id = ExtractInt32Field(document, Names::order_id);
   std::vector<SortField> fields;
   ProcessArray(document[Names::fields],
                [&fields](const rapidjson::Value& elem) mutable { fields.emplace_back(JsonToSortField(elem)); });
-  return std::make_shared<SortOrder>(order_id, fields);
+  return std::make_shared<SortOrder>(SortOrder{order_id, fields});
 }
 
 std::vector<std::shared_ptr<SortOrder>> ExtractSortOrders(const rapidjson::Value& document) {
