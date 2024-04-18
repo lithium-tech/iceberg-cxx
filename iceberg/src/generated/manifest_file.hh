@@ -42,8 +42,8 @@ public:
         idx_ = 0;
         value_ = std::any();
     }
-    bool get_bool() const;
-    void set_bool(const bool& v);
+    int32_t get_int() const;
+    void set_int(const int32_t& v);
     manifest_file_schema_json_Union__0__();
 };
 
@@ -60,8 +60,8 @@ public:
         idx_ = 0;
         value_ = std::any();
     }
-    std::vector<uint8_t> get_bytes() const;
-    void set_bytes(const std::vector<uint8_t>& v);
+    int32_t get_int() const;
+    void set_int(const int32_t& v);
     manifest_file_schema_json_Union__1__();
 };
 
@@ -78,25 +78,9 @@ public:
         idx_ = 0;
         value_ = std::any();
     }
-    std::vector<uint8_t> get_bytes() const;
-    void set_bytes(const std::vector<uint8_t>& v);
+    int32_t get_int() const;
+    void set_int(const int32_t& v);
     manifest_file_schema_json_Union__2__();
-};
-
-struct r508 {
-    typedef manifest_file_schema_json_Union__0__ contains_nan_t;
-    typedef manifest_file_schema_json_Union__1__ lower_bound_t;
-    typedef manifest_file_schema_json_Union__2__ upper_bound_t;
-    bool contains_null;
-    contains_nan_t contains_nan;
-    lower_bound_t lower_bound;
-    upper_bound_t upper_bound;
-    r508() :
-        contains_null(bool()),
-        contains_nan(contains_nan_t()),
-        lower_bound(lower_bound_t()),
-        upper_bound(upper_bound_t())
-        { }
 };
 
 struct manifest_file_schema_json_Union__3__ {
@@ -112,8 +96,8 @@ public:
         idx_ = 0;
         value_ = std::any();
     }
-    std::vector<r508 > get_array() const;
-    void set_array(const std::vector<r508 >& v);
+    int32_t get_int() const;
+    void set_int(const int32_t& v);
     manifest_file_schema_json_Union__3__();
 };
 
@@ -130,14 +114,144 @@ public:
         idx_ = 0;
         value_ = std::any();
     }
-    std::vector<uint8_t> get_bytes() const;
-    void set_bytes(const std::vector<uint8_t>& v);
+    int32_t get_int() const;
+    void set_int(const int32_t& v);
     manifest_file_schema_json_Union__4__();
 };
 
+struct manifest_file_schema_json_Union__5__ {
+private:
+    size_t idx_;
+    std::any value_;
+public:
+    size_t idx() const { return idx_; }
+    bool is_null() const {
+        return (idx_ == 0);
+    }
+    void set_null() {
+        idx_ = 0;
+        value_ = std::any();
+    }
+    int32_t get_int() const;
+    void set_int(const int32_t& v);
+    manifest_file_schema_json_Union__5__();
+};
+
+struct manifest_file_schema_json_Union__6__ {
+private:
+    size_t idx_;
+    std::any value_;
+public:
+    size_t idx() const { return idx_; }
+    bool is_null() const {
+        return (idx_ == 0);
+    }
+    void set_null() {
+        idx_ = 0;
+        value_ = std::any();
+    }
+    bool get_bool() const;
+    void set_bool(const bool& v);
+    manifest_file_schema_json_Union__6__();
+};
+
+struct manifest_file_schema_json_Union__7__ {
+private:
+    size_t idx_;
+    std::any value_;
+public:
+    size_t idx() const { return idx_; }
+    bool is_null() const {
+        return (idx_ == 0);
+    }
+    void set_null() {
+        idx_ = 0;
+        value_ = std::any();
+    }
+    std::vector<uint8_t> get_bytes() const;
+    void set_bytes(const std::vector<uint8_t>& v);
+    manifest_file_schema_json_Union__7__();
+};
+
+struct manifest_file_schema_json_Union__8__ {
+private:
+    size_t idx_;
+    std::any value_;
+public:
+    size_t idx() const { return idx_; }
+    bool is_null() const {
+        return (idx_ == 0);
+    }
+    void set_null() {
+        idx_ = 0;
+        value_ = std::any();
+    }
+    std::vector<uint8_t> get_bytes() const;
+    void set_bytes(const std::vector<uint8_t>& v);
+    manifest_file_schema_json_Union__8__();
+};
+
+struct r508 {
+    typedef manifest_file_schema_json_Union__6__ contains_nan_t;
+    typedef manifest_file_schema_json_Union__7__ lower_bound_t;
+    typedef manifest_file_schema_json_Union__8__ upper_bound_t;
+    bool contains_null;
+    contains_nan_t contains_nan;
+    lower_bound_t lower_bound;
+    upper_bound_t upper_bound;
+    r508() :
+        contains_null(bool()),
+        contains_nan(contains_nan_t()),
+        lower_bound(lower_bound_t()),
+        upper_bound(upper_bound_t())
+        { }
+};
+
+struct manifest_file_schema_json_Union__9__ {
+private:
+    size_t idx_;
+    std::any value_;
+public:
+    size_t idx() const { return idx_; }
+    bool is_null() const {
+        return (idx_ == 0);
+    }
+    void set_null() {
+        idx_ = 0;
+        value_ = std::any();
+    }
+    std::vector<r508 > get_array() const;
+    void set_array(const std::vector<r508 >& v);
+    manifest_file_schema_json_Union__9__();
+};
+
+struct manifest_file_schema_json_Union__10__ {
+private:
+    size_t idx_;
+    std::any value_;
+public:
+    size_t idx() const { return idx_; }
+    bool is_null() const {
+        return (idx_ == 0);
+    }
+    void set_null() {
+        idx_ = 0;
+        value_ = std::any();
+    }
+    std::vector<uint8_t> get_bytes() const;
+    void set_bytes(const std::vector<uint8_t>& v);
+    manifest_file_schema_json_Union__10__();
+};
+
 struct manifest_file {
-    typedef manifest_file_schema_json_Union__3__ partitions_t;
-    typedef manifest_file_schema_json_Union__4__ key_metadata_t;
+    typedef manifest_file_schema_json_Union__0__ added_files_count_t;
+    typedef manifest_file_schema_json_Union__1__ existing_files_count_t;
+    typedef manifest_file_schema_json_Union__2__ deleted_files_count_t;
+    typedef manifest_file_schema_json_Union__3__ added_data_files_count_t;
+    typedef manifest_file_schema_json_Union__4__ existing_data_files_count_t;
+    typedef manifest_file_schema_json_Union__5__ deleted_data_files_count_t;
+    typedef manifest_file_schema_json_Union__9__ partitions_t;
+    typedef manifest_file_schema_json_Union__10__ key_metadata_t;
     std::string manifest_path;
     int64_t manifest_length;
     int32_t partition_spec_id;
@@ -145,9 +259,12 @@ struct manifest_file {
     int64_t sequence_number;
     int64_t min_sequence_number;
     int64_t added_snapshot_id;
-    int32_t added_files_count;
-    int32_t existing_files_count;
-    int32_t deleted_files_count;
+    added_files_count_t added_files_count;
+    existing_files_count_t existing_files_count;
+    deleted_files_count_t deleted_files_count;
+    added_data_files_count_t added_data_files_count;
+    existing_data_files_count_t existing_data_files_count;
+    deleted_data_files_count_t deleted_data_files_count;
     int64_t added_rows_count;
     int64_t existing_rows_count;
     int64_t deleted_rows_count;
@@ -161,9 +278,12 @@ struct manifest_file {
         sequence_number(int64_t()),
         min_sequence_number(int64_t()),
         added_snapshot_id(int64_t()),
-        added_files_count(int32_t()),
-        existing_files_count(int32_t()),
-        deleted_files_count(int32_t()),
+        added_files_count(added_files_count_t()),
+        existing_files_count(existing_files_count_t()),
+        deleted_files_count(deleted_files_count_t()),
+        added_data_files_count(added_data_files_count_t()),
+        existing_data_files_count(existing_data_files_count_t()),
+        deleted_data_files_count(deleted_data_files_count_t()),
         added_rows_count(int64_t()),
         existing_rows_count(int64_t()),
         deleted_rows_count(int64_t()),
@@ -173,71 +293,155 @@ struct manifest_file {
 };
 
 inline
-bool manifest_file_schema_json_Union__0__::get_bool() const {
+int32_t manifest_file_schema_json_Union__0__::get_int() const {
     if (idx_ != 1) {
         throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__0__");
+    }
+    return std::any_cast<int32_t >(value_);
+}
+
+inline
+void manifest_file_schema_json_Union__0__::set_int(const int32_t& v) {
+    idx_ = 1;
+    value_ = v;
+}
+
+inline
+int32_t manifest_file_schema_json_Union__1__::get_int() const {
+    if (idx_ != 1) {
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__1__");
+    }
+    return std::any_cast<int32_t >(value_);
+}
+
+inline
+void manifest_file_schema_json_Union__1__::set_int(const int32_t& v) {
+    idx_ = 1;
+    value_ = v;
+}
+
+inline
+int32_t manifest_file_schema_json_Union__2__::get_int() const {
+    if (idx_ != 1) {
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__2__");
+    }
+    return std::any_cast<int32_t >(value_);
+}
+
+inline
+void manifest_file_schema_json_Union__2__::set_int(const int32_t& v) {
+    idx_ = 1;
+    value_ = v;
+}
+
+inline
+int32_t manifest_file_schema_json_Union__3__::get_int() const {
+    if (idx_ != 1) {
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__3__");
+    }
+    return std::any_cast<int32_t >(value_);
+}
+
+inline
+void manifest_file_schema_json_Union__3__::set_int(const int32_t& v) {
+    idx_ = 1;
+    value_ = v;
+}
+
+inline
+int32_t manifest_file_schema_json_Union__4__::get_int() const {
+    if (idx_ != 1) {
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__4__");
+    }
+    return std::any_cast<int32_t >(value_);
+}
+
+inline
+void manifest_file_schema_json_Union__4__::set_int(const int32_t& v) {
+    idx_ = 1;
+    value_ = v;
+}
+
+inline
+int32_t manifest_file_schema_json_Union__5__::get_int() const {
+    if (idx_ != 1) {
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__5__");
+    }
+    return std::any_cast<int32_t >(value_);
+}
+
+inline
+void manifest_file_schema_json_Union__5__::set_int(const int32_t& v) {
+    idx_ = 1;
+    value_ = v;
+}
+
+inline
+bool manifest_file_schema_json_Union__6__::get_bool() const {
+    if (idx_ != 1) {
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__6__");
     }
     return std::any_cast<bool >(value_);
 }
 
 inline
-void manifest_file_schema_json_Union__0__::set_bool(const bool& v) {
+void manifest_file_schema_json_Union__6__::set_bool(const bool& v) {
     idx_ = 1;
     value_ = v;
 }
 
 inline
-std::vector<uint8_t> manifest_file_schema_json_Union__1__::get_bytes() const {
+std::vector<uint8_t> manifest_file_schema_json_Union__7__::get_bytes() const {
     if (idx_ != 1) {
-        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__1__");
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__7__");
     }
     return std::any_cast<std::vector<uint8_t> >(value_);
 }
 
 inline
-void manifest_file_schema_json_Union__1__::set_bytes(const std::vector<uint8_t>& v) {
+void manifest_file_schema_json_Union__7__::set_bytes(const std::vector<uint8_t>& v) {
     idx_ = 1;
     value_ = v;
 }
 
 inline
-std::vector<uint8_t> manifest_file_schema_json_Union__2__::get_bytes() const {
+std::vector<uint8_t> manifest_file_schema_json_Union__8__::get_bytes() const {
     if (idx_ != 1) {
-        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__2__");
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__8__");
     }
     return std::any_cast<std::vector<uint8_t> >(value_);
 }
 
 inline
-void manifest_file_schema_json_Union__2__::set_bytes(const std::vector<uint8_t>& v) {
+void manifest_file_schema_json_Union__8__::set_bytes(const std::vector<uint8_t>& v) {
     idx_ = 1;
     value_ = v;
 }
 
 inline
-std::vector<r508 > manifest_file_schema_json_Union__3__::get_array() const {
+std::vector<r508 > manifest_file_schema_json_Union__9__::get_array() const {
     if (idx_ != 1) {
-        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__3__");
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__9__");
     }
     return std::any_cast<std::vector<r508 > >(value_);
 }
 
 inline
-void manifest_file_schema_json_Union__3__::set_array(const std::vector<r508 >& v) {
+void manifest_file_schema_json_Union__9__::set_array(const std::vector<r508 >& v) {
     idx_ = 1;
     value_ = v;
 }
 
 inline
-std::vector<uint8_t> manifest_file_schema_json_Union__4__::get_bytes() const {
+std::vector<uint8_t> manifest_file_schema_json_Union__10__::get_bytes() const {
     if (idx_ != 1) {
-        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__4__");
+        throw avro::Exception("Invalid type for union manifest_file_schema_json_Union__10__");
     }
     return std::any_cast<std::vector<uint8_t> >(value_);
 }
 
 inline
-void manifest_file_schema_json_Union__4__::set_bytes(const std::vector<uint8_t>& v) {
+void manifest_file_schema_json_Union__10__::set_bytes(const std::vector<uint8_t>& v) {
     idx_ = 1;
     value_ = v;
 }
@@ -247,6 +451,12 @@ inline manifest_file_schema_json_Union__1__::manifest_file_schema_json_Union__1_
 inline manifest_file_schema_json_Union__2__::manifest_file_schema_json_Union__2__() : idx_(0) { }
 inline manifest_file_schema_json_Union__3__::manifest_file_schema_json_Union__3__() : idx_(0) { }
 inline manifest_file_schema_json_Union__4__::manifest_file_schema_json_Union__4__() : idx_(0) { }
+inline manifest_file_schema_json_Union__5__::manifest_file_schema_json_Union__5__() : idx_(0) { }
+inline manifest_file_schema_json_Union__6__::manifest_file_schema_json_Union__6__() : idx_(0) { }
+inline manifest_file_schema_json_Union__7__::manifest_file_schema_json_Union__7__() : idx_(0) { }
+inline manifest_file_schema_json_Union__8__::manifest_file_schema_json_Union__8__() : idx_(0) { }
+inline manifest_file_schema_json_Union__9__::manifest_file_schema_json_Union__9__() : idx_(0) { }
+inline manifest_file_schema_json_Union__10__::manifest_file_schema_json_Union__10__() : idx_(0) { }
 }
 namespace avro {
 template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__0__> {
@@ -257,11 +467,197 @@ template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__0__> {
             e.encodeNull();
             break;
         case 1:
-            avro::encode(e, v.get_bool());
+            avro::encode(e, v.get_int());
             break;
         }
     }
     static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__0__& v) {
+        size_t n = d.decodeUnionIndex();
+        if (n >= 2) { throw avro::Exception("Union index too big"); }
+        switch (n) {
+        case 0:
+            d.decodeNull();
+            v.set_null();
+            break;
+        case 1:
+            {
+                int32_t vv;
+                avro::decode(d, vv);
+                v.set_int(vv);
+            }
+            break;
+        }
+    }
+};
+
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__1__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__1__ v) {
+        e.encodeUnionIndex(v.idx());
+        switch (v.idx()) {
+        case 0:
+            e.encodeNull();
+            break;
+        case 1:
+            avro::encode(e, v.get_int());
+            break;
+        }
+    }
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__1__& v) {
+        size_t n = d.decodeUnionIndex();
+        if (n >= 2) { throw avro::Exception("Union index too big"); }
+        switch (n) {
+        case 0:
+            d.decodeNull();
+            v.set_null();
+            break;
+        case 1:
+            {
+                int32_t vv;
+                avro::decode(d, vv);
+                v.set_int(vv);
+            }
+            break;
+        }
+    }
+};
+
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__2__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__2__ v) {
+        e.encodeUnionIndex(v.idx());
+        switch (v.idx()) {
+        case 0:
+            e.encodeNull();
+            break;
+        case 1:
+            avro::encode(e, v.get_int());
+            break;
+        }
+    }
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__2__& v) {
+        size_t n = d.decodeUnionIndex();
+        if (n >= 2) { throw avro::Exception("Union index too big"); }
+        switch (n) {
+        case 0:
+            d.decodeNull();
+            v.set_null();
+            break;
+        case 1:
+            {
+                int32_t vv;
+                avro::decode(d, vv);
+                v.set_int(vv);
+            }
+            break;
+        }
+    }
+};
+
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__3__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__3__ v) {
+        e.encodeUnionIndex(v.idx());
+        switch (v.idx()) {
+        case 0:
+            e.encodeNull();
+            break;
+        case 1:
+            avro::encode(e, v.get_int());
+            break;
+        }
+    }
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__3__& v) {
+        size_t n = d.decodeUnionIndex();
+        if (n >= 2) { throw avro::Exception("Union index too big"); }
+        switch (n) {
+        case 0:
+            d.decodeNull();
+            v.set_null();
+            break;
+        case 1:
+            {
+                int32_t vv;
+                avro::decode(d, vv);
+                v.set_int(vv);
+            }
+            break;
+        }
+    }
+};
+
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__4__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__4__ v) {
+        e.encodeUnionIndex(v.idx());
+        switch (v.idx()) {
+        case 0:
+            e.encodeNull();
+            break;
+        case 1:
+            avro::encode(e, v.get_int());
+            break;
+        }
+    }
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__4__& v) {
+        size_t n = d.decodeUnionIndex();
+        if (n >= 2) { throw avro::Exception("Union index too big"); }
+        switch (n) {
+        case 0:
+            d.decodeNull();
+            v.set_null();
+            break;
+        case 1:
+            {
+                int32_t vv;
+                avro::decode(d, vv);
+                v.set_int(vv);
+            }
+            break;
+        }
+    }
+};
+
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__5__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__5__ v) {
+        e.encodeUnionIndex(v.idx());
+        switch (v.idx()) {
+        case 0:
+            e.encodeNull();
+            break;
+        case 1:
+            avro::encode(e, v.get_int());
+            break;
+        }
+    }
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__5__& v) {
+        size_t n = d.decodeUnionIndex();
+        if (n >= 2) { throw avro::Exception("Union index too big"); }
+        switch (n) {
+        case 0:
+            d.decodeNull();
+            v.set_null();
+            break;
+        case 1:
+            {
+                int32_t vv;
+                avro::decode(d, vv);
+                v.set_int(vv);
+            }
+            break;
+        }
+    }
+};
+
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__6__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__6__ v) {
+        e.encodeUnionIndex(v.idx());
+        switch (v.idx()) {
+        case 0:
+            e.encodeNull();
+            break;
+        case 1:
+            avro::encode(e, v.get_bool());
+            break;
+        }
+    }
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__6__& v) {
         size_t n = d.decodeUnionIndex();
         if (n >= 2) { throw avro::Exception("Union index too big"); }
         switch (n) {
@@ -280,8 +676,8 @@ template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__0__> {
     }
 };
 
-template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__1__> {
-    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__1__ v) {
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__7__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__7__ v) {
         e.encodeUnionIndex(v.idx());
         switch (v.idx()) {
         case 0:
@@ -292,7 +688,7 @@ template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__1__> {
             break;
         }
     }
-    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__1__& v) {
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__7__& v) {
         size_t n = d.decodeUnionIndex();
         if (n >= 2) { throw avro::Exception("Union index too big"); }
         switch (n) {
@@ -311,8 +707,8 @@ template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__1__> {
     }
 };
 
-template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__2__> {
-    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__2__ v) {
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__8__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__8__ v) {
         e.encodeUnionIndex(v.idx());
         switch (v.idx()) {
         case 0:
@@ -323,7 +719,7 @@ template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__2__> {
             break;
         }
     }
-    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__2__& v) {
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__8__& v) {
         size_t n = d.decodeUnionIndex();
         if (n >= 2) { throw avro::Exception("Union index too big"); }
         switch (n) {
@@ -381,8 +777,8 @@ template<> struct codec_traits<iceberg::r508> {
     }
 };
 
-template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__3__> {
-    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__3__ v) {
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__9__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__9__ v) {
         e.encodeUnionIndex(v.idx());
         switch (v.idx()) {
         case 0:
@@ -393,7 +789,7 @@ template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__3__> {
             break;
         }
     }
-    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__3__& v) {
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__9__& v) {
         size_t n = d.decodeUnionIndex();
         if (n >= 2) { throw avro::Exception("Union index too big"); }
         switch (n) {
@@ -412,8 +808,8 @@ template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__3__> {
     }
 };
 
-template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__4__> {
-    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__4__ v) {
+template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__10__> {
+    static void encode(Encoder& e, iceberg::manifest_file_schema_json_Union__10__ v) {
         e.encodeUnionIndex(v.idx());
         switch (v.idx()) {
         case 0:
@@ -424,7 +820,7 @@ template<> struct codec_traits<iceberg::manifest_file_schema_json_Union__4__> {
             break;
         }
     }
-    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__4__& v) {
+    static void decode(Decoder& d, iceberg::manifest_file_schema_json_Union__10__& v) {
         size_t n = d.decodeUnionIndex();
         if (n >= 2) { throw avro::Exception("Union index too big"); }
         switch (n) {
@@ -455,6 +851,9 @@ template<> struct codec_traits<iceberg::manifest_file> {
         avro::encode(e, v.added_files_count);
         avro::encode(e, v.existing_files_count);
         avro::encode(e, v.deleted_files_count);
+        avro::encode(e, v.added_data_files_count);
+        avro::encode(e, v.existing_data_files_count);
+        avro::encode(e, v.deleted_data_files_count);
         avro::encode(e, v.added_rows_count);
         avro::encode(e, v.existing_rows_count);
         avro::encode(e, v.deleted_rows_count);
@@ -499,18 +898,27 @@ template<> struct codec_traits<iceberg::manifest_file> {
                     avro::decode(d, v.deleted_files_count);
                     break;
                 case 10:
-                    avro::decode(d, v.added_rows_count);
+                    avro::decode(d, v.added_data_files_count);
                     break;
                 case 11:
-                    avro::decode(d, v.existing_rows_count);
+                    avro::decode(d, v.existing_data_files_count);
                     break;
                 case 12:
-                    avro::decode(d, v.deleted_rows_count);
+                    avro::decode(d, v.deleted_data_files_count);
                     break;
                 case 13:
-                    avro::decode(d, v.partitions);
+                    avro::decode(d, v.added_rows_count);
                     break;
                 case 14:
+                    avro::decode(d, v.existing_rows_count);
+                    break;
+                case 15:
+                    avro::decode(d, v.deleted_rows_count);
+                    break;
+                case 16:
+                    avro::decode(d, v.partitions);
+                    break;
+                case 17:
                     avro::decode(d, v.key_metadata);
                     break;
                 default:
@@ -528,6 +936,9 @@ template<> struct codec_traits<iceberg::manifest_file> {
             avro::decode(d, v.added_files_count);
             avro::decode(d, v.existing_files_count);
             avro::decode(d, v.deleted_files_count);
+            avro::decode(d, v.added_data_files_count);
+            avro::decode(d, v.existing_data_files_count);
+            avro::decode(d, v.deleted_data_files_count);
             avro::decode(d, v.added_rows_count);
             avro::decode(d, v.existing_rows_count);
             avro::decode(d, v.deleted_rows_count);

@@ -39,18 +39,39 @@
         },
         {
             "name": "added_files_count",
-            "type": "int",
-            "doc": "Added entry count"
+            "type": ["null", "int"],
+            "doc": "Added entry count",
+            "default": null
         },
         {
             "name": "existing_files_count",
-            "type": "int",
-            "doc": "Existing entry count"
+            "type": ["null", "int"],
+            "doc": "Existing entry count",
+            "default": null
         },
         {
             "name": "deleted_files_count",
-            "type": "int",
-            "doc": "Deleted entry count"
+            "type": ["null", "int"],
+            "doc": "Deleted entry count",
+            "default": null
+        },
+        {
+            "name": "added_data_files_count",
+            "type": ["null", "int"],
+            "doc": "Added entry count",
+            "default": null
+        },
+        {
+            "name": "existing_data_files_count",
+            "type": ["null", "int"],
+            "doc": "Existing entry count",
+            "default": null
+        },
+        {
+            "name": "deleted_data_files_count",
+            "type": ["null", "int"],
+            "doc": "Deleted entry count",
+            "default": null
         },
         {
             "name": "added_rows_count",
