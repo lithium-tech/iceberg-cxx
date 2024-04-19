@@ -80,7 +80,10 @@ arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, c
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location) {
   ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(fs, metadata_location));
-  auto table_metadata = ReadTableMetadataV2(table_metadata_content);
+  auto table_metadata = ice_tea::ReadTableMetadataV2(table_metadata_content);
+  if (!table_metadata) {
+    return arrow::Status::ExecutionError("cannot read metadata");
+  }
   if (!table_metadata->current_snapshot_id.has_value()) {
     return arrow::Status::ExecutionError("no current_snapshot_id");
   }
@@ -102,7 +105,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
     ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs, manifest_path));
-    std::vector<ManifestEntry> entries_input = MakeManifestEntries(entries_content);
+    std::vector<ManifestEntry> entries_input = ice_tea::ReadManifestEntries(entries_content);
     for (auto&& entry : entries_input) {
       if (entry.status == ManifestEntry::Status::kDeleted) {
         continue;

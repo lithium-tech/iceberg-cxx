@@ -185,11 +185,11 @@ class WriterContext {
   }
 
   void WriteSnapshot(rapidjson::Value& document, const Snapshot& snap) {
+    WriteIntField(document, Names::sequence_number, snap.sequence_number);
     WriteIntField(document, Names::snapshot_id, snap.snapshot_id);
     if (snap.parent_snapshot_id) {
       WriteIntField(document, Names::parent_snapshot_id, *snap.parent_snapshot_id);
     }
-    WriteIntField(document, Names::sequence_number, snap.sequence_number);
     WriteIntField(document, Names::timestamp_ms, snap.timestamp_ms);
 
     if (!snap.summary.contains(Names::operation)) {
@@ -800,11 +800,13 @@ static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Doc
   return builder.Build();
 }
 
+namespace ice_tea {
+
 std::shared_ptr<TableMetadataV2> ReadTableMetadataV2(const std::string& json) {
   rapidjson::Document document;
   document.Parse(json.c_str(), json.size());
   if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
+    return {};
   }
 
   return MakeTableMetadataV2(document);
@@ -815,7 +817,7 @@ std::shared_ptr<TableMetadataV2> ReadTableMetadataV2(std::istream& istream) {
   rapidjson::IStreamWrapper isw(istream);
   document.ParseStream(isw);
   if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
+    return {};
   }
 
   return MakeTableMetadataV2(document);
@@ -835,13 +837,16 @@ std::string WriteTableMetadataV2(const TableMetadataV2& metadata, bool pretty) {
   ctx.WriteIntField(document, Names::last_column_id, metadata.last_column_id);
   ctx.WriteIntField(document, Names::current_schema_id, metadata.current_schema_id);
   ctx.WriteSchemas(document, metadata.schemas);
-  ctx.WritePartitionSpec(document, metadata.partition_specs);
   ctx.WriteIntField(document, Names::default_spec_id, metadata.default_spec_id);
+  ctx.WritePartitionSpec(document, metadata.partition_specs);
   ctx.WriteIntField(document, Names::last_partition_id, metadata.last_partition_id);
+  ctx.WriteIntField(document, Names::default_sort_order_id, metadata.default_sort_order_id);
+  ctx.WriteSortOrder(document, metadata.sort_orders);
   ctx.WriteProperties(document, metadata.properties);
   if (metadata.current_snapshot_id) {
     ctx.WriteIntField(document, Names::current_snapshot_id, *metadata.current_snapshot_id);
   }
+  // ctx.WriteRefs(document, metadata.refs);
   ctx.WriteSnapshots(document, metadata.snapshots);
   if (!metadata.snapshot_log.empty()) {
     ctx.WriteSnapshotLog(document, metadata.snapshot_log);
@@ -849,9 +854,6 @@ std::string WriteTableMetadataV2(const TableMetadataV2& metadata, bool pretty) {
   if (!metadata.metadata_log.empty()) {
     ctx.WriteMetadataLog(document, metadata.metadata_log);
   }
-  ctx.WriteSortOrder(document, metadata.sort_orders);
-  ctx.WriteIntField(document, Names::default_sort_order_id, metadata.default_sort_order_id);
-  // ctx.WriteRefs(document, metadata.refs);
 
   rapidjson::StringBuffer s;
   if (pretty) {
@@ -866,4 +868,5 @@ std::string WriteTableMetadataV2(const TableMetadataV2& metadata, bool pretty) {
   return s.GetString();
 }
 
+}  // namespace ice_tea
 }  // namespace iceberg

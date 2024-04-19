@@ -7,13 +7,7 @@
 
 namespace iceberg {
 
-TEST(ManifestEntryTest, Test) {
-  std::ifstream input("metadata/0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro");
-  std::stringstream ss;
-  ss << input.rdbuf();
-  std::string data = ss.str();
-
-  std::vector<ManifestEntry> entries = MakeManifestEntries(data);
+static void Check(const std::vector<ManifestEntry>& entries) {
   EXPECT_EQ(entries.size(), 6);
   const auto& entry = entries[0];
   EXPECT_EQ(entry.status, ManifestEntry::Status::kAdded);
@@ -51,13 +45,34 @@ TEST(ManifestEntryTest, Test) {
   EXPECT_EQ(data_file.distinct_counts.size(), 0);
 }
 
+TEST(ManifestEntryTest, Test) {
+  std::ifstream input("metadata/0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro");
+  std::stringstream ss;
+  ss << input.rdbuf();
+  std::string data = ss.str();
+
+  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(data);
+  Check(entries);
+}
+
+TEST(ManifestEntryTest, ReadWriteRead) {
+  std::ifstream input("metadata/0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro");
+
+  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input);
+  Check(entries);
+
+  std::string serialized = ice_tea::WriteManifestEntries(entries);
+  entries = ice_tea::ReadManifestEntries(serialized);
+  Check(entries);
+}
+
 TEST(ManifestEntryTest, Test2) {
   std::ifstream input("metadata/5c8077bc-bb60-406d-ace2-586694e7ebea-m0.avro");
   std::stringstream ss;
   ss << input.rdbuf();
   std::string data = ss.str();
 
-  std::vector<ManifestEntry> entries = MakeManifestEntries(data);
+  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(data);
   EXPECT_EQ(entries.size(), 1);
   const auto& entry = entries[0];
   EXPECT_EQ(entry.status, ManifestEntry::Status::kAdded);

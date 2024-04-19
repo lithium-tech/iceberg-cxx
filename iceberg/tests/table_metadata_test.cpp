@@ -112,18 +112,21 @@ TEST(Metadata, ReadSanityCheck) {
   ss << input.rdbuf();
   std::string data = ss.str();
 
-  auto metadata = ReadTableMetadataV2(data);
+  auto metadata = ice_tea::ReadTableMetadataV2(data);
+  EXPECT_TRUE(!!metadata);
   Check(*metadata);
 }
 
 TEST(Metadata, ReadWriteRead) {
   std::ifstream input("metadata/00003-aaa5649c-d0a0-4bdd-bf89-1a63bba01b37.metadata.json");
 
-  auto metadata = ReadTableMetadataV2(input);
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  EXPECT_TRUE(!!metadata);
   Check(*metadata);
 
-  std::string serialized = WriteTableMetadataV2(*metadata, true);
-  metadata = ReadTableMetadataV2(serialized);
+  std::string serialized = ice_tea::WriteTableMetadataV2(*metadata, true);
+  metadata = ice_tea::ReadTableMetadataV2(serialized);
+  EXPECT_TRUE(!!metadata);
   Check(*metadata);
 }
 

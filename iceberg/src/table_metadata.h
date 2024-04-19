@@ -163,8 +163,11 @@ struct TableMetadataV2Builder {
   std::optional<std::map<std::string, SnapshotRef>> refs;
 };
 
+namespace ice_tea {
+
 std::shared_ptr<TableMetadataV2> ReadTableMetadataV2(const std::string& json);
 std::shared_ptr<TableMetadataV2> ReadTableMetadataV2(std::istream& istream);
 std::string WriteTableMetadataV2(const TableMetadataV2& metadata, bool pretty = false);
 
+}  // namespace ice_tea
 }  // namespace iceberg

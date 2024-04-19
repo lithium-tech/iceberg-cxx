@@ -57,6 +57,11 @@ struct ManifestEntry {
   DataFile data_file;
 };
 
-std::vector<ManifestEntry> MakeManifestEntries(const std::string& data);
+namespace ice_tea {
 
+std::vector<ManifestEntry> ReadManifestEntries(std::istream& istream);
+std::vector<ManifestEntry> ReadManifestEntries(const std::string& data);
+std::string WriteManifestEntries(const std::vector<ManifestEntry>& manifest_entries);
+
+}  // namespace ice_tea
 }  // namespace iceberg
