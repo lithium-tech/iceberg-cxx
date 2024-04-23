@@ -771,9 +771,12 @@ std::shared_ptr<TableMetadataV2> TableMetadataV2Builder::Build() {
   return std::make_shared<TableMetadataV2>(
       std::move(table_uuid.value()), std::move(location.value()), last_sequence_number.value(), last_updated_ms.value(),
       last_column_id.value(), std::move(schemas.value()), current_schema_id.value(), std::move(partition_specs.value()),
-      default_spec_id.value(), last_partition_id.value(), std::move(properties.value()), current_snapshot_id,
-      std::move(snapshots.value()), (snapshot_log ? std::move(snapshot_log.value()) : std::vector<SnapshotLog>{}),
-      (metadata_log ? std::move(metadata_log.value()) : std::vector<MetadataLog>{}), std::move(sort_orders.value()),
+      default_spec_id.value(), last_partition_id.value(),
+      (properties ? std::move(properties.value()) : std::map<std::string, std::string>{}), current_snapshot_id,
+      (snapshots ? std::move(snapshots.value()) : std::vector<std::shared_ptr<Snapshot>>{}),
+      (snapshot_log ? std::move(snapshot_log.value()) : std::vector<SnapshotLog>{}),
+      (metadata_log ? std::move(metadata_log.value()) : std::vector<MetadataLog>{}),
+      (sort_orders ? std::move(sort_orders.value()) : std::vector<std::shared_ptr<SortOrder>>{}),
       default_sort_order_id.value(), (refs ? std::move(refs.value()) : std::map<std::string, SnapshotRef>{}));
 }
 

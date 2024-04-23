@@ -21,16 +21,6 @@ bool ReplacePattern(std::string& str, const std::string& from, const std::string
   return true;
 }
 
-std::string RemoveSuffix(const std::string& str, const std::string& suffix) {
-  if (suffix.empty()) {
-    return str;
-  }
-  if (str.ends_with(suffix)) {
-    return str.substr(0, str.size() - suffix.size());
-  }
-  return str;
-}
-
 std::string FileType(iceberg::ContentFile::FileContent content) {
   switch (content) {
     case iceberg::ContentFile::FileContent::kData:
@@ -103,9 +93,8 @@ class MetadataTree {
     return out;
   }
 
-  void FixLocation(const std::string& new_location, const std::string& suffix) {
+  void FixLocation(const std::string& old_location, const std::string& new_location) {
     auto& metadata = medatada_file.table_metadata;
-    const std::string old_location = RemoveSuffix(metadata->location, suffix);
     metadata->location = new_location;
 
     for (auto& snap : metadata->snapshots) {
@@ -113,8 +102,6 @@ class MetadataTree {
     }
     for (auto& meta_log : metadata->metadata_log) {
       ReplacePattern(meta_log.metadata_file, old_location, new_location);
-
-      // TODO(chertus): fix old snapshots?
     }
 
     for (auto& [_, man_list] : manifests_lists) {
@@ -194,8 +181,8 @@ class MetadataTree {
 }  // namespace
 
 ABSL_FLAG(std::string, metadata, "", "path to iceberg metadata JSON file");
+ABSL_FLAG(std::string, old, "", "old location");
 ABSL_FLAG(std::string, fix, "", "new location");
-ABSL_FLAG(std::string, suffix, "/iceberg", "suffix in location to keep");
 ABSL_FLAG(std::string, outdir, "", "path to dst");
 
 int main(int argc, char** argv) {
@@ -203,8 +190,8 @@ int main(int argc, char** argv) {
     absl::ParseCommandLine(argc, argv);
 
     const std::filesystem::path metadata_path = absl::GetFlag(FLAGS_metadata);
+    const std::string old = absl::GetFlag(FLAGS_old);
     const std::string fix = absl::GetFlag(FLAGS_fix);
-    const std::string suffix = absl::GetFlag(FLAGS_suffix);
     const std::filesystem::path outdir = absl::GetFlag(FLAGS_outdir);
 
     if (metadata_path.empty()) {
@@ -224,9 +211,9 @@ int main(int argc, char** argv) {
 
     if (!fix.empty()) {
       for (auto& prev_tree : prev_meta) {
-        prev_tree.FixLocation(fix, suffix);
+        prev_tree.FixLocation(old, fix);
       }
-      meta_tree.FixLocation(fix, suffix);
+      meta_tree.FixLocation(old, fix);
     }
 
     if (!outdir.empty()) {
