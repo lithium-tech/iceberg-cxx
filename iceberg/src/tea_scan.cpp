@@ -88,6 +88,11 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
     return arrow::Status::ExecutionError("no current_snapshot_id");
   }
 
+  std::shared_ptr<Schema> schema = table_metadata->GetCurrentSchema();
+  if (table_metadata->snapshots.empty()) {
+    return ScanMetadata{.schema = schema, .entries = {}};
+  }
+
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   if (!maybe_manifest_list_path.has_value()) {
     return arrow::Status::ExecutionError("no manifest_list_path");
@@ -100,7 +105,6 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   const std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
 
   std::vector<ManifestEntry> entries_output;
-  std::shared_ptr<Schema> schema = table_metadata->GetCurrentSchema();
 
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
