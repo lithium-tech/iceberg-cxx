@@ -55,6 +55,9 @@ class MetadataTree {
   };
 
   explicit MetadataTree(const std::filesystem::path& path) : medatada_file_path(std::filesystem::absolute(path)) {
+    if (!std::filesystem::exists(medatada_file_path)) {
+      throw std::runtime_error("No metadata file '" + medatada_file_path.string() + "'");
+    }
     std::ifstream input_metadata(medatada_file_path);
     medatada_file.table_metadata = iceberg::ice_tea::ReadTableMetadataV2(input_metadata);
     if (!medatada_file.table_metadata) {
@@ -64,7 +67,11 @@ class MetadataTree {
     for (size_t i = 0; i < medatada_file.ListsCount(); ++i) {
       auto list_path = medatada_file.ManifestListPath(i);
 
-      std::ifstream list_input(FilesPath() / list_path.filename());
+      auto list_file_path = FilesPath() / list_path.filename();
+      if (!std::filesystem::exists(list_file_path)) {
+        throw std::runtime_error("No manifests list file '" + list_file_path.string() + "'");
+      }
+      std::ifstream list_input(list_file_path);
       auto list =
           std::make_shared<ManifestList>(ManifestList{.manifests = iceberg::ice_tea::ReadManifestList(list_input)});
 
@@ -73,7 +80,11 @@ class MetadataTree {
           std::filesystem::path man_path = man_file.path;
 
           if (!manifests.contains(man_path.filename())) {
-            std::ifstream list_input(FilesPath() / man_path.filename());
+            auto man_file_path = FilesPath() / man_path.filename();
+            if (!std::filesystem::exists(man_file_path)) {
+              throw std::runtime_error("No manifest file '" + man_file_path.string() + "'");
+            }
+            std::ifstream list_input(man_file_path);
             auto man = std::make_shared<Manifest>(Manifest{.files = iceberg::ice_tea::ReadManifestEntries(list_input)});
 
             manifests.emplace(man_path.filename(), std::move(man));
@@ -184,6 +195,7 @@ ABSL_FLAG(std::string, metadata, "", "path to iceberg metadata JSON file");
 ABSL_FLAG(std::string, old, "", "old location");
 ABSL_FLAG(std::string, fix, "", "new location");
 ABSL_FLAG(std::string, outdir, "", "path to dst");
+ABSL_FLAG(int, strict, 0, "fail on errors in previous snapshots");
 
 int main(int argc, char** argv) {
   try {
@@ -193,6 +205,7 @@ int main(int argc, char** argv) {
     const std::string old = absl::GetFlag(FLAGS_old);
     const std::string fix = absl::GetFlag(FLAGS_fix);
     const std::filesystem::path outdir = absl::GetFlag(FLAGS_outdir);
+    const int strict = absl::GetFlag(FLAGS_strict);
 
     if (metadata_path.empty()) {
       std::cerr << "No metadata set" << std::endl;
@@ -206,7 +219,16 @@ int main(int argc, char** argv) {
     for (auto& [_, meta_file_path] : meta_log) {
       auto path =
           std::filesystem::absolute(metadata_path).parent_path() / std::filesystem::path(meta_file_path).filename();
-      prev_meta.emplace_back(MetadataTree(path));
+
+      try {
+        MetadataTree old_meta(path);
+        prev_meta.emplace_back(std::move(old_meta));
+      } catch (std::exception& ex) {
+        std::cerr << "Error while processing " << path << ": " << ex.what() << std::endl;
+        if (strict) {
+          throw;
+        }
+      }
     }
 
     if (!fix.empty()) {
