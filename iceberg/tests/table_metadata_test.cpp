@@ -8,43 +8,38 @@
 namespace iceberg {
 namespace {
 
-std::map<std::string, std::string> expected_properties = {{"created-at", "2024-03-20T12:47:31.109851401Z"},
+std::map<std::string, std::string> expected_properties = {{"created-at", "2024-04-24T09:46:28.136251005Z"},
                                                           {"owner", "root"},
                                                           {"write.delete.mode", "merge-on-read"},
                                                           {"write.parquet.compression-codec", "zstd"}};
 
 std::map<std::string, std::string> expected_summary_for_snapshot_0 = {
     {"added-data-files", "6"},        {"added-files-size", "25206"},   {"added-records", "10000"},
-    {"changed-partition-count", "1"}, {"operation", "append"},         {"spark.app.id", "local-1710938745155"},
+    {"changed-partition-count", "1"}, {"operation", "append"},         {"spark.app.id", "local-1713951981838"},
     {"total-data-files", "6"},        {"total-delete-files", "0"},     {"total-equality-deletes", "0"},
     {"total-files-size", "25206"},    {"total-position-deletes", "0"}, {"total-records", "10000"}};
 
 std::map<std::string, std::string> expected_summary_for_snapshot_1 = {{"added-delete-files", "1"},
-                                                                      {"added-files-size", "1393"},
+                                                                      {"added-files-size", "1391"},
                                                                       {"added-position-delete-files", "1"},
                                                                       {"added-position-deletes", "1"},
                                                                       {"changed-partition-count", "1"},
                                                                       {"operation", "overwrite"},
-                                                                      {"spark.app.id", "local-1710938745155"},
+                                                                      {"spark.app.id", "local-1713951981838"},
                                                                       {"total-data-files", "6"},
                                                                       {"total-delete-files", "1"},
                                                                       {"total-equality-deletes", "0"},
-                                                                      {"total-files-size", "26599"},
+                                                                      {"total-files-size", "26597"},
                                                                       {"total-position-deletes", "1"},
                                                                       {"total-records", "10000"}};
 
 std::vector<SnapshotLog> expected_snapshot_log = {
-    {1710938855718, 2084304437907955247}, {1710938891838, 2635333433439510679}, {1710939086483, 765518724043979080}};
+    {1713951992417, 1638951453256129678}, {1713951995410, 5231658854638766100}, {1713951998102, 7558608030923099867}};
 
-std::vector<MetadataLog> expected_metadata_log = {{1710938855718,
-                                                   "s3://warehouse/gperov/test/metadata/"
-                                                   "00000-2ea03b9c-978d-416d-abd3-f1944ad92444.metadata.json"},
-                                                  {1710938891838,
-                                                   "s3://warehouse/gperov/test/metadata/"
-                                                   "00001-3b18f38f-545a-4a5b-a35c-a9bfbbbb9952.metadata.json"},
-                                                  {1710939079188,
-                                                   "s3://warehouse/gperov/test/metadata/"
-                                                   "00002-d98f22c9-60fb-4061-8af1-61037369648f.metadata.json"}};
+std::vector<MetadataLog> expected_metadata_log = {
+    {1713951992417, "s3://warehouse/gperov/test/metadata/00000-800cc6aa-5051-47d5-9579-46aafcba1de6.metadata.json"},
+    {1713951995410, "s3://warehouse/gperov/test/metadata/00001-6d216ef0-8d58-4f27-a1d9-1cb22c1f3415.metadata.json"},
+    {1713951995685, "s3://warehouse/gperov/test/metadata/00002-37c508a5-8a06-4823-845e-889dff066f72.metadata.json"}};
 
 std::vector<std::shared_ptr<PartitionSpec>> expected_partition_specs = {
     std::make_shared<PartitionSpec>(PartitionSpec{0, {}})};
@@ -56,9 +51,9 @@ std::vector<std::shared_ptr<SortOrder>> expected_sort_orders{std::make_shared<So
 
 void Check(const TableMetadataV2& metadata) {
   EXPECT_EQ(metadata.location, "s3://warehouse/gperov/test");
-  EXPECT_EQ(metadata.table_uuid, "83d399af-a71f-4a31-8625-a39c7e97953e");
+  EXPECT_EQ(metadata.table_uuid, "4412d001-c6df-4adb-8854-d3b9e762440c");
   EXPECT_EQ(metadata.last_sequence_number, 3);
-  EXPECT_EQ(metadata.last_updated_ms, 1710939086483);
+  EXPECT_EQ(metadata.last_updated_ms, 1713951998102);
   EXPECT_EQ(metadata.last_column_id, 2);
   EXPECT_EQ(metadata.schemas.size(), 1);
   EXPECT_EQ(metadata.schemas[0]->SchemaId(), 0);
@@ -77,20 +72,20 @@ void Check(const TableMetadataV2& metadata) {
   EXPECT_EQ(metadata.default_spec_id, 0);
   EXPECT_EQ(metadata.last_partition_id, 999);
   EXPECT_EQ(metadata.properties, expected_properties);
-  EXPECT_EQ(metadata.current_snapshot_id, 765518724043979080);
+  EXPECT_EQ(metadata.current_snapshot_id, 7558608030923099867);
   EXPECT_TRUE(!metadata.snapshots.empty());
   const auto& snapshots = metadata.snapshots;
   EXPECT_EQ(snapshots.size(), 3);
-  EXPECT_EQ(snapshots[1]->snapshot_id, 2635333433439510679);
+  EXPECT_EQ(snapshots[1]->snapshot_id, 5231658854638766100);
   EXPECT_EQ(snapshots[1]->parent_snapshot_id.has_value(), true);
   EXPECT_EQ(snapshots[1]->sequence_number, 2);
-  EXPECT_EQ(snapshots[1]->timestamp_ms, 1710938891838);
+  EXPECT_EQ(snapshots[1]->timestamp_ms, 1713951995410);
   EXPECT_EQ(snapshots[1]->summary, expected_summary_for_snapshot_0);
   EXPECT_EQ(snapshots[2]->schema_id, 0);
-  EXPECT_EQ(snapshots[2]->snapshot_id, 765518724043979080);
-  EXPECT_EQ(snapshots[2]->parent_snapshot_id, 2635333433439510679);
+  EXPECT_EQ(snapshots[2]->snapshot_id, 7558608030923099867);
+  EXPECT_EQ(snapshots[2]->parent_snapshot_id, 5231658854638766100);
   EXPECT_EQ(snapshots[2]->sequence_number, 3);
-  EXPECT_EQ(snapshots[2]->timestamp_ms, 1710939086483);
+  EXPECT_EQ(snapshots[2]->timestamp_ms, 1713951998102);
   EXPECT_EQ(snapshots[2]->summary, expected_summary_for_snapshot_1);
   EXPECT_EQ(snapshots[2]->schema_id, 0);
   EXPECT_EQ(metadata.snapshot_log, expected_snapshot_log);
@@ -106,7 +101,7 @@ void Check(const TableMetadataV2& metadata) {
 }  // namespace
 
 TEST(Metadata, ReadSanityCheck) {
-  std::ifstream input("metadata/00003-aaa5649c-d0a0-4bdd-bf89-1a63bba01b37.metadata.json");
+  std::ifstream input("metadata/00003-ca406d8e-6c7b-4672-87ff-bfd76f84f949.metadata.json");
 
   std::stringstream ss;
   ss << input.rdbuf();
@@ -118,7 +113,7 @@ TEST(Metadata, ReadSanityCheck) {
 }
 
 TEST(Metadata, ReadWriteRead) {
-  std::ifstream input("metadata/00003-aaa5649c-d0a0-4bdd-bf89-1a63bba01b37.metadata.json");
+  std::ifstream input("metadata/00003-ca406d8e-6c7b-4672-87ff-bfd76f84f949.metadata.json");
 
   auto metadata = ice_tea::ReadTableMetadataV2(input);
   EXPECT_TRUE(!!metadata);

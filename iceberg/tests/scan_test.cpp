@@ -60,23 +60,19 @@ TEST(Scan, Test) {
   {
     EXPECT_EQ(entries[0].data_file.file_size_in_bytes, 3980);
     EXPECT_EQ(entries[0].data_file.file_path,
-              "s3://warehouse/gperov/test/data/"
-              "00000-6-9183b96d-8d9f-4514-b60d-1ea34766c578-0-00001.parquet");
+              "s3://warehouse/gperov/test/data/00000-6-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet");
     EXPECT_EQ(entries[0].data_file.content, DataFile::FileContent::kData);
   }
   {
     EXPECT_EQ(entries[3].data_file.file_size_in_bytes, 2768);
     EXPECT_EQ(entries[3].data_file.file_path,
-              "s3://warehouse/gperov/test/data/"
-              "00003-9-9183b96d-8d9f-4514-b60d-1ea34766c578-0-00001.parquet");
+              "s3://warehouse/gperov/test/data/00003-9-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet");
     EXPECT_EQ(entries[3].data_file.content, DataFile::FileContent::kData);
   }
   {
-    EXPECT_EQ(entries[6].data_file.file_size_in_bytes, 1393);
+    EXPECT_EQ(entries[6].data_file.file_size_in_bytes, 1391);
     EXPECT_EQ(entries[6].data_file.file_path,
-              "s3://warehouse/gperov/test/data/"
-              "00000-13-dacb3d8d-55e9-45af-b186-ce208da1f36a-00001-deletes."
-              "parquet");
+              "s3://warehouse/gperov/test/data/00000-13-85b2f39e-780b-4214-912b-df665f506333-00001-deletes.parquet");
     EXPECT_EQ(entries[6].data_file.content, DataFile::FileContent::kPositionDeletes);
   }
   EXPECT_EQ(schema->SchemaId(), 0);
@@ -94,7 +90,7 @@ TEST(Catalog, Test) {
   hive_client.Initialize("ice_tea", properties);
   auto table = hive_client.LoadTable(catalog::TableIdentifier{.db = "gperov", .name = "test"});
   auto location = table->Location();
-  ASSERT_EQ(location, "s3://warehouse/gperov/test/metadata/00003-aaa5649c-d0a0-4bdd-bf89-1a63bba01b37.metadata.json");
+  ASSERT_EQ(location, "s3://warehouse/gperov/test/metadata/00003-ca406d8e-6c7b-4672-87ff-bfd76f84f949.metadata.json");
   auto schema = table->GetSchema();
   EXPECT_TRUE(!!schema);
   EXPECT_EQ(schema->SchemaId(), 0);

@@ -11,8 +11,7 @@ TEST(HiveCatalog, Test) {
   auto table = hive_client.LoadTable(catalog::TableIdentifier{.db = "gperov", .name = "test"});
   ASSERT_TRUE(!!table);
   ASSERT_EQ(table->Location(),
-            "s3://warehouse/gperov/test/metadata/"
-            "00003-aaa5649c-d0a0-4bdd-bf89-1a63bba01b37.metadata.json");
+            "s3://warehouse/gperov/test/metadata/00003-ca406d8e-6c7b-4672-87ff-bfd76f84f949.metadata.json");
 }
 #endif
 

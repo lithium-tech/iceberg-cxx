@@ -1,9 +1,9 @@
 {
   "format-version" : 2,
-  "table-uuid" : "83d399af-a71f-4a31-8625-a39c7e97953e",
+  "table-uuid" : "4412d001-c6df-4adb-8854-d3b9e762440c",
   "location" : "s3://warehouse/gperov/test",
   "last-sequence-number" : 1,
-  "last-updated-ms" : 1710938855718,
+  "last-updated-ms" : 1713951992417,
   "last-column-id" : 2,
   "current-schema-id" : 0,
   "schemas" : [ {
@@ -34,23 +34,23 @@
   } ],
   "properties" : {
     "owner" : "root",
-    "created-at" : "2024-03-20T12:47:31.109851401Z",
+    "created-at" : "2024-04-24T09:46:28.136251005Z",
     "write.parquet.compression-codec" : "zstd"
   },
-  "current-snapshot-id" : 2084304437907955247,
+  "current-snapshot-id" : 1638951453256129678,
   "refs" : {
     "main" : {
-      "snapshot-id" : 2084304437907955247,
+      "snapshot-id" : 1638951453256129678,
       "type" : "branch"
     }
   },
   "snapshots" : [ {
     "sequence-number" : 1,
-    "snapshot-id" : 2084304437907955247,
-    "timestamp-ms" : 1710938855718,
+    "snapshot-id" : 1638951453256129678,
+    "timestamp-ms" : 1713951992417,
     "summary" : {
       "operation" : "append",
-      "spark.app.id" : "local-1710938745155",
+      "spark.app.id" : "local-1713951981838",
       "changed-partition-count" : "0",
       "total-records" : "0",
       "total-files-size" : "0",
@@ -59,14 +59,14 @@
       "total-position-deletes" : "0",
       "total-equality-deletes" : "0"
     },
-    "manifest-list" : "s3://warehouse/gperov/test/metadata/snap-2084304437907955247-1-210e098e-f2ad-4f30-9aec-1d3343e3df79.avro",
+    "manifest-list" : "s3://warehouse/gperov/test/metadata/snap-1638951453256129678-1-eea762e4-1b7a-4717-b361-eae34da54fd4.avro",
     "schema-id" : 0
   } ],
   "statistics" : [ ],
   "partition-statistics" : [ ],
   "snapshot-log" : [ {
-    "timestamp-ms" : 1710938855718,
-    "snapshot-id" : 2084304437907955247
+    "timestamp-ms" : 1713951992417,
+    "snapshot-id" : 1638951453256129678
   } ],
   "metadata-log" : [ ]
 }

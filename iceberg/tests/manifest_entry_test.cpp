@@ -11,14 +11,13 @@ static void Check(const std::vector<ManifestEntry>& entries) {
   EXPECT_EQ(entries.size(), 6);
   const auto& entry = entries[0];
   EXPECT_EQ(entry.status, ManifestEntry::Status::kAdded);
-  EXPECT_EQ(entry.snapshot_id, 2635333433439510679);
+  EXPECT_EQ(entry.snapshot_id, 5231658854638766100);
   EXPECT_EQ(entry.sequence_number, std::nullopt);
   EXPECT_EQ(entry.file_sequence_number, std::nullopt);
   const auto& data_file = entry.data_file;
   EXPECT_EQ(data_file.content, DataFile::FileContent::kData);
   EXPECT_EQ(data_file.file_path,
-            "s3://warehouse/gperov/test/data/"
-            "00000-6-9183b96d-8d9f-4514-b60d-1ea34766c578-0-00001.parquet");
+            "s3://warehouse/gperov/test/data/00000-6-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet");
   EXPECT_EQ(data_file.file_format, "PARQUET");
   EXPECT_EQ(data_file.record_count, 1024);
   EXPECT_EQ(data_file.file_size_in_bytes, 3980);
@@ -46,7 +45,7 @@ static void Check(const std::vector<ManifestEntry>& entries) {
 }
 
 TEST(ManifestEntryTest, Test) {
-  std::ifstream input("metadata/0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro");
+  std::ifstream input("metadata/7e6e13cb-31fd-4de7-8811-02ce7cec44a9-m0.avro");
   std::stringstream ss;
   ss << input.rdbuf();
   std::string data = ss.str();
@@ -56,7 +55,7 @@ TEST(ManifestEntryTest, Test) {
 }
 
 TEST(ManifestEntryTest, ReadWriteRead) {
-  std::ifstream input("metadata/0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro");
+  std::ifstream input("metadata/7e6e13cb-31fd-4de7-8811-02ce7cec44a9-m0.avro");
 
   std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input);
   Check(entries);
@@ -67,7 +66,7 @@ TEST(ManifestEntryTest, ReadWriteRead) {
 }
 
 TEST(ManifestEntryTest, Test2) {
-  std::ifstream input("metadata/5c8077bc-bb60-406d-ace2-586694e7ebea-m0.avro");
+  std::ifstream input("metadata/41f34bc8-eedf-4573-96b0-10c04e7c84c4-m0.avro");
   std::stringstream ss;
   ss << input.rdbuf();
   std::string data = ss.str();
@@ -76,18 +75,17 @@ TEST(ManifestEntryTest, Test2) {
   EXPECT_EQ(entries.size(), 1);
   const auto& entry = entries[0];
   EXPECT_EQ(entry.status, ManifestEntry::Status::kAdded);
-  EXPECT_EQ(entry.snapshot_id, 765518724043979080);
+  EXPECT_EQ(entry.snapshot_id, 7558608030923099867);
   EXPECT_EQ(entry.sequence_number, std::nullopt);
   EXPECT_EQ(entry.file_sequence_number, std::nullopt);
   const auto& data_file = entry.data_file;
   EXPECT_EQ(data_file.content, DataFile::FileContent::kPositionDeletes);
   EXPECT_EQ(data_file.file_path,
-            "s3://warehouse/gperov/test/data/"
-            "00000-13-dacb3d8d-55e9-45af-b186-ce208da1f36a-00001-deletes.parquet");
+            "s3://warehouse/gperov/test/data/00000-13-85b2f39e-780b-4214-912b-df665f506333-00001-deletes.parquet");
   EXPECT_EQ(data_file.file_format, "PARQUET");
   EXPECT_EQ(data_file.record_count, 1);
-  EXPECT_EQ(data_file.file_size_in_bytes, 1393);
-  std::map<int32_t, int64_t> expected_column_sizes = {{2147483546, 123}, {2147483545, 40}};
+  EXPECT_EQ(data_file.file_size_in_bytes, 1391);
+  std::map<int32_t, int64_t> expected_column_sizes = {{2147483546, 121}, {2147483545, 40}};
   EXPECT_EQ(data_file.column_sizes, expected_column_sizes);
   EXPECT_EQ(data_file.value_counts.size(), 0);
   std::vector<int64_t> expected_split_offsets = {4};

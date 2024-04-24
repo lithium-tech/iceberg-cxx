@@ -15,12 +15,12 @@ std::vector<ManifestFile> expected_list = {
                  .deleted_rows_count = 0,
                  .existing_files_count = 0,
                  .existing_rows_count = 0,
-                 .length = 6824,
+                 .length = 6825,
                  .min_sequence_number = 2,
                  .partition_spec_id = 0,
-                 .path = "s3://warehouse/gperov/test/metadata/0c0f3dbb-cb29-488b-8c01-368366432478-m0.avro",
+                 .path = "s3://warehouse/gperov/test/metadata/7e6e13cb-31fd-4de7-8811-02ce7cec44a9-m0.avro",
                  .sequence_number = 2,
-                 .snapshot_id = 2635333433439510679},
+                 .snapshot_id = 5231658854638766100},
     ManifestFile{.added_files_count = 1,
                  .added_rows_count = 1,
                  .content = ManifestContent::kDeletes,
@@ -28,12 +28,12 @@ std::vector<ManifestFile> expected_list = {
                  .deleted_rows_count = 0,
                  .existing_files_count = 0,
                  .existing_rows_count = 0,
-                 .length = 6712,
+                 .length = 6714,
                  .min_sequence_number = 3,
                  .partition_spec_id = 0,
-                 .path = "s3://warehouse/gperov/test/metadata/5c8077bc-bb60-406d-ace2-586694e7ebea-m0.avro",
+                 .path = "s3://warehouse/gperov/test/metadata/41f34bc8-eedf-4573-96b0-10c04e7c84c4-m0.avro",
                  .sequence_number = 3,
-                 .snapshot_id = 765518724043979080}};
+                 .snapshot_id = 7558608030923099867}};
 
 void CheckEqual(const ManifestFile& m1, const ManifestFile& m2) {
   EXPECT_EQ(m1.path, m2.path);
@@ -53,9 +53,7 @@ void CheckEqual(const ManifestFile& m1, const ManifestFile& m2) {
 }  // namespace
 
 TEST(Manifest, ReadSanityCheck) {
-  std::ifstream input(
-      "metadata/"
-      "snap-765518724043979080-1-5c8077bc-bb60-406d-ace2-586694e7ebea.avro");
+  std::ifstream input("metadata/snap-7558608030923099867-1-41f34bc8-eedf-4573-96b0-10c04e7c84c4.avro");
 
   std::vector<ManifestFile> manifest_list = ice_tea::ReadManifestList(input);
   EXPECT_EQ(manifest_list.size(), 2);
@@ -64,9 +62,7 @@ TEST(Manifest, ReadSanityCheck) {
 }
 
 TEST(Manifest, ReadWriteRead) {
-  std::ifstream input(
-      "metadata/"
-      "snap-765518724043979080-1-5c8077bc-bb60-406d-ace2-586694e7ebea.avro");
+  std::ifstream input("metadata/snap-7558608030923099867-1-41f34bc8-eedf-4573-96b0-10c04e7c84c4.avro");
 
   std::vector<ManifestFile> manifest_list = ice_tea::ReadManifestList(input);
   auto manifest_data = ice_tea::WriteManifestList(manifest_list);
