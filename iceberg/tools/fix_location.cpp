@@ -75,7 +75,7 @@ class MetadataTree {
       auto list =
           std::make_shared<ManifestList>(ManifestList{.manifests = iceberg::ice_tea::ReadManifestList(list_input)});
 
-      if (!manifests_lists.contains(list_path.filename())) {
+      if (manifests_lists.try_emplace(list_path.filename(), list).second) {
         for (auto& man_file : list->manifests) {
           std::filesystem::path man_path = man_file.path;
 
@@ -90,8 +90,6 @@ class MetadataTree {
             manifests.emplace(man_path.filename(), std::move(man));
           }
         }
-
-        manifests_lists.emplace(list_path.filename(), list);
       }
     }
   }

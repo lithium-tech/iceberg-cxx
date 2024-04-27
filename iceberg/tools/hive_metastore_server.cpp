@@ -28,11 +28,11 @@ class ThriftHiveMetastoreHandler : public Apache::Hadoop::Hive::ThriftHiveMetast
     std::lock_guard lg(mutex_);
     std::cerr << __FUNCTION__ << std::endl;
     _return.clear();
-    if (!tables_.contains(db_name)) {
+    auto db_it = tables_.find(db_name);
+    if (db_it == tables_.end()) {
       return;
     }
-    const auto& db_info = tables_.at(db_name);
-    for (const auto& [table_name, table_info] : db_info) {
+    for (const auto& [table_name, table_info] : db_it->second) {
       _return.emplace_back(table_name);
     }
   }
@@ -41,9 +41,15 @@ class ThriftHiveMetastoreHandler : public Apache::Hadoop::Hive::ThriftHiveMetast
                  const std::string& table_name) override {
     std::lock_guard lg(mutex_);
     std::cerr << __FUNCTION__ << std::endl;
-    if (tables_.contains(db_name) && tables_.at(db_name).contains(table_name)) {
-      table = tables_.at(db_name).at(table_name);
+    auto db_it = tables_.find(db_name);
+    if (db_it == tables_.end()) {
+      return;
     }
+    auto table_it = db_it->second.find(table_name);
+    if (table_it == db_it->second.end()) {
+      return;
+    }
+    table = table_it->second;
   }
 
   void create_table(const Apache::Hadoop::Hive::Table& table) override {

@@ -36,11 +36,11 @@ class HiveClientImpl {
     if (table.tableName.empty()) {
       throw std::runtime_error("No table '" + table_name + "'");
     }
-    const std::map<std::string, std::string>& params = table.parameters;
-    if (!params.contains("metadata_location")) {
+    if (auto it = table.parameters.find("metadata_location"); it == table.parameters.end()) {
       throw std::runtime_error("Table '" + table_name + "' has no metadata_location");
+    } else {
+      return it->second;
     }
-    return params.at("metadata_location");
   }
 
  private:
