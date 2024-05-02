@@ -12,8 +12,12 @@ namespace {
 enum class Mode {
   kGetTables,
   kGetTable,
-  kGetDatabases,
   kCreateTable,
+  kGetDatabases,
+  kGetDatabase,
+  kCreateDatabase,
+  kGetPartitions,
+  kGetSchema,
   kUnknown,
 };
 
@@ -22,10 +26,12 @@ struct ModeStringEntry {
   Mode mode;
 };
 
-constexpr ModeStringEntry kModeStringEntries[] = {{"get-tables", Mode::kGetTables},
-                                                  {"get-table", Mode::kGetTable},
-                                                  {"get-databases", Mode::kGetDatabases},
-                                                  {"create-table", Mode::kCreateTable}};
+constexpr ModeStringEntry kModeStringEntries[] = {
+    {"get-tables", Mode::kGetTables},         {"get-table", Mode::kGetTable},
+    {"create-table", Mode::kCreateTable},     {"get-databases", Mode::kGetDatabases},
+    {"get-database", Mode::kGetDatabase},     {"create-database", Mode::kCreateDatabase},
+    {"get-partitions", Mode::kGetPartitions}, {"get-schema", Mode::kGetSchema},
+};
 
 Mode StringToMode(const std::string& str) {
   for (const auto& [name, mode] : kModeStringEntries) {
@@ -47,9 +53,11 @@ void PrintSupportModes(std::ostream& os) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  using Apache::Hadoop::Hive::Database;
+  using Apache::Hadoop::Hive::FieldSchema;
+  using Apache::Hadoop::Hive::Partition;
   using Apache::Hadoop::Hive::Table;
   using Apache::Hadoop::Hive::ThriftHiveMetastoreClient;
-  using apache::thrift::TException;
   using apache::thrift::protocol::TBinaryProtocol;
   using apache::thrift::protocol::TProtocol;
   using apache::thrift::transport::TBufferedTransport;
@@ -61,7 +69,9 @@ int main(int argc, char** argv) {
     PrintSupportModes(std::cerr);
     return 1;
   }
-  const Mode mode = StringToMode(argv[1]);
+  const std::string prog_name = argv[0];
+  const std::string str_mode = argv[1];
+  const Mode mode = StringToMode(str_mode);
   const std::string endpoint = argv[2];
   const int port = std::stoi(argv[3]);
   if (mode == Mode::kUnknown) {
@@ -78,7 +88,7 @@ int main(int argc, char** argv) {
     switch (mode) {
       case Mode::kGetTables: {
         if (argc != 5) {
-          std::cerr << "Usage: " << argv[0] << " get-tables <endpoint> <port> <db_name>" << std::endl;
+          std::cerr << "Usage: " << prog_name << " " << str_mode << " <endpoint> <port> <db_name>" << std::endl;
           return 1;
         }
         const std::string db_name = argv[4];
@@ -91,7 +101,8 @@ int main(int argc, char** argv) {
       }
       case Mode::kGetTable: {
         if (argc != 6) {
-          std::cerr << "Usage: " << argv[0] << " get-table <endpoint> <port> <db_name> <table_name>" << std::endl;
+          std::cerr << "Usage: " << prog_name << " " << str_mode << " <endpoint> <port> <db_name> <table_name>"
+                    << std::endl;
           return 1;
         }
         const std::string db_name = argv[4];
@@ -103,7 +114,7 @@ int main(int argc, char** argv) {
       }
       case Mode::kGetDatabases: {
         if (argc != 4) {
-          std::cerr << "Usage: " << argv[0] << " get-table <endpoint> <port>" << std::endl;
+          std::cerr << "Usage: " << prog_name << " " << str_mode << " <endpoint> <port>" << std::endl;
           return 1;
         }
         std::vector<std::string> databases;
@@ -113,12 +124,36 @@ int main(int argc, char** argv) {
         }
         break;
       }
+      case Mode::kGetDatabase: {
+        if (argc != 5) {
+          std::cerr << "Usage: " << prog_name << " " << str_mode << " <endpoint> <port> <db_name>" << std::endl;
+          return 1;
+        }
+        const std::string db_name = argv[4];
+        Database db;
+        client.get_database(db, db_name);
+        db.printTo(std::cout);
+        break;
+      }
+      case Mode::kCreateDatabase: {
+        if (argc != 6) {
+          std::cerr << "Usage: " << prog_name << " " << str_mode << " <endpoint> <port> <db_name> <location>"
+                    << std::endl;
+          return 1;
+        }
+        const std::string db_name = argv[4];
+        const std::string location = argv[5];
+        Database db;
+        db.name = db_name;
+        db.locationUri = location;
+        client.create_database(db);
+        db.printTo(std::cout);
+        break;
+      }
       case Mode::kCreateTable: {
         if (argc != 7) {
-          std::cerr << "Usage: " << argv[0]
-                    << " create-table <endpoint> <port> <db_name> <table_name> "
-                       "<metadata_location>"
-                    << std::endl;
+          std::cerr << "Usage: " << prog_name << " " << str_mode
+                    << " <endpoint> <port> <db_name> <table_name> <metadata_location>" << std::endl;
           return 1;
         }
         const std::string db_name = argv[4];
@@ -131,11 +166,42 @@ int main(int argc, char** argv) {
         client.create_table(table);
         break;
       }
+      case Mode::kGetPartitions: {
+        if (argc != 6) {
+          std::cerr << "Usage: " << prog_name << " " << str_mode << " <endpoint> <port> <db_name> <table_name>"
+                    << std::endl;
+          return 1;
+        }
+        const std::string db_name = argv[4];
+        const std::string table_name = argv[5];
+        const int16_t max_parts = 1024;
+        std::vector<Partition> parts;
+        client.get_partitions(parts, db_name, table_name, max_parts);
+        for (const auto& part : parts) {
+          part.printTo(std::cout);
+        }
+        break;
+      }
+      case Mode::kGetSchema: {
+        if (argc != 6) {
+          std::cerr << "Usage: " << prog_name << " " << str_mode << " <endpoint> <port> <db_name> <table_name>"
+                    << std::endl;
+          return 1;
+        }
+        const std::string db_name = argv[4];
+        const std::string table_name = argv[5];
+        std::vector<FieldSchema> fields;
+        client.get_schema(fields, db_name, table_name);
+        for (const auto& field : fields) {
+          field.printTo(std::cout);
+        }
+        break;
+      }
       default:
         throw std::runtime_error("Unknown mode");
     }
     transport->close();
-  } catch (TException& tx) {
-    std::cout << "ERROR: " << tx.what() << std::endl;
+  } catch (const std::exception& ex) {
+    std::cout << "ERROR: " << ex.what() << std::endl;
   }
 }
