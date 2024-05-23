@@ -38,7 +38,7 @@ struct S3Access {
   void LoadEnvOptions(const std::string env_prefix) {
     options = arrow::fs::S3Options::Defaults();  // reqiures InitS3() first
     options.endpoint_override = GetEnvVar(env_prefix + ENDPOINT_URL);
-    options.region = GetEnvVar(env_prefix + DEFAULT_REGION);
+    options.region = GetEnvVar(env_prefix + DEFAULT_REGION, false);
     options.ConfigureAccessKey(GetEnvVar(env_prefix + ACCESS_KEY_ID), GetEnvVar(env_prefix + SECRET_ACCESS_KEY));
   }
 
@@ -50,10 +50,14 @@ struct S3Access {
     unsetenv((env_prefix + SECRET_ACCESS_KEY).c_str());
   }
 
-  static std::string GetEnvVar(const std::string& env) {
+  static std::string GetEnvVar(const std::string& env, bool required = true) {
     const char* value = getenv(env.c_str());
     if (!value) {
-      throw std::runtime_error("env var not set '" + env + "'");
+      if (required) {
+        throw std::runtime_error("env var not set '" + env + "'");
+      } else {
+        return "";
+      }
     }
     return value;
   }

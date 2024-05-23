@@ -1,8 +1,24 @@
 #include <gtest/gtest.h>
 
 #include "arrow/filesystem/s3fs.h"
+#include "iceberg/src/catalog.h"
 
-int main(int argc, char **argv) {
+namespace iceberg {
+
+catalog::TableIdentifier GetTestTable() {
+  catalog::TableIdentifier table_identifier{.db = "gperov", .name = "test"};
+  if (auto* db = getenv("TEST_DB")) {
+    table_identifier.db = db;
+  }
+  if (auto* table = getenv("TEST_TABLE")) {
+    table_identifier.name = table;
+  }
+  return table_identifier;
+}
+
+}  // namespace iceberg
+
+int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   arrow::fs::S3GlobalOptions global_options{};
   global_options.log_level = arrow::fs::S3LogLevel::Fatal;

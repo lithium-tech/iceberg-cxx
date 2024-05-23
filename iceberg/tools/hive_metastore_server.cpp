@@ -14,6 +14,8 @@
 #include <iostream>
 #include <mutex>
 
+namespace hive = Apache::Hadoop::Hive;
+
 class ThriftHiveMetastoreHandler : public Apache::Hadoop::Hive::ThriftHiveMetastoreNull {
   void get_all_databases(std::vector<std::string>& _return) override {
     std::lock_guard lg(mutex_);
@@ -43,11 +45,11 @@ class ThriftHiveMetastoreHandler : public Apache::Hadoop::Hive::ThriftHiveMetast
     std::cerr << __FUNCTION__ << std::endl;
     auto db_it = tables_.find(db_name);
     if (db_it == tables_.end()) {
-      return;
+      throw hive::NoSuchObjectException();
     }
     auto table_it = db_it->second.find(table_name);
     if (table_it == db_it->second.end()) {
-      return;
+      throw hive::NoSuchObjectException();
     }
     table = table_it->second;
   }
