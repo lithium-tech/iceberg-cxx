@@ -15,31 +15,74 @@
 
 namespace ice_tea {
 
-class S3Client {
-  static constexpr const char* AWS_ENDPOINT_URL = "AWS_ENDPOINT_URL";
-  static constexpr const char* AWS_DEFAULT_REGION = "AWS_DEFAULT_REGION";
-  static constexpr const char* AWS_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID";
-  static constexpr const char* AWS_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY";
+struct S3Access {
+  static constexpr const char* ENDPOINT_URL = "ENDPOINT_URL";
+  static constexpr const char* DEFAULT_REGION = "DEFAULT_REGION";
+  static constexpr const char* ACCESS_KEY_ID = "ACCESS_KEY_ID";
+  static constexpr const char* SECRET_ACCESS_KEY = "SECRET_ACCESS_KEY";
   static constexpr const char* AWS_EC2_METADATA_DISABLED = "AWS_EC2_METADATA_DISABLED";
 
+  arrow::fs::S3Options options;
+
+  static void InitS3() {
+    if (!arrow::fs::IsS3Initialized()) {
+      arrow::fs::S3GlobalOptions global_options{};
+      global_options.log_level = arrow::fs::S3LogLevel::Error;
+      // global_options.log_level = arrow::fs::S3LogLevel::Debug;
+      if (!arrow::fs::InitializeS3(global_options).ok()) {
+        throw std::runtime_error("Cannot Initialize S3");
+      }
+    }
+  }
+
+  void LoadEnvOptions(const std::string env_prefix) {
+    options = arrow::fs::S3Options::Defaults();  // reqiures InitS3() first
+    options.endpoint_override = GetEnvVar(env_prefix + ENDPOINT_URL);
+    options.region = GetEnvVar(env_prefix + DEFAULT_REGION);
+    options.ConfigureAccessKey(GetEnvVar(env_prefix + ACCESS_KEY_ID), GetEnvVar(env_prefix + SECRET_ACCESS_KEY));
+  }
+
+  static void ClearEnvOptions(const std::string& env_prefix = "AWS_") {
+    setenv(AWS_EC2_METADATA_DISABLED, "true", 1);
+    unsetenv((env_prefix + ENDPOINT_URL).c_str());
+    unsetenv((env_prefix + DEFAULT_REGION).c_str());
+    unsetenv((env_prefix + ACCESS_KEY_ID).c_str());
+    unsetenv((env_prefix + SECRET_ACCESS_KEY).c_str());
+  }
+
+  static std::string GetEnvVar(const std::string& env) {
+    const char* value = getenv(env.c_str());
+    if (!value) {
+      throw std::runtime_error("env var not set '" + env + "'");
+    }
+    return value;
+  }
+};
+
+class S3Client {
   static constexpr int64_t CHUNK_SIZE = 1024 * 1024;
 
  public:
-  explicit S3Client(bool force) : continue_on_fail_(force) {
-    InitS3();
+  explicit S3Client(bool force, const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_")
+      : continue_on_fail_(force) {
+    S3Access::InitS3();
 
-    options_ = GetEnvOptions();
-    ClearEnvOptions();
+    src_access_.LoadEnvOptions(src_env_prefix);
+    dst_access_.LoadEnvOptions(dst_env_prefix);
+    S3Access::ClearEnvOptions("AWS_");
 
     fs_ = std::make_shared<arrow::fs::LocalFileSystem>();
 
-    auto s3fs_res = arrow::fs::S3FileSystem::Make(options_);
+    auto s3fs_res = arrow::fs::S3FileSystem::Make(src_access_.options);
     if (!s3fs_res.ok()) {
       throw std::runtime_error(s3fs_res.status().ToString());
     }
     src_s3fs_ = *s3fs_res;
 
-    // TODO(chertus): another S3
+    s3fs_res = arrow::fs::S3FileSystem::Make(dst_access_.options);
+    if (!s3fs_res.ok()) {
+      throw std::runtime_error(s3fs_res.status().ToString());
+    }
     dst_s3fs_ = *s3fs_res;
   }
 
@@ -113,7 +156,8 @@ class S3Client {
 
  private:
   bool continue_on_fail_;
-  arrow::fs::S3Options options_;
+  S3Access src_access_;
+  S3Access dst_access_;
   std::shared_ptr<arrow::fs::FileSystem> fs_;
   std::shared_ptr<arrow::fs::FileSystem> src_s3fs_;
   std::shared_ptr<arrow::fs::FileSystem> dst_s3fs_;
@@ -159,42 +203,6 @@ class S3Client {
       }
     }
     return found;
-  }
-
-  static void InitS3() {
-    if (!arrow::fs::IsS3Initialized()) {
-      arrow::fs::S3GlobalOptions global_options{};
-      global_options.log_level = arrow::fs::S3LogLevel::Error;
-      // global_options.log_level = arrow::fs::S3LogLevel::Debug;
-      if (!arrow::fs::InitializeS3(global_options).ok()) {
-        throw std::runtime_error("Cannot Initialize S3");
-      }
-    }
-  }
-
-  static arrow::fs::S3Options GetEnvOptions() {
-    auto options = arrow::fs::S3Options::Defaults();
-    options.endpoint_override = GetEnvVar(AWS_ENDPOINT_URL);
-    options.region = GetEnvVar(AWS_DEFAULT_REGION);
-    // options.scheme = "http";
-    options.ConfigureAccessKey(GetEnvVar(AWS_ACCESS_KEY_ID), GetEnvVar(AWS_SECRET_ACCESS_KEY));
-    return options;
-  }
-
-  static void ClearEnvOptions() {
-    setenv(AWS_EC2_METADATA_DISABLED, "true", 1);
-    unsetenv(AWS_ENDPOINT_URL);
-    unsetenv(AWS_DEFAULT_REGION);
-    unsetenv(AWS_ACCESS_KEY_ID);
-    unsetenv(AWS_SECRET_ACCESS_KEY);
-  }
-
-  static std::string GetEnvVar(const char* env) {
-    const char* value = getenv(env);
-    if (!value) {
-      throw std::runtime_error(std::string("env var not set '") + env + "'");
-    }
-    return value;
   }
 
   static std::string CropPrefix(const std::string& src, const std::string& prefix = "://") {
