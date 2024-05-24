@@ -104,7 +104,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   std::stringstream ss(manifest_metadatas_content);
   const std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
 
-  std::vector<ManifestEntry> entries_output;
+  std::vector<Task> entries_output;
 
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
@@ -124,7 +124,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         return arrow::Status::ExecutionError("no sequence_number");
       }
       entry.sequence_number = data_sequence_number;
-      entries_output.emplace_back(std::move(entry));
+      entries_output.emplace_back(Task{.entry = std::move(entry)});
     }
   }
 

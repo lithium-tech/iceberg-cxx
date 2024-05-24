@@ -12,9 +12,19 @@
 
 namespace iceberg::ice_tea {
 
+struct Task {
+  struct Segment {
+    int64_t offset;
+    int64_t length;  // 0 <=> until end
+  };
+
+  ManifestEntry entry;
+  std::vector<Segment> parts;  // empty <=> full file
+};
+
 struct ScanMetadata {
   std::shared_ptr<Schema> schema;
-  std::vector<ManifestEntry> entries;
+  std::vector<Task> entries;
 };
 
 arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& url);

@@ -18,12 +18,12 @@ catalog::TableIdentifier GetTestTable();
 
 namespace {
 
-void SortEntries(std::vector<ManifestEntry>& entries) {
-  std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
-    const auto& d_lhs = lhs.data_file;
-    const auto& d_rhs = rhs.data_file;
-    return std::tie(lhs.sequence_number.value(), d_lhs.file_path) <
-           std::tie(rhs.sequence_number.value(), d_rhs.file_path);
+void SortEntries(std::vector<ice_tea::Task>& tasks) {
+  std::sort(tasks.begin(), tasks.end(), [](const auto& lhs, const auto& rhs) {
+    const auto& d_lhs = lhs.entry.data_file;
+    const auto& d_rhs = rhs.entry.data_file;
+    return std::tie(lhs.entry.sequence_number.value(), d_lhs.file_path) <
+           std::tie(rhs.entry.sequence_number.value(), d_rhs.file_path);
   });
 }
 
@@ -57,27 +57,27 @@ TEST(Scan, Test) {
   std::string expected_path = "s3://warehouse/" + table_ident.db + "/" + table_ident.name;
   auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, table->Location());
   ASSERT_TRUE(maybe_scan_metadata.ok());
-  auto entries = maybe_scan_metadata.ValueUnsafe().entries;
+  auto tasks = maybe_scan_metadata.ValueUnsafe().entries;
   auto schema = maybe_scan_metadata.ValueUnsafe().schema;
-  SortEntries(entries);
-  ASSERT_EQ(entries.size(), 7);
+  SortEntries(tasks);
+  ASSERT_EQ(tasks.size(), 7);
   {
-    EXPECT_EQ(entries[0].data_file.file_size_in_bytes, 3980);
-    EXPECT_EQ(entries[0].data_file.file_path,
+    EXPECT_EQ(tasks[0].entry.data_file.file_size_in_bytes, 3980);
+    EXPECT_EQ(tasks[0].entry.data_file.file_path,
               expected_path + "/data/00000-6-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet");
-    EXPECT_EQ(entries[0].data_file.content, DataFile::FileContent::kData);
+    EXPECT_EQ(tasks[0].entry.data_file.content, DataFile::FileContent::kData);
   }
   {
-    EXPECT_EQ(entries[3].data_file.file_size_in_bytes, 2768);
-    EXPECT_EQ(entries[3].data_file.file_path,
+    EXPECT_EQ(tasks[3].entry.data_file.file_size_in_bytes, 2768);
+    EXPECT_EQ(tasks[3].entry.data_file.file_path,
               expected_path + "/data/00003-9-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet");
-    EXPECT_EQ(entries[3].data_file.content, DataFile::FileContent::kData);
+    EXPECT_EQ(tasks[3].entry.data_file.content, DataFile::FileContent::kData);
   }
   {
-    EXPECT_EQ(entries[6].data_file.file_size_in_bytes, 1391);
-    EXPECT_EQ(entries[6].data_file.file_path,
+    EXPECT_EQ(tasks[6].entry.data_file.file_size_in_bytes, 1391);
+    EXPECT_EQ(tasks[6].entry.data_file.file_path,
               expected_path + "/data/00000-13-85b2f39e-780b-4214-912b-df665f506333-00001-deletes.parquet");
-    EXPECT_EQ(entries[6].data_file.content, DataFile::FileContent::kPositionDeletes);
+    EXPECT_EQ(tasks[6].entry.data_file.content, DataFile::FileContent::kPositionDeletes);
   }
   EXPECT_EQ(schema->SchemaId(), 0);
   EXPECT_EQ(schema->Columns().size(), 2);
