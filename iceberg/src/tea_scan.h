@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,12 +15,20 @@ namespace iceberg::ice_tea {
 
 struct Task {
   struct Segment {
+    Segment(int64_t off, int64_t len) : offset(off), length(len) {}
+
     int64_t offset;
     int64_t length;  // 0 <=> until end
   };
 
   ManifestEntry entry;
   std::vector<Segment> parts;  // empty <=> full file
+
+  inline void SortParts() {
+    std::sort(parts.begin(), parts.end(), [&](const auto& lhs, const auto& rhs) { return lhs.offset < rhs.offset; });
+  }
+
+  inline bool IsWholeFile() const { return parts.empty(); }
 };
 
 struct ScanMetadata {
