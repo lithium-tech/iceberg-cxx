@@ -67,6 +67,9 @@ struct Names {
   static constexpr const char* desc = "desc";
   static constexpr const char* nulls_first = "nulls-first";
   static constexpr const char* nulls_last = "nulls-last";
+  static constexpr const char* min_snapshots_to_keep = "min-snapshots-to-keep";
+  static constexpr const char* max_snapshot_age_ms = "max-snapshot-age-ms";
+  static constexpr const char* max_ref_age_ms = "max-ref-age-ms";
 };
 
 auto Ref(const char* s) { return rapidjson::StringRef(s, strlen(s)); }
@@ -291,7 +294,24 @@ class WriterContext {
     }
     doc.AddMember(Ref(Names::sort_orders), orders.Move(), GetAllocator());
   }
-#if 0
+
+  void WriteRefField(rapidjson::Value& doc, const std::string& name, const SnapshotRef& snap_ref) {
+    rapidjson::Value ref(rapidjson::kObjectType);
+    WriteIntField(ref, Names::snapshot_id, snap_ref.snapshot_id);
+    WriteStringField(ref, Names::type, snap_ref.type);
+    if (snap_ref.min_snapshots_to_keep) {
+      WriteIntField(ref, Names::min_snapshots_to_keep, *snap_ref.min_snapshots_to_keep);
+    }
+    if (snap_ref.max_snapshot_age_ms) {
+      WriteIntField(ref, Names::max_snapshot_age_ms, *snap_ref.max_snapshot_age_ms);
+    }
+    if (snap_ref.max_ref_age_ms) {
+      WriteIntField(ref, Names::max_ref_age_ms, *snap_ref.max_ref_age_ms);
+    }
+
+    doc.AddMember(rapidjson::StringRef(name.data(), name.size()), ref.Move(), GetAllocator());
+  }
+
   void WriteRefs(rapidjson::Value& doc, const std::map<std::string, SnapshotRef>& values) {
     if (values.empty()) {
       return;
@@ -299,12 +319,11 @@ class WriterContext {
 
     rapidjson::Value refs(rapidjson::kObjectType);
     for (auto& [key, value] : values) {
-      // TODO(chertus)
+      WriteRefField(refs, key, value);
     }
 
     doc.AddMember(Ref(Names::refs), refs.Move(), GetAllocator());
   }
-#endif
 
  private:
   Allocator& allocator_;
@@ -335,7 +354,6 @@ int64_t ExtractInt64Field(const rapidjson::Value& document, const std::string& f
   return document[c_str].GetInt64();
 }
 
-#if 0
 std::optional<int32_t> ExtractOptionalInt32Field(const rapidjson::Value& document, const std::string& field_name) {
   const char* c_str = field_name.c_str();
   if (!document.HasMember(c_str)) {
@@ -346,7 +364,6 @@ std::optional<int32_t> ExtractOptionalInt32Field(const rapidjson::Value& documen
   }
   return document[c_str].GetInt();
 }
-#endif
 
 std::optional<int64_t> ExtractOptionalInt64Field(const rapidjson::Value& document, const std::string& field_name) {
   const char* c_str = field_name.c_str();
@@ -658,7 +675,7 @@ std::vector<std::shared_ptr<SortOrder>> ExtractSortOrders(const rapidjson::Value
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToSortOrders(elem)); });
   return result;
 }
-#if 0
+
 SnapshotRef JsonToRef(const rapidjson::Value& document) {
   if (!document.IsObject()) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
@@ -666,9 +683,9 @@ SnapshotRef JsonToRef(const rapidjson::Value& document) {
 
   return SnapshotRef{.snapshot_id = ExtractInt64Field(document, Names::snapshot_id),
                      .type = ExtractStringField(document, Names::type),
-                     .min_snapshots_to_keep = ExtractOptionalInt32Field(document, "min_snapshots_to_keep"),
-                     .max_snapshot_age_ms = ExtractOptionalInt64Field(document, "max_snapshot_age_ms"),
-                     .max_ref_age_ms = ExtractOptionalInt64Field(document, "max_ref_age_ms")};
+                     .min_snapshots_to_keep = ExtractOptionalInt32Field(document, Names::min_snapshots_to_keep),
+                     .max_snapshot_age_ms = ExtractOptionalInt64Field(document, Names::max_snapshot_age_ms),
+                     .max_ref_age_ms = ExtractOptionalInt64Field(document, Names::max_ref_age_ms)};
 }
 
 std::map<std::string, SnapshotRef> JsonToRefsMap(const rapidjson::Value& document) {
@@ -691,9 +708,9 @@ std::optional<std::map<std::string, SnapshotRef>> ExtractRefs(const rapidjson::V
   if (!document.HasMember(field_name)) {
     return std::nullopt;
   }
-  return JsonToRefsMap(document);
+  return JsonToRefsMap(document[field_name]);
 }
-#endif
+
 }  // namespace
 
 std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
@@ -799,7 +816,7 @@ static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Doc
   builder.metadata_log = ExtractMetadataLog(document);
   builder.sort_orders = ExtractSortOrders(document);
   builder.default_sort_order_id = ExtractInt32Field(document, Names::default_sort_order_id);
-  // builder.refs = ExtractRefs(document);
+  builder.refs = ExtractRefs(document);
   return builder.Build();
 }
 
@@ -849,7 +866,7 @@ std::string WriteTableMetadataV2(const TableMetadataV2& metadata, bool pretty) {
   if (metadata.current_snapshot_id) {
     ctx.WriteIntField(document, Names::current_snapshot_id, *metadata.current_snapshot_id);
   }
-  // ctx.WriteRefs(document, metadata.refs);
+  ctx.WriteRefs(document, metadata.refs);
   ctx.WriteSnapshots(document, metadata.snapshots);
   if (!metadata.snapshot_log.empty()) {
     ctx.WriteSnapshotLog(document, metadata.snapshot_log);
