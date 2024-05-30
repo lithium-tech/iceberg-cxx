@@ -39,39 +39,39 @@
         },
         {
             "name": "added_files_count",
-            "type": ["null", "int"],
+            "type": "int",
             "doc": "Added entry count",
-            "default": null
-        },
-        {
-            "name": "existing_files_count",
-            "type": ["null", "int"],
-            "doc": "Existing entry count",
-            "default": null
-        },
-        {
-            "name": "deleted_files_count",
-            "type": ["null", "int"],
-            "doc": "Deleted entry count",
-            "default": null
+            "default": 0
         },
         {
             "name": "added_data_files_count",
-            "type": ["null", "int"],
-            "doc": "Added entry count",
-            "default": null
+            "type": "int",
+            "doc": "Added entry count (Spark compatibility, read-only)",
+            "default": 0
+        },
+        {
+            "name": "existing_files_count",
+            "type": "int",
+            "doc": "Existing entry count",
+            "default": 0
         },
         {
             "name": "existing_data_files_count",
-            "type": ["null", "int"],
-            "doc": "Existing entry count",
-            "default": null
+            "type": "int",
+            "doc": "Existing entry count (Spark compatibility)",
+            "default": 0
+        },
+        {
+            "name": "deleted_files_count",
+            "type": "int",
+            "doc": "Deleted entry count",
+            "default": 0
         },
         {
             "name": "deleted_data_files_count",
-            "type": ["null", "int"],
-            "doc": "Deleted entry count",
-            "default": null
+            "type": "int",
+            "doc": "Deleted entry count (Spark compatibility)",
+            "default": 0
         },
         {
             "name": "added_rows_count",

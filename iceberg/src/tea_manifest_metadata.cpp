@@ -11,18 +11,16 @@
 namespace iceberg::ice_tea {
 namespace {
 ManifestFile Convert(const iceberg::manifest_file& manifest_file) {
-  return ManifestFile{.added_files_count = (!manifest_file.added_files_count.is_null())
-                                               ? manifest_file.added_files_count.get_int()
-                                               : manifest_file.added_data_files_count.get_int(),
+  return ManifestFile{.added_files_count = manifest_file.added_files_count ? manifest_file.added_files_count
+                                                                           : manifest_file.added_data_files_count,
                       .added_rows_count = manifest_file.added_rows_count,
                       .content = (manifest_file.content == 0 ? ManifestContent::kData : ManifestContent::kDeletes),
-                      .deleted_files_count = (!manifest_file.deleted_files_count.is_null())
-                                                 ? manifest_file.deleted_files_count.get_int()
-                                                 : manifest_file.deleted_data_files_count.get_int(),
+                      .deleted_files_count = manifest_file.deleted_files_count ? manifest_file.deleted_files_count
+                                                                               : manifest_file.deleted_data_files_count,
                       .deleted_rows_count = manifest_file.deleted_rows_count,
-                      .existing_files_count = (!manifest_file.existing_files_count.is_null())
-                                                  ? manifest_file.existing_files_count.get_int()
-                                                  : manifest_file.existing_data_files_count.get_int(),
+                      .existing_files_count = manifest_file.existing_files_count
+                                                  ? manifest_file.existing_files_count
+                                                  : manifest_file.existing_data_files_count,
                       .existing_rows_count = manifest_file.existing_rows_count,
                       .length = manifest_file.manifest_length,
                       .min_sequence_number = manifest_file.min_sequence_number,
@@ -41,12 +39,17 @@ iceberg::manifest_file Convert(const ManifestFile& manifest) {
   manifest_file.sequence_number = manifest.sequence_number;
   manifest_file.min_sequence_number = manifest.min_sequence_number;
   manifest_file.added_snapshot_id = manifest.snapshot_id;
-  manifest_file.added_files_count.set_int(manifest.added_files_count);
-  manifest_file.existing_files_count.set_int(manifest.existing_files_count);
-  manifest_file.deleted_files_count.set_int(manifest.deleted_files_count);
+  manifest_file.added_files_count = manifest.added_files_count;
+  manifest_file.existing_files_count = manifest.existing_files_count;
+  manifest_file.deleted_files_count = manifest.deleted_files_count;
   manifest_file.added_rows_count = manifest.added_rows_count;
   manifest_file.existing_rows_count = manifest.existing_rows_count;
   manifest_file.deleted_rows_count = manifest.deleted_rows_count;
+#if 1  // Spark compatibility
+  manifest_file.added_data_files_count = manifest.added_files_count;
+  manifest_file.existing_data_files_count = manifest.existing_files_count;
+  manifest_file.deleted_data_files_count = manifest.deleted_files_count;
+#endif
   return manifest_file;
 }
 
