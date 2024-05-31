@@ -24,11 +24,30 @@ struct S3Access {
 
   arrow::fs::S3Options options;
 
-  static void InitS3() {
+  static arrow::fs::S3LogLevel LogLevel(const std::string& level) {
+    using arrow::fs::S3LogLevel;
+    if (level == "off") {
+      return S3LogLevel::Off;
+    } else if (level == "fatal") {
+      return S3LogLevel::Fatal;
+    } else if (level == "error") {
+      return S3LogLevel::Error;
+    } else if (level == "warn") {
+      return S3LogLevel::Warn;
+    } else if (level == "info") {
+      return S3LogLevel::Info;
+    } else if (level == "debug") {
+      return S3LogLevel::Debug;
+    } else if (level == "trace") {
+      return S3LogLevel::Trace;
+    }
+    return S3LogLevel::Error;
+  }
+
+  static void InitS3(arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error) {
     if (!arrow::fs::IsS3Initialized()) {
       arrow::fs::S3GlobalOptions global_options{};
-      global_options.log_level = arrow::fs::S3LogLevel::Error;
-      // global_options.log_level = arrow::fs::S3LogLevel::Debug;
+      global_options.log_level = log_level;
       if (!arrow::fs::InitializeS3(global_options).ok()) {
         throw std::runtime_error("Cannot Initialize S3");
       }
@@ -67,9 +86,10 @@ class S3Client {
   static constexpr int64_t CHUNK_SIZE = 1024 * 1024;
 
  public:
-  explicit S3Client(bool force, const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_")
+  S3Client(bool force, arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error,
+           const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_")
       : continue_on_fail_(force) {
-    S3Access::InitS3();
+    S3Access::InitS3(log_level);
 
     src_access_.LoadEnvOptions(src_env_prefix);
     dst_access_.LoadEnvOptions(dst_env_prefix);
@@ -227,7 +247,7 @@ inline bool Rclone(const std::string& cmd, const std::string& arg1, const std::s
 }
 
 inline bool CopyDir(std::shared_ptr<S3Client> s3client, const std::string& src, const std::string& dst,
-                    bool use_threads = true) {
+                    bool use_threads) {
   if (s3client) {
     if (!s3client->CopyDir(src, dst, use_threads)) {
       return false;
@@ -239,7 +259,7 @@ inline bool CopyDir(std::shared_ptr<S3Client> s3client, const std::string& src, 
 }
 
 inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_map<std::string, std::string>& renames,
-                      bool use_threads = true) {
+                      bool use_threads) {
   if (s3client) {
     if (!s3client->CopyFiles(renames, use_threads)) {
       return false;
