@@ -1,3 +1,4 @@
+#include <optional>
 #include <sstream>
 #include <utility>
 
@@ -10,6 +11,58 @@
 
 namespace iceberg::ice_tea {
 namespace {
+
+std::vector<PartitionFieldSummary> ConvertPartitions(const iceberg::manifest_file::partitions_t& partitions) {
+  if (partitions.is_null()) {
+    return {};
+  }
+
+  auto src = partitions.get_array();
+  std::vector<PartitionFieldSummary> dst;
+  dst.reserve(src.size());
+  for (auto& p : src) {
+    PartitionFieldSummary part{.contains_null = p.contains_null};
+    if (!p.contains_nan.is_null()) {
+      part.contains_nan = p.contains_nan.get_bool();
+    }
+    if (!p.lower_bound.is_null()) {
+      part.lower_bound = p.lower_bound.get_bytes();
+    }
+    if (!p.upper_bound.is_null()) {
+      part.upper_bound = p.upper_bound.get_bytes();
+    }
+    dst.emplace_back(std::move(part));
+  }
+  return dst;
+}
+
+void ConvertPartitions(const std::vector<PartitionFieldSummary>& partitions, iceberg::manifest_file& out) {
+  if (partitions.empty()) {
+    return;
+  }
+
+  // using TVec = decltype(out.partitions.get_array());
+  using TVec = std::vector<iceberg::r508>;
+  using TElem = typename TVec::value_type;
+
+  TVec vec;
+  for (auto& p : partitions) {
+    TElem part;
+    part.contains_null = p.contains_null;
+    if (p.contains_nan) {
+      part.contains_nan.set_bool(*p.contains_nan);
+    }
+    if (p.lower_bound.size()) {
+      part.lower_bound.set_bytes(p.lower_bound);
+    }
+    if (p.upper_bound.size()) {
+      part.upper_bound.set_bytes(p.upper_bound);
+    }
+    vec.emplace_back(std::move(part));
+  }
+  out.partitions.set_array(vec);
+}
+
 ManifestFile Convert(const iceberg::manifest_file& manifest_file) {
   return ManifestFile{.added_files_count = manifest_file.added_files_count ? manifest_file.added_files_count
                                                                            : manifest_file.added_data_files_count,
@@ -27,7 +80,8 @@ ManifestFile Convert(const iceberg::manifest_file& manifest_file) {
                       .partition_spec_id = manifest_file.partition_spec_id,
                       .path = manifest_file.manifest_path,
                       .sequence_number = manifest_file.sequence_number,
-                      .snapshot_id = manifest_file.added_snapshot_id};
+                      .snapshot_id = manifest_file.added_snapshot_id,
+                      .partitions = ConvertPartitions(manifest_file.partitions)};
 }
 
 iceberg::manifest_file Convert(const ManifestFile& manifest) {
@@ -50,6 +104,7 @@ iceberg::manifest_file Convert(const ManifestFile& manifest) {
   manifest_file.existing_data_files_count = manifest.existing_files_count;
   manifest_file.deleted_data_files_count = manifest.deleted_files_count;
 #endif
+  ConvertPartitions(manifest.partitions, manifest_file);
   return manifest_file;
 }
 

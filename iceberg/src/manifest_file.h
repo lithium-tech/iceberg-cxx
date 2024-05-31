@@ -10,6 +10,13 @@ enum class ManifestContent {
   kDeletes = 1,
 };
 
+struct PartitionFieldSummary {
+  bool contains_null;
+  std::optional<bool> contains_nan;
+  std::vector<uint8_t> lower_bound;
+  std::vector<uint8_t> upper_bound;
+};
+
 // see also https://iceberg.apache.org/javadoc/1.5.0/org/apache/iceberg/ManifestFile.html
 struct ManifestFile {
   int32_t added_files_count{};
@@ -25,8 +32,8 @@ struct ManifestFile {
   std::string path{};
   int64_t sequence_number{};
   int64_t snapshot_id{};
+  std::vector<PartitionFieldSummary> partitions;
 
-  // TODO(gmusya): partitions
   // TODO(gmusya): key metadata
 };
 
