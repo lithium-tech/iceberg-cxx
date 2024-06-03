@@ -49,6 +49,7 @@ class MetadataTree {
 
   std::string SerializeMetadataFile() const;
   void WriteFiles(const std::filesystem::path& out_dir) const;
+  void Print(std::ostream& os, size_t limit_files = 2) const;
 
  private:
   std::filesystem::path medatada_file_path;
@@ -57,7 +58,6 @@ class MetadataTree {
   std::unordered_map<std::string, std::shared_ptr<Manifest>> manifests;
 
   std::filesystem::path FilesPath() const { return medatada_file_path.parent_path(); }
-  void Print(std::ostream& os, size_t limit_files = 2) const;
 
   friend std::ostream& operator<<(std::ostream& os, const MetadataTree& meta_tree) {
     meta_tree.Print(os);
