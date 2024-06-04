@@ -15,14 +15,9 @@
 
 namespace ice_tea {
 
-struct S3Access {
-  static constexpr const char* ENDPOINT_URL = "ENDPOINT_URL";
-  static constexpr const char* DEFAULT_REGION = "DEFAULT_REGION";
-  static constexpr const char* ACCESS_KEY_ID = "ACCESS_KEY_ID";
-  static constexpr const char* SECRET_ACCESS_KEY = "SECRET_ACCESS_KEY";
-  static constexpr const char* AWS_EC2_METADATA_DISABLED = "AWS_EC2_METADATA_DISABLED";
-
-  arrow::fs::S3Options options;
+struct S3Init {
+  explicit S3Init(arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error) { InitS3(log_level); }
+  ~S3Init() { FinalizeS3(); }
 
   static arrow::fs::S3LogLevel LogLevel(const std::string& level) {
     using arrow::fs::S3LogLevel;
@@ -53,6 +48,23 @@ struct S3Access {
       }
     }
   }
+
+  static bool FinalizeS3() {
+    if (!arrow::fs::IsS3Finalized()) {
+      return arrow::fs::FinalizeS3().ok();
+    }
+    return true;
+  }
+};
+
+struct S3Access {
+  static constexpr const char* ENDPOINT_URL = "ENDPOINT_URL";
+  static constexpr const char* DEFAULT_REGION = "DEFAULT_REGION";
+  static constexpr const char* ACCESS_KEY_ID = "ACCESS_KEY_ID";
+  static constexpr const char* SECRET_ACCESS_KEY = "SECRET_ACCESS_KEY";
+  static constexpr const char* AWS_EC2_METADATA_DISABLED = "AWS_EC2_METADATA_DISABLED";
+
+  arrow::fs::S3Options options;
 
   void LoadEnvOptions(const std::string env_prefix) {
     options = arrow::fs::S3Options::Defaults();  // reqiures InitS3() first
@@ -88,9 +100,7 @@ class S3Client {
  public:
   S3Client(bool force, arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error,
            const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_")
-      : continue_on_fail_(force) {
-    S3Access::InitS3(log_level);
-
+      : s3init_(log_level), continue_on_fail_(force) {
     src_access_.LoadEnvOptions(src_env_prefix);
     dst_access_.LoadEnvOptions(dst_env_prefix);
     S3Access::ClearEnvOptions("AWS_");
@@ -108,12 +118,6 @@ class S3Client {
       throw std::runtime_error(s3fs_res.status().ToString());
     }
     dst_s3fs_ = *s3fs_res;
-  }
-
-  ~S3Client() {
-    if (!arrow::fs::IsS3Finalized()) {
-      arrow::fs::FinalizeS3().ok();
-    }
   }
 
   bool CopyFiles(const std::unordered_map<std::string, std::string>& renames, bool use_threads) {
@@ -179,6 +183,7 @@ class S3Client {
   }
 
  private:
+  S3Init s3init_;
   bool continue_on_fail_;
   S3Access src_access_;
   S3Access dst_access_;

@@ -19,8 +19,8 @@ if(USE_ICEBERG)
   target_link_libraries(syncice PUBLIC _hivemetastore _thrift
     iceberg rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Arrow::arrow_static)
 
-  add_executable(lsice lsice.cpp metadata_tree.cpp)
-  target_include_directories(lsice PUBLIC "${PROJECT_SOURCE_DIR}")
-  target_link_libraries(lsice PUBLIC _hivemetastore _thrift
+  add_executable(ice_ls ls.cpp metadata_tree.cpp)
+  target_include_directories(ice_ls PUBLIC "${PROJECT_SOURCE_DIR}")
+  target_link_libraries(ice_ls PUBLIC _hivemetastore _thrift
     iceberg rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Arrow::arrow_static)
 endif()
