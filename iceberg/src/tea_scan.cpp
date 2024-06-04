@@ -13,6 +13,7 @@
 #include "iceberg/src/manifest_entry.h"
 #include "iceberg/src/manifest_file.h"
 #include "iceberg/src/table_metadata.h"
+#include "iceberg/src/tea_column_stats.h"
 #include "iceberg/src/tea_hive_catalog.h"
 
 namespace iceberg::ice_tea {
@@ -55,7 +56,104 @@ std::string UrlToPath(const std::string& url) {
   return {};
 }
 
+std::string AsciiToLower(std::string_view value) {
+  std::string result = std::string(value);
+  std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+  return result;
+}
+
 }  // namespace
+
+std::optional<int64_t> Task::GetValueCounts(int32_t field_id) const {
+  for (const auto& [id, cnt] : entry.data_file.value_counts) {
+    if (id == field_id) {
+      return cnt;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<int64_t> Task::GetColumnSize(int32_t field_id) const {
+  for (const auto& [id, cnt] : entry.data_file.column_sizes) {
+    if (id == field_id) {
+      return cnt;
+    }
+  }
+  return std::nullopt;
+}
+
+ColumnStats Task::GetColumnStats(int32_t field_id) const {
+  uint64_t total_rows = entry.data_file.record_count;
+  std::optional<int64_t> value_count = GetValueCounts(field_id);
+  std::optional<int64_t> column_size = GetColumnSize(field_id);
+
+  ColumnStats result{.null_count = -1,
+                     .distinct_count = -1,
+                     .not_null_count = -1,
+                     .total_compressed_size = -1,
+                     .total_uncompressed_size = -1};
+
+  if (value_count.has_value()) {
+    result.not_null_count = value_count.value();
+    result.null_count = total_rows - value_count.value();
+  }
+
+  if (column_size.has_value()) {
+    result.total_compressed_size = column_size.value();
+    // TODO(gmusya): estimate total_uncompressed_size
+  }
+
+  return result;
+}
+
+namespace {
+void Add(ColumnStats& base, const ColumnStats& addition) {
+  base.distinct_count = -1;
+
+  if (addition.not_null_count == -1 || base.not_null_count == -1) {
+    base.not_null_count = -1;
+  } else {
+    base.not_null_count += addition.not_null_count;
+  }
+
+  if (addition.null_count == -1 || base.null_count == -1) {
+    base.null_count = -1;
+  } else {
+    base.null_count += addition.null_count;
+  }
+
+  if (addition.total_uncompressed_size == -1 || base.total_uncompressed_size == -1) {
+    base.total_uncompressed_size = -1;
+  } else {
+    base.total_uncompressed_size += addition.total_uncompressed_size;
+  }
+}
+}  // namespace
+
+arrow::Result<ColumnStats> ScanMetadata::GetColumnStats(const std::string& column_name) const {
+  int field_id = -1;
+  {
+    auto maybe_field_id = schema->FindMatchingColumn(
+        [&column_name](const std::string& field_name) { return AsciiToLower(field_name) == column_name; });
+    if (!maybe_field_id.has_value()) {
+      return arrow::Status::ExecutionError("GetIcebergColumnStats: Column ", column_name, " not found in schema");
+    }
+    field_id = maybe_field_id.value();
+  }
+
+  ColumnStats result{.null_count = 0,
+                     .distinct_count = 0,
+                     .not_null_count = 0,
+                     .total_compressed_size = 0,
+                     .total_uncompressed_size = 0};
+
+  for (const auto& task : entries) {
+    ColumnStats task_stats = task.GetColumnStats(field_id);
+    Add(result, task_stats);
+  }
+
+  return result;
+}
 
 arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenFile(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                                      const std::string& url) {

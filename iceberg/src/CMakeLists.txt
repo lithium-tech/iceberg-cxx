@@ -1,19 +1,20 @@
 add_library(iceberg
     catalog.h
-    nested_field.h
-    tea_hive_catalog.cpp
-    tea_hive_catalog.h
     manifest_entry.cpp
     manifest_entry.h
-    tea_manifest_metadata.cpp
     manifest_file.h
-    tea_scan.cpp
-    tea_scan.h
+    nested_field.h
+    schema.cpp
     schema.h
     snapshot.h
-    table.h
     table_metadata.cpp
     table_metadata.h
+    table.h
+    tea_column_stats.h
+    tea_hive_catalog.cpp
+    tea_manifest_metadata.cpp
+    tea_scan.cpp
+    tea_scan.h
     type.cpp
     type.h
 )

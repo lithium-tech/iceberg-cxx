@@ -13,7 +13,7 @@ target_include_directories(fix_location PUBLIC "${PROJECT_SOURCE_DIR}")
 target_link_libraries(fix_location
   iceberg rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse)
 
-if(USE_ICEBERG)
+if(USE_ICEBERG AND ${pg_version_major} EQUAL 9)
   add_executable(syncice syncice.cpp metadata_tree.cpp)
   target_include_directories(syncice PUBLIC "${PROJECT_SOURCE_DIR}")
   target_link_libraries(syncice PUBLIC _hivemetastore _thrift

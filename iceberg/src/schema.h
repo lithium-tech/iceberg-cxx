@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -16,6 +18,8 @@ class Schema {
 
   int32_t SchemaId() const { return schema_id_; }
   const std::vector<types::NestedField>& Columns() const { return fields_; }
+
+  std::optional<int32_t> FindMatchingColumn(const std::function<bool(const std::string&)> predicate) const;
 
  private:
   int32_t schema_id_;

@@ -9,6 +9,7 @@
 #include "arrow/result.h"
 #include "iceberg/src/manifest_entry.h"
 #include "iceberg/src/schema.h"
+#include "iceberg/src/tea_column_stats.h"
 #include "iceberg/src/tea_hive_catalog.h"
 
 namespace iceberg::ice_tea {
@@ -20,6 +21,10 @@ struct Task {
     int64_t offset;
     int64_t length;  // 0 <=> until end
   };
+
+  ColumnStats GetColumnStats(int32_t field_id) const;
+  std::optional<int64_t> GetValueCounts(int32_t field_id) const;
+  std::optional<int64_t> GetColumnSize(int32_t field_id) const;
 
   ManifestEntry entry;
   std::vector<Segment> parts;  // empty <=> full file
@@ -34,6 +39,8 @@ struct Task {
 struct ScanMetadata {
   std::shared_ptr<Schema> schema;
   std::vector<Task> entries;
+
+  arrow::Result<ColumnStats> GetColumnStats(const std::string& column_name) const;
 };
 
 arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& url);
