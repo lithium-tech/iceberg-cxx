@@ -23,6 +23,75 @@ namespace thrift = apache::thrift;
 using iceberg::tools::MetadataTree;
 using iceberg::tools::StringFix;
 
+namespace {
+
+std::string GpTypeStr(const iceberg::types::Type* type) {
+  using iceberg::TypeID;
+
+  if (!type) {
+    throw std::runtime_error("cannot convert type - nullptr");
+  }
+
+  switch (type->TypeId()) {
+    case TypeID::kBoolean:
+      return "BOOLEAN";
+    case TypeID::kInt:
+      return "INTEGER";
+    case TypeID::kLong:
+      return "BIGINT";
+    case TypeID::kFloat:
+      return "FLOAT";
+    case TypeID::kDouble:
+      return "DOUBLE PRECISION";
+    case TypeID::kDecimal:
+      if (auto* decimal = dynamic_cast<const iceberg::types::DecimalType*>(type)) {
+        return "NUMERIC(" + std::to_string(decimal->Precision()) + "," + std::to_string(decimal->Scale()) + ")";
+      }
+      break;
+    case TypeID::kDate:
+      return "DATE";
+    case TypeID::kTime:
+      return "TIME WITHOUT TIME ZONE";
+    case TypeID::kTimestamp:
+      return "TIMESTAMP WITHOUT TIME ZONE";
+    case TypeID::kTimestamptz:
+      return "TIMESTAMP WITH TIME ZONE";
+    case TypeID::kString:
+      return "TEXT";
+    case TypeID::kUuid:
+      return "UUID";
+    case TypeID::kFixed:
+      break;  // not supported
+    case TypeID::kBinary:
+      return "BYTEA";
+    case TypeID::kStruct:
+      break;  // not supported
+    case TypeID::kList:
+      if (auto* list = dynamic_cast<const iceberg::types::ListType*>(type)) {
+        return GpTypeStr(list->ElementType().get()) + "[]";
+      }
+      break;
+    case TypeID::kMap:
+      break;  // not supported
+    case TypeID::kUnknown:
+      break;
+  }
+  throw std::runtime_error("cannot convert type: " + type->ToString());
+}
+
+std::string FieldStr(const iceberg::types::NestedField& field, bool gp_type) {
+  std::string col_descr = field.name;
+  if (field.type) {
+    col_descr += " " + (gp_type ? GpTypeStr(field.type.get()) : field.type->ToString());
+  }
+  if (field.is_required) {
+    col_descr += " NOT NULL";
+  }
+  return col_descr;
+}
+
+}  // namespace
+
 static constexpr uint16_t HMS_PORT = 9083;
 
 ABSL_FLAG(std::string, host, "localhost", "src HMS host");
@@ -33,6 +102,7 @@ ABSL_FLAG(std::string, tmpdir, "/tmp/ice_ls", "path to tmp directory");
 ABSL_FLAG(bool, rclone, false, "use rclone for sync");
 ABSL_FLAG(bool, print_files, true, "print file paths and types");
 ABSL_FLAG(bool, print_schema, true, "print schema");
+ABSL_FLAG(std::string, convert_types, "", "convert schema types, one of: GP, <empty>");
 ABSL_FLAG(std::string, loglevel, "", "S3 SDK loglevel, one of: off, fatal, error, warn, info, debug, trace");
 
 int main(int argc, char** argv) {
@@ -47,7 +117,10 @@ int main(int argc, char** argv) {
     const bool use_rclone = absl::GetFlag(FLAGS_rclone);
     const bool print_files = absl::GetFlag(FLAGS_print_files);
     const bool print_schema = absl::GetFlag(FLAGS_print_schema);
+    const std::string convert_types = absl::GetFlag(FLAGS_convert_types);
     const std::string loglevel = absl::GetFlag(FLAGS_loglevel);
+
+    bool gp_types = (convert_types == "GP");
 
     if (tmpdir.empty()) {
       throw std::runtime_error("Wrong args: tmpdir should not be empty");
@@ -135,17 +208,17 @@ int main(int argc, char** argv) {
       if ((size_t)current_schema_id >= table_metadata->schemas.size() || !table_metadata->schemas[current_schema_id]) {
         std::cerr << "no schema for current_schema_id " << current_schema_id << std::endl;
       }
-      std::cout << "-- Iceberg schema for " << src_db << "." << src_tablename << std::endl;
+      std::cout << "-- " << (gp_types ? "GP" : "Iceberg") << " schema for " << src_db << "." << src_tablename
+                << std::endl;
       std::cout << "CREATE TABLE " << src_db << "." << src_tablename << std::endl << "(" << std::endl;
       std::shared_ptr<iceberg::Schema> schema = table_metadata->schemas[current_schema_id];
       const auto& columns = schema->Columns();
       for (size_t i = 0; i < columns.size(); ++i) {
         const iceberg::types::NestedField& field = columns[i];
         bool has_next = columns.size() - i - 1;
-        std::cout << "  " << field.name << " " << (field.type ? field.type->ToString() : std::string())
-                  << (field.is_required ? " NOT NULL" : "") << (has_next ? "," : "") << std::endl;
+        std::cout << "  " << FieldStr(field, gp_types) << (has_next ? "," : "") << std::endl;
       }
-      std::cout << ");" << std::endl;
+      std::cout << ")" << std::endl;
     }
   } catch (std::exception& ex) {
     std::cerr << ex.what() << std::endl;
