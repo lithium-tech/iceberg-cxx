@@ -93,7 +93,8 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<ice_tea::S3Client> s3client;
     if (!use_rclone) {
-      s3client = std::make_shared<ice_tea::S3Client>(false, ice_tea::S3Init::LogLevel(loglevel));
+      s3client = std::make_shared<ice_tea::S3Client>(false, ice_tea::S3Init::LogLevel(loglevel), std::string("AWS_"),
+                                                     std::string());
     }
 
     std::cerr << "copying table '" << src_tablename << "' meta form " << src_metadata_path << " to " << meta_tmpdir

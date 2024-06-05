@@ -102,7 +102,6 @@ class S3Client {
            const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_")
       : s3init_(log_level), continue_on_fail_(force) {
     src_access_.LoadEnvOptions(src_env_prefix);
-    dst_access_.LoadEnvOptions(dst_env_prefix);
     S3Access::ClearEnvOptions("AWS_");
 
     fs_ = std::make_shared<arrow::fs::LocalFileSystem>();
@@ -113,11 +112,14 @@ class S3Client {
     }
     src_s3fs_ = *s3fs_res;
 
-    s3fs_res = arrow::fs::S3FileSystem::Make(dst_access_.options);
-    if (!s3fs_res.ok()) {
-      throw std::runtime_error(s3fs_res.status().ToString());
+    if (!dst_env_prefix.empty()) {
+      dst_access_.LoadEnvOptions(dst_env_prefix);
+      s3fs_res = arrow::fs::S3FileSystem::Make(dst_access_.options);
+      if (!s3fs_res.ok()) {
+        throw std::runtime_error(s3fs_res.status().ToString());
+      }
+      dst_s3fs_ = *s3fs_res;
     }
-    dst_s3fs_ = *s3fs_res;
   }
 
   bool CopyFiles(const std::unordered_map<std::string, std::string>& renames, bool use_threads) {
@@ -133,6 +135,9 @@ class S3Client {
       if (from.path == src_name) {
         from.filesystem = fs_;
       }
+      if (!from.filesystem) {
+        throw std::runtime_error("src fs is not set");
+      }
 
       if (!found.contains(from.path)) {
         if (!continue_on_fail_) {
@@ -144,6 +149,9 @@ class S3Client {
       arrow::fs::FileLocator to{.filesystem = dst_s3fs_, .path = CropPrefix(dst_name)};
       if (to.path == dst_name) {
         to.filesystem = fs_;
+      }
+      if (!to.filesystem) {
+        throw std::runtime_error("dst fs is not set");
       }
 
       src.emplace_back(std::move(from));
@@ -167,11 +175,17 @@ class S3Client {
     if (selector.base_dir == src) {
       src_fs = fs_;
     }
+    if (!src_fs) {
+      throw std::runtime_error("src fs is not set");
+    }
 
     auto dst_fs = dst_s3fs_;
     auto dst_path = CropPrefix(dst);
     if (dst_path == dst) {
       dst_fs = fs_;
+    }
+    if (!dst_fs) {
+      throw std::runtime_error("dst fs is not set");
     }
 
     auto status = arrow::fs::CopyFiles(src_fs, selector, dst_fs, dst_path, arrow::io::default_io_context(), CHUNK_SIZE,
