@@ -100,7 +100,8 @@ ABSL_FLAG(std::string, db, "", "src database name");
 ABSL_FLAG(std::string, table, "", "src table name");
 ABSL_FLAG(std::string, tmpdir, "/tmp/ice_ls", "path to tmp directory");
 ABSL_FLAG(bool, rclone, false, "use rclone for sync");
-ABSL_FLAG(bool, print_files, true, "print file paths and types");
+ABSL_FLAG(bool, print_location, true, "print metadata location");
+ABSL_FLAG(bool, print_files, false, "print file paths and types");
 ABSL_FLAG(bool, print_schema, true, "print schema");
 ABSL_FLAG(std::string, convert_types, "", "convert schema types, one of: GP, <empty>");
 ABSL_FLAG(std::string, loglevel, "", "S3 SDK loglevel, one of: off, fatal, error, warn, info, debug, trace");
@@ -115,6 +116,7 @@ int main(int argc, char** argv) {
     const std::string src_tablename = absl::GetFlag(FLAGS_table);
     const std::filesystem::path tmpdir = absl::GetFlag(FLAGS_tmpdir);
     const bool use_rclone = absl::GetFlag(FLAGS_rclone);
+    const bool print_location = absl::GetFlag(FLAGS_print_location);
     const bool print_files = absl::GetFlag(FLAGS_print_files);
     const bool print_schema = absl::GetFlag(FLAGS_print_schema);
     const std::string convert_types = absl::GetFlag(FLAGS_convert_types);
@@ -188,7 +190,11 @@ int main(int argc, char** argv) {
         throw std::runtime_error("Cannot read metadata file '" + meta_tmpdir_json.string() + "'");
       }
     }
-    std::cerr << "location: " << table_metadata->location << std::endl;
+
+    if (print_location) {
+      std::cout << "location: " << table_metadata->location << std::endl;
+      std::cout << "json: " << src_meta_json << std::endl;
+    }
 
     if (print_files) {
       std::vector<MetadataTree> prev_meta;
