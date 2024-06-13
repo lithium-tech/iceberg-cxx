@@ -122,6 +122,20 @@ class S3Client {
     }
   }
 
+  arrow::fs::FileLocator MakeFileLocator(std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& name) const {
+    arrow::fs::FileLocator file_loc{.filesystem = fs, .path = CropPrefix(name)};
+    if (file_loc.path == name) {
+      file_loc.filesystem = fs_;
+    }
+    if (!file_loc.filesystem) {
+      throw std::runtime_error("fs is not set");
+    }
+    return file_loc;
+  }
+
+  arrow::fs::FileLocator SrcFileLocator(const std::string& name) const { return MakeFileLocator(src_s3fs_, name); }
+  arrow::fs::FileLocator DstFileLocator(const std::string& name) const { return MakeFileLocator(dst_s3fs_, name); }
+
   bool CopyFiles(const std::unordered_map<std::string, std::string>& renames, bool use_threads) {
     std::unordered_set<std::string> found = CheckFiles(renames);
 
@@ -131,13 +145,7 @@ class S3Client {
     dst.reserve(renames.size());
 
     for (auto& [src_name, dst_name] : renames) {
-      arrow::fs::FileLocator from{.filesystem = src_s3fs_, .path = CropPrefix(src_name)};
-      if (from.path == src_name) {
-        from.filesystem = fs_;
-      }
-      if (!from.filesystem) {
-        throw std::runtime_error("src fs is not set");
-      }
+      arrow::fs::FileLocator from = SrcFileLocator(src_name);
 
       if (!found.contains(from.path)) {
         if (!continue_on_fail_) {
@@ -146,18 +154,15 @@ class S3Client {
         continue;
       }
 
-      arrow::fs::FileLocator to{.filesystem = dst_s3fs_, .path = CropPrefix(dst_name)};
-      if (to.path == dst_name) {
-        to.filesystem = fs_;
-      }
-      if (!to.filesystem) {
-        throw std::runtime_error("dst fs is not set");
-      }
-
       src.emplace_back(std::move(from));
-      dst.emplace_back(std::move(to));
+      dst.emplace_back(DstFileLocator(dst_name));
     }
 
+    return CopyFiles(src, dst, use_threads);
+  }
+
+  bool CopyFiles(const std::vector<arrow::fs::FileLocator>& src, const std::vector<arrow::fs::FileLocator>& dst,
+                 bool use_threads) {
     auto status = arrow::fs::CopyFiles(src, dst, arrow::io::default_io_context(), CHUNK_SIZE, use_threads);
     if (!status.ok()) {
       throw std::runtime_error(status.ToString());
@@ -292,5 +297,9 @@ inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_m
   }
   return true;
 }
+
+bool CopyFilesWithProjection(std::shared_ptr<ice_tea::S3Client> s3client,
+                             const std::unordered_map<std::string, std::string>& renames,
+                             const std::unordered_set<std::string>& column_filer, const std::string& tmp_dir);
 
 }  // namespace ice_tea

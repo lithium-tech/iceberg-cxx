@@ -14,10 +14,11 @@ target_link_libraries(fix_location
   iceberg rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse)
 
 if(USE_ICEBERG AND ${pg_version_major} EQUAL 9)
-  add_executable(syncice syncice.cpp metadata_tree.cpp)
-  target_include_directories(syncice PUBLIC "${PROJECT_SOURCE_DIR}")
+  add_executable(syncice syncice.cpp copy_with_projection.cpp metadata_tree.cpp)
+  target_include_directories(syncice PUBLIC "${PROJECT_SOURCE_DIR} ${ArrowHouse_SOURCE_DIR}")
   target_link_libraries(syncice PUBLIC _hivemetastore _thrift
-    iceberg rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Arrow::arrow_static)
+    iceberg rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse
+    arrowhouse DataStreams Arrow::arrow_static Parquet::parquet_static)
 
   add_executable(ice_ls ls.cpp metadata_tree.cpp)
   target_include_directories(ice_ls PUBLIC "${PROJECT_SOURCE_DIR}")

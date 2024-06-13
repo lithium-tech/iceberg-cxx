@@ -56,12 +56,6 @@ std::string UrlToPath(const std::string& url) {
   return {};
 }
 
-std::string AsciiToLower(std::string_view value) {
-  std::string result = std::string(value);
-  std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
-  return result;
-}
-
 }  // namespace
 
 std::optional<int64_t> Task::GetValueCounts(int32_t field_id) const {
@@ -133,8 +127,7 @@ void Add(ColumnStats& base, const ColumnStats& addition) {
 arrow::Result<ColumnStats> ScanMetadata::GetColumnStats(const std::string& column_name) const {
   int field_id = -1;
   {
-    auto maybe_field_id = schema->FindMatchingColumn(
-        [&column_name](const std::string& field_name) { return AsciiToLower(field_name) == column_name; });
+    auto maybe_field_id = schema->FindColumnIgnoreCase(column_name);
     if (!maybe_field_id.has_value()) {
       return arrow::Status::ExecutionError("GetIcebergColumnStats: Column ", column_name, " not found in schema");
     }

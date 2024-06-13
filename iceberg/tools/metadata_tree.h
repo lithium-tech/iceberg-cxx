@@ -47,6 +47,7 @@ class MetadataTree {
   void FixLocation(const StringFix& fix_meta, const StringFix& fix_data,
                    std::unordered_map<std::string, std::string>& renames);
 
+  MetadataFile& GetMetadataFile() { return medatada_file; }
   const MetadataFile& GetMetadataFile() const { return medatada_file; }
   std::string SerializeMetadataFile() const;
   void WriteFiles(const std::filesystem::path& out_dir) const;

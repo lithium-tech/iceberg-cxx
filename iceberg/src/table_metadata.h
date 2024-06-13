@@ -133,6 +133,15 @@ struct TableMetadataV2 {
   std::map<std::string, SnapshotRef> refs;
   // std::vector<Statistics> statistics_;
   // std::vector<PartitionStatistics> partition_statistics_;
+
+  template <typename T>
+  void FilterSchemaColumns(const T& filter) {
+    for (auto& schema : schemas) {
+      if (schema) {
+        schema->FilterColumns(schema->FindColumnIds(filter));
+      }
+    }
+  }
 };
 
 struct TableMetadataV2Builder {
