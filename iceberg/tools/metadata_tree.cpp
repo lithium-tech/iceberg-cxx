@@ -91,9 +91,10 @@ std::map<int64_t, std::string> MetadataTree::MetadataLog() const {
 }
 
 void MetadataTree::FixLocation(const StringFix& fix_meta, const StringFix& fix_data,
-                               std::unordered_map<std::string, std::string>& renames) {
+                               std::unordered_map<std::string, std::string>& renames,
+                               std::unordered_map<std::string, std::string>& rename_locations) {
   auto& metadata = medatada_file.table_metadata;
-  FixString(metadata->location, fix_meta, renames);
+  FixString(metadata->location, fix_meta, rename_locations);
 
   for (auto& snap : metadata->snapshots) {
     FixString(snap->manifest_list_location, fix_meta, renames);
@@ -177,7 +178,8 @@ void MetadataTree::Print(std::ostream& os, size_t limit_files) const {
 
 MetadataTree FixLocation(const std::filesystem::path& metadata_path, const StringFix& fix_meta,
                          const StringFix& fix_data, std::vector<MetadataTree>& prev_meta,
-                         std::unordered_map<std::string, std::string>& renames, bool strict) {
+                         std::unordered_map<std::string, std::string>& renames,
+                         std::unordered_map<std::string, std::string>& rename_locations) {
   MetadataTree meta_tree(metadata_path);
   auto meta_log = meta_tree.MetadataLog();
   prev_meta.reserve(meta_log.size());
@@ -190,9 +192,6 @@ MetadataTree FixLocation(const std::filesystem::path& metadata_path, const Strin
       prev_meta.emplace_back(std::move(old_meta));
     } catch (std::exception& ex) {
       std::cerr << "Error while processing " << path << ": " << ex.what() << std::endl;
-      if (strict) {
-        throw;
-      }
     }
   }
 
@@ -201,9 +200,9 @@ MetadataTree FixLocation(const std::filesystem::path& metadata_path, const Strin
   }
 
   for (auto& prev_tree : prev_meta) {
-    prev_tree.FixLocation(fix_meta, fix_data, renames);
+    prev_tree.FixLocation(fix_meta, fix_data, renames, rename_locations);
   }
-  meta_tree.FixLocation(fix_meta, fix_data, renames);
+  meta_tree.FixLocation(fix_meta, fix_data, renames, rename_locations);
 
   return meta_tree;
 }

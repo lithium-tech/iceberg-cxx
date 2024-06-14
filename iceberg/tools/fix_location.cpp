@@ -9,7 +9,6 @@ ABSL_FLAG(std::string, old, "", "old location");
 ABSL_FLAG(std::string, fix, "", "new location");
 ABSL_FLAG(std::string, outdir, "", "path to dst");
 ABSL_FLAG(bool, clean, true, "clean outdir");
-ABSL_FLAG(int, strict, 0, "fail on errors in previous snapshots");
 
 using iceberg::tools::MetadataTree;
 using iceberg::tools::StringFix;
@@ -23,7 +22,6 @@ int main(int argc, char** argv) {
     const std::string fix = absl::GetFlag(FLAGS_fix);
     const std::filesystem::path outdir = absl::GetFlag(FLAGS_outdir);
     const bool clean = absl::GetFlag(FLAGS_clean);
-    const int strict = absl::GetFlag(FLAGS_strict);
 
     if (metadata_path.empty()) {
       throw std::runtime_error("No metadata set");
@@ -33,7 +31,10 @@ int main(int argc, char** argv) {
     StringFix fix_data{old, fix};
     std::vector<MetadataTree> prev_meta;
     std::unordered_map<std::string, std::string> renames;
-    MetadataTree meta_tree = iceberg::tools::FixLocation(metadata_path, fix_meta, fix_data, prev_meta, renames, strict);
+    std::unordered_map<std::string, std::string> unneded;
+    MetadataTree meta_tree =
+        iceberg::tools::FixLocation(metadata_path, fix_meta, fix_data, prev_meta, renames, unneded);
+    unneded.clear();
 
     for (auto& prev_tree : prev_meta) {
       std::cout << prev_tree << std::endl;
