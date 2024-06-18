@@ -121,6 +121,12 @@ void Add(ColumnStats& base, const ColumnStats& addition) {
   } else {
     base.total_uncompressed_size += addition.total_uncompressed_size;
   }
+
+  if (addition.total_compressed_size == -1 || base.total_compressed_size == -1) {
+    base.total_compressed_size = -1;
+  } else {
+    base.total_compressed_size += addition.total_compressed_size;
+  }
 }
 }  // namespace
 
@@ -141,6 +147,9 @@ arrow::Result<ColumnStats> ScanMetadata::GetColumnStats(const std::string& colum
                      .total_uncompressed_size = 0};
 
   for (const auto& task : entries) {
+    if (task.entry.data_file.content != DataFile::FileContent::kData) {
+      continue;
+    }
     ColumnStats task_stats = task.GetColumnStats(field_id);
     Add(result, task_stats);
   }
