@@ -298,8 +298,4 @@ inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_m
   return true;
 }
 
-bool CopyFilesWithProjection(std::shared_ptr<ice_tea::S3Client> s3client,
-                             const std::unordered_map<std::string, std::string>& renames,
-                             const std::unordered_set<std::string>& column_filer, const std::string& tmp_dir);
-
 }  // namespace ice_tea
