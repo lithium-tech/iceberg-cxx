@@ -44,9 +44,9 @@ enum class SortDirection { kAsc, kDesc };
 
 struct SortField {
   std::string transform;  // TODO(chertus): Transform type
-  int32_t source_id;
-  SortDirection direction;
-  NullOrder null_order;
+  int32_t source_id{};
+  SortDirection direction = SortDirection::kAsc;
+  NullOrder null_order = NullOrder::kNullsLast;
 
   bool operator==(const SortField& other) const {
     return source_id == other.source_id && direction == other.direction && null_order == other.null_order &&
@@ -55,7 +55,7 @@ struct SortField {
 };
 
 struct SortOrder {
-  int32_t order_id;
+  int32_t order_id{};
   std::vector<SortField> fields;
 
   bool operator==(const SortOrder& other) const { return order_id == other.order_id && fields == other.fields; }
@@ -109,8 +109,9 @@ struct TableMetadataV2 {
         refs(std::move(refs_)) {}
 
   std::optional<std::string> GetCurrentManifestListPath() const;
-
   std::shared_ptr<Schema> GetCurrentSchema() const;
+  std::shared_ptr<SortOrder> GetSortOrder() const;
+  int32_t SetSortOrder(std::shared_ptr<SortOrder> order);
 
   static constexpr uint32_t format_vesion = 2;                  // required
   std::string table_uuid;                                       // required

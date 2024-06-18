@@ -4,6 +4,7 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 #include "iceberg/src/nested_field.h"
 #include "iceberg/src/type.h"
@@ -747,6 +748,35 @@ std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
     }
   }
   throw std::runtime_error(std::string(__FUNCTION__) + ": no schema with current schema id");
+}
+
+std::shared_ptr<SortOrder> TableMetadataV2::GetSortOrder() const {
+  for (auto order : sort_orders) {
+    if (order->order_id == default_sort_order_id) {
+      return order;
+    }
+  }
+  return {};
+}
+
+int32_t TableMetadataV2::SetSortOrder(std::shared_ptr<SortOrder> order) {
+  std::unordered_set<int32_t> ids;
+  for (auto& known_order : sort_orders) {
+    if (known_order->fields == order->fields) {
+      default_sort_order_id = known_order->order_id;
+      return default_sort_order_id;
+    }
+    ids.emplace(known_order->order_id);
+  }
+  if (order->order_id == 0 || ids.contains(order->order_id)) {
+    order->order_id = 1;
+    while (ids.contains(order->order_id)) {
+      ++order->order_id;
+    }
+  }
+  sort_orders.push_back(order);
+  default_sort_order_id = order->order_id;
+  return default_sort_order_id;
 }
 
 std::shared_ptr<TableMetadataV2> TableMetadataV2Builder::Build() {
