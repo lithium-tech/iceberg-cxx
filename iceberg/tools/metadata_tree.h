@@ -69,9 +69,9 @@ class MetadataTree {
   }
 };
 
-MetadataTree FixLocation(const std::filesystem::path& metadata_path, const StringFix& fix_meta,
-                         const StringFix& fix_data, std::vector<MetadataTree>& prev_meta,
-                         std::unordered_map<std::string, std::string>& renames,
-                         std::unordered_map<std::string, std::string>& rename_locations);
+void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_meta,
+                 const StringFix& fix_data, std::vector<MetadataTree>& prev_meta,
+                 std::unordered_map<std::string, std::string>& renames,
+                 std::unordered_map<std::string, std::string>& rename_locations);
 
 }  // namespace iceberg::tools

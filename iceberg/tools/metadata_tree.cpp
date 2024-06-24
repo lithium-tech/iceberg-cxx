@@ -176,11 +176,10 @@ void MetadataTree::Print(std::ostream& os, size_t limit_files) const {
   }
 }
 
-MetadataTree FixLocation(const std::filesystem::path& metadata_path, const StringFix& fix_meta,
-                         const StringFix& fix_data, std::vector<MetadataTree>& prev_meta,
-                         std::unordered_map<std::string, std::string>& renames,
-                         std::unordered_map<std::string, std::string>& rename_locations) {
-  MetadataTree meta_tree(metadata_path);
+void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_meta,
+                 const StringFix& fix_data, std::vector<MetadataTree>& prev_meta,
+                 std::unordered_map<std::string, std::string>& renames,
+                 std::unordered_map<std::string, std::string>& rename_locations) {
   auto meta_log = meta_tree.MetadataLog();
   prev_meta.reserve(meta_log.size());
   for (auto& [_, meta_file_path] : meta_log) {
@@ -196,15 +195,13 @@ MetadataTree FixLocation(const std::filesystem::path& metadata_path, const Strin
   }
 
   if (!fix_meta.NeedFix() && !fix_data.NeedFix()) {
-    return meta_tree;
+    return;
   }
 
   for (auto& prev_tree : prev_meta) {
     prev_tree.FixLocation(fix_meta, fix_data, renames, rename_locations);
   }
   meta_tree.FixLocation(fix_meta, fix_data, renames, rename_locations);
-
-  return meta_tree;
 }
 
 }  // namespace iceberg::tools

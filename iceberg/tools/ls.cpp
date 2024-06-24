@@ -200,7 +200,8 @@ int main(int argc, char** argv) {
       std::vector<MetadataTree> prev_meta;
       std::unordered_map<std::string, std::string> renames;
       std::unordered_map<std::string, std::string> unneeded;
-      MetadataTree meta_tree = FixLocation(meta_tmpdir_json, {}, {}, prev_meta, renames, unneeded);
+      MetadataTree meta_tree(meta_tmpdir_json);
+      FixLocation(meta_tree, meta_tmpdir_json, {}, {}, prev_meta, renames, unneeded);
       unneeded.clear();
 
       for (auto& prev_tree : prev_meta) {
