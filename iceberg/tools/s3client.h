@@ -282,6 +282,13 @@ inline bool CopyDir(std::shared_ptr<S3Client> s3client, const std::string& src, 
   return true;
 }
 
+inline void CopyDirOrThrow(std::shared_ptr<S3Client> s3client, const std::string& src, const std::string& dst,
+                           bool use_threads) {
+  if (!CopyDir(s3client, src, dst, use_threads)) {
+    throw std::runtime_error(std::string("cannot copy dir ") + src + " to " + dst);
+  }
+}
+
 inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_map<std::string, std::string>& renames,
                       bool use_threads) {
   if (s3client) {
@@ -296,6 +303,13 @@ inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_m
     }
   }
   return true;
+}
+
+inline void CopyFilesOrThrow(std::shared_ptr<S3Client> s3client,
+                             const std::unordered_map<std::string, std::string>& renames, bool use_threads) {
+  if (!CopyFiles(s3client, renames, use_threads)) {
+    throw std::runtime_error("cannot copy files");
+  }
 }
 
 }  // namespace ice_tea
