@@ -20,7 +20,10 @@
 namespace hive = Apache::Hadoop::Hive;
 namespace thrift = apache::thrift;
 
+using iceberg::tools::CopyDir;
 using iceberg::tools::MetadataTree;
+using iceberg::tools::S3Client;
+using iceberg::tools::S3Init;
 using iceberg::tools::StringFix;
 
 namespace {
@@ -166,15 +169,14 @@ int main(int argc, char** argv) {
     std::filesystem::remove_all(meta_tmpdir);
     std::filesystem::create_directories(meta_tmpdir);
 
-    std::shared_ptr<ice_tea::S3Client> s3client;
+    std::shared_ptr<S3Client> s3client;
     if (!use_rclone) {
-      s3client = std::make_shared<ice_tea::S3Client>(false, ice_tea::S3Init::LogLevel(loglevel), std::string("AWS_"),
-                                                     std::string());
+      s3client = std::make_shared<S3Client>(false, S3Init::LogLevel(loglevel), std::string("AWS_"), std::string());
     }
 
     std::cerr << "copying table '" << src_tablename << "' meta form " << src_metadata_path << " to " << meta_tmpdir
               << std::endl;
-    if (!ice_tea::CopyDir(s3client, src_metadata_path, meta_tmpdir, false)) {
+    if (!CopyDir(s3client, src_metadata_path, meta_tmpdir, false)) {
       throw std::runtime_error(std::string("cannot copy dir ") + src_metadata_path + " to " + meta_tmpdir.string());
     }
 

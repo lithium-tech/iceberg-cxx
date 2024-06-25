@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace ice_tea {
+namespace iceberg::tools {
 
 struct S3Init {
   explicit S3Init(arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error) { InitS3(log_level); }
@@ -312,4 +312,4 @@ inline void CopyFilesOrThrow(std::shared_ptr<S3Client> s3client,
   }
 }
 
-}  // namespace ice_tea
+}  // namespace iceberg::tools

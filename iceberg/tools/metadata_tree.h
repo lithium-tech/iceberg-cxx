@@ -19,6 +19,23 @@ struct StringFix {
   bool NeedFix() const { return from != to; }
 };
 
+class ManifestEntryHelper {
+ public:
+  using EntryStatus = iceberg::ManifestEntry::Status;
+  using FileContent = iceberg::ContentFile::FileContent;
+
+  explicit ManifestEntryHelper(const iceberg::ManifestEntry& entry) : entry_(entry) {}
+
+  std::filesystem::path FilePath() const { return entry_.data_file.file_path; }
+  bool IsDeleted() const { return entry_.status == EntryStatus::kDeleted; }
+  bool IsData() const { return entry_.data_file.content == FileContent::kData; }
+  bool IsEqualityDeletes() const { return entry_.data_file.content == FileContent::kEqualityDeletes; }
+  bool IsPositionDeletes() const { return entry_.data_file.content == FileContent::kPositionDeletes; }
+
+ private:
+  const iceberg::ManifestEntry& entry_;
+};
+
 class MetadataTree {
  public:
   struct MetadataFile {
@@ -36,8 +53,6 @@ class MetadataTree {
 
   struct Manifest {
     std::vector<iceberg::ManifestEntry> files;
-
-    std::filesystem::path DataFilePath(size_t i) const { return files[i].data_file.file_path; }
   };
 
   explicit MetadataTree(const std::filesystem::path& path);
@@ -51,6 +66,7 @@ class MetadataTree {
   MetadataFile& GetMetadataFile() { return medatada_file; }
   const std::string& Location() const { return medatada_file.table_metadata->location; }
   const MetadataFile& GetMetadataFile() const { return medatada_file; }
+  const auto& GetManifests() const { return manifests; }
   std::string SerializeMetadataFile() const;
   void WriteFiles(const std::filesystem::path& out_dir) const;
   void Print(std::ostream& os, size_t limit_files = 2) const;
