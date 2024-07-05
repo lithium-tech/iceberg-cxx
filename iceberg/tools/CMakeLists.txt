@@ -19,9 +19,19 @@ if(USE_ICEBERG AND ${pg_version_major} EQUAL 9)
   target_link_libraries(syncice PUBLIC _hivemetastore _thrift
     iceberg rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse
     arrowhouse DataStreams Arrow::arrow_static Parquet::parquet_static)
+  set_target_properties(syncice PROPERTIES LINK_FLAGS_RELEASE -s)
+  set_target_properties(syncice PROPERTIES LINK_FLAGS_RELWITHDEBINFO -s)
 
   add_executable(ice_ls ls.cpp metadata_tree.cpp)
   target_include_directories(ice_ls PUBLIC "${PROJECT_SOURCE_DIR}")
   target_link_libraries(ice_ls PUBLIC _hivemetastore _thrift
     iceberg rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Arrow::arrow_static)
+  set_target_properties(ice_ls PROPERTIES LINK_FLAGS_RELEASE -s)
+  set_target_properties(ice_ls PROPERTIES LINK_FLAGS_RELWITHDEBINFO -s)
+
+  install(TARGETS syncice ice_ls hive_metastore_client hive_metastore_server
+    DESTINATION ""
+    COMPONENT icetools
+    EXCLUDE_FROM_ALL
+  )
 endif()
