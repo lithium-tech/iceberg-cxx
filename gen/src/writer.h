@@ -1,0 +1,79 @@
+#pragma once
+
+#include <iostream>
+#include <memory>
+#include <string>
+
+#include "arrow/io/file.h"
+#include "arrow/record_batch.h"
+#include "gen/src/log.h"
+#include "parquet/arrow/writer.h"
+#include "parquet/file_writer.h"
+#include "parquet/properties.h"
+#include "parquet/schema.h"
+#include "parquet/types.h"
+
+namespace gen {
+
+class Writer {
+ public:
+  Writer(const std::string& filename, const std::shared_ptr<parquet::schema::GroupNode>& schema)
+      : outfile_([&filename]() {
+          auto maybe_outfile = arrow::io::FileOutputStream::Open(filename);
+          if (!maybe_outfile.ok()) {
+            throw maybe_outfile.status();
+          }
+          return maybe_outfile.ValueUnsafe();
+        }()),
+        parquet_writer_(parquet::ParquetFileWriter::Open(outfile_, schema)) {}
+
+  arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) {
+    if (arrow_writer_ == nullptr) {
+      ARROW_RETURN_NOT_OK(parquet::arrow::FileWriter::Make(arrow::default_memory_pool(), std::move(parquet_writer_),
+                                                           record_batch->schema(),
+                                                           parquet::default_arrow_writer_properties(), &arrow_writer_));
+    }
+
+    return arrow_writer_->WriteRecordBatch(*record_batch);
+  }
+
+  arrow::Status Finalize() {
+    if (parquet_writer_) {
+      parquet_writer_->Close();
+      parquet_writer_.reset();
+    }
+    if (arrow_writer_) {
+      ARROW_RETURN_NOT_OK(arrow_writer_->Close());
+      arrow_writer_ = nullptr;
+    }
+    return arrow::Status::OK();
+  }
+
+  ~Writer() {
+    auto status = Finalize();
+    LOG_NOT_OK(status);
+  }
+
+ private:
+  std::shared_ptr<arrow::io::FileOutputStream> outfile_;
+  std::unique_ptr<parquet::ParquetFileWriter> parquet_writer_;
+  std::unique_ptr<parquet::arrow::FileWriter> arrow_writer_;
+};
+
+class BatchSizeMaker {
+ public:
+  BatchSizeMaker(int64_t batch_size, int64_t total_rows) : batch_size_(batch_size), total_rows_(total_rows) {}
+
+  int64_t NextBatchSize() {
+    int64_t batch_size = std::min(batch_size_, total_rows_ - rows_done_);
+    rows_done_ += batch_size;
+    return batch_size;
+  }
+
+ private:
+  int64_t rows_done_ = 0;
+  const int64_t batch_size_;
+  const int64_t total_rows_;
+};
+
+}  // namespace gen
