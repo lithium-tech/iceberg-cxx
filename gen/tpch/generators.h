@@ -16,6 +16,23 @@ namespace gen {
 
 namespace tpch {
 
+class AppendLeadingZerosGenerator : public WithArgsStringGenerator {
+ public:
+  AppendLeadingZerosGenerator(int32_t length) : WithArgsStringGenerator({arrow::utf8()}), length_(length) {}
+
+  std::string GenerateValue(BatchPtr batch, uint64_t index) override {
+    auto value = std::static_pointer_cast<arrow::StringArray>(batch->Column(0))->GetString(index);
+    if (value.size() < length_) {
+      // redundant allocation, but it's not a big deal
+      return std::string(length_ - value.size(), '0') + value;
+    }
+    return value;
+  }
+
+ private:
+  const uint32_t length_;
+};
+
 class PhoneGenerator : public WithArgsStringGenerator {
  public:
   explicit PhoneGenerator(RandomDevice& random_device)
@@ -29,8 +46,8 @@ class PhoneGenerator : public WithArgsStringGenerator {
     int32_t local_number1 = generator_three_digits_(random_device_);
     int32_t local_number2 = generator_three_digits_(random_device_);
     int32_t local_number3 = generator_four_digits_(random_device_);
-    return std::to_string(country_code) + "-" + std::to_string(local_number1) + "-" + std::to_string(local_number2) +
-           "-" + std::to_string(local_number3);
+    return std::to_string(country_code + 10) + "-" + std::to_string(local_number1) + "-" +
+           std::to_string(local_number2) + "-" + std::to_string(local_number3);
   }
 
  private:
@@ -61,8 +78,28 @@ class VStringGenerator : public TrivialStringGenerator {
   UniformInt64Distribution length_distribution_;
   UniformInt64Distribution char_distribution_;
 
-  static constexpr std::string_view kCharacterSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  static_assert(kCharacterSet.size() == 2 * 26 + 10);
+  static constexpr std::string_view kCharacterSet = "0123456789abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ,";
+  static_assert(kCharacterSet.size() == 2 * 26 + 10 + 2);
+};
+
+// Append zeros to positions [sparse_keep, sparse_keep + sparse_bits)
+class SparseKeyGenerator : public WithArgsInt32Generator {
+ public:
+  SparseKeyGenerator(int32_t sparse_keep, int32_t sparse_bits)
+      : WithArgsInt32Generator({arrow::int32()}), sparse_keep_(sparse_keep), sparse_bits_(sparse_bits) {}
+
+  int32_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
+    int32_t key = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0))->GetView(row_index);
+    int32_t low_bits = key & ((1 << sparse_keep_) - 1);
+    key >>= sparse_keep_;
+    key <<= sparse_bits_ + sparse_keep_;
+    key |= low_bits;
+    return key;
+  }
+
+ private:
+  const int32_t sparse_keep_;
+  const int32_t sparse_bits_;
 };
 
 class TextStringGenerator : public TrivialStringGenerator {
@@ -135,11 +172,11 @@ class CommentGenerator : public TrivialStringGenerator {
 
 namespace part {
 
-class RetailPriceGenerator : public WithArgsInt32Generator {
+class RetailPriceGenerator : public WithArgsInt64Generator {
  public:
-  RetailPriceGenerator() : WithArgsInt32Generator({arrow::int32()}) {}
+  RetailPriceGenerator() : WithArgsInt64Generator({arrow::int32()}) {}
 
-  int32_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
+  int64_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
     int32_t partkey = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0))->GetView(row_index);
     int32_t price = 90000;
     price += (partkey / 10) % 20001;
@@ -199,9 +236,9 @@ class SuppkeyGenerator : public WithArgsInt32Generator {
       : WithArgsInt32Generator({arrow::int32(), arrow::int32()}), s_(scale_factor * 10'000) {}
 
   int32_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
+    auto partkey = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0))->GetView(row_index);
     auto corresponding_supplier =
-        std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0))->GetView(row_index);
-    auto partkey = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(1))->GetView(row_index);
+        std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(1))->GetView(row_index);
 
     return (partkey + (corresponding_supplier * ((s_ / 4) + (partkey - 1) / s_))) % s_ + 1;
   }
@@ -265,22 +302,22 @@ class OrderstatusGenerator : public AggregatorGenerator<arrow::StringType> {
   }
 };
 
-class TotalpriceGenerator : public AggregatorGenerator<arrow::Int32Type> {
+class TotalpriceGenerator : public AggregatorGenerator<arrow::Int64Type> {
  public:
   TotalpriceGenerator()
-      : AggregatorGenerator<arrow::Int32Type>({arrow::int32(), arrow::int32(), arrow::int32(), arrow::int32()}) {}
+      : AggregatorGenerator<arrow::Int64Type>({arrow::int32(), arrow::int64(), arrow::int64(), arrow::int64()}) {}
 
-  arrow::Status HandleArray(BatchPtr args, int64_t from, int64_t to, std::vector<int32_t>& result) override {
-    auto extendprice_column = std::static_pointer_cast<arrow::Int32Array>(args->Column(0));
-    auto tax_column = std::static_pointer_cast<arrow::Int32Array>(args->Column(1));
-    auto discount_column = std::static_pointer_cast<arrow::Int32Array>(args->Column(2));
+  arrow::Status HandleArray(BatchPtr args, int64_t from, int64_t to, std::vector<int64_t>& result) override {
+    auto extendprice_column = std::static_pointer_cast<arrow::Int64Array>(args->Column(0));
+    auto tax_column = std::static_pointer_cast<arrow::Int64Array>(args->Column(1));
+    auto discount_column = std::static_pointer_cast<arrow::Int64Array>(args->Column(2));
 
-    int32_t total_result = 0;
+    int64_t total_result = 0;
     for (int32_t k = from; k < to; ++k) {
-      const auto extendprice = extendprice_column->GetView(k);
+      const int64_t extendprice = extendprice_column->GetView(k);
       const auto tax = tax_column->GetView(k);
       const auto discount = discount_column->GetView(k);
-      total_result += extendprice * (100 + tax) * (100 - discount);
+      total_result += extendprice * (100 - discount) / 100 * (100 + tax) / 100;
     }
     result.emplace_back(total_result);
 
@@ -295,12 +332,12 @@ namespace lineitem {
 class ReturnflagGenerator : public WithArgsStringGenerator {
  public:
   ReturnflagGenerator(int32_t current_date, RandomDevice& random_device)
-      : WithArgsStringGenerator({arrow::int32()}),
+      : WithArgsStringGenerator({arrow::date32()}),
         current_date_(current_date),
         generator_(gen::List("flag", std::vector<std::string>{"R", "A"}), random_device) {}
 
   std::string GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
-    int32_t receiptdate = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0))->GetView(row_index);
+    int32_t receiptdate = std::static_pointer_cast<arrow::Date32Array>(record_batch->Column(0))->GetView(row_index);
 
     if (receiptdate <= current_date_) {
       return generator_.GenerateValue();
@@ -316,10 +353,10 @@ class ReturnflagGenerator : public WithArgsStringGenerator {
 
 class LinestatusGenerator : public WithArgsStringGenerator {
  public:
-  LinestatusGenerator(int32_t current_date) : WithArgsStringGenerator({arrow::int32()}), current_date_(current_date) {}
+  LinestatusGenerator(int32_t current_date) : WithArgsStringGenerator({arrow::date32()}), current_date_(current_date) {}
 
   std::string GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
-    int32_t shipdate = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0))->GetView(row_index);
+    int32_t shipdate = std::static_pointer_cast<arrow::Date32Array>(record_batch->Column(0))->GetView(row_index);
 
     if (shipdate > current_date_) {
       return "O";

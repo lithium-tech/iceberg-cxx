@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include "arrow/csv/options.h"
 #include "arrow/record_batch.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
@@ -20,7 +21,7 @@
 
 using namespace gen;
 
-constexpr int32_t kStartDate = 8206;
+constexpr int32_t kStartDate = 8035;
 constexpr int32_t kCurrentDate = 9298;
 constexpr int32_t kEndDate = 10591;
 
@@ -29,7 +30,7 @@ struct Table {
     return ParquetSchemaFromArrowSchema(MakeArrowSchema());
   }
 
-  virtual std::shared_ptr<const arrow::Schema> MakeArrowSchema() const = 0;
+  virtual std::shared_ptr<arrow::Schema> MakeArrowSchema() const = 0;
 
   std::vector<std::string> MakeColumnNames() const {
     std::vector<std::string> result;
@@ -50,14 +51,14 @@ struct SupplierTable : public Table {
   static constexpr std::string_view kAcctbal = "s_acctbal";
   static constexpr std::string_view kComment = "s_comment";
 
-  std::shared_ptr<const arrow::Schema> MakeArrowSchema() const override {
+  std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
     arrow::FieldVector fields;
     fields.emplace_back(arrow::field(std::string(kSuppkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kName), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kAddress), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kNationkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kPhone), arrow::utf8()));
-    fields.emplace_back(arrow::field(std::string(kAcctbal), arrow::decimal128(7, 2)));
+    fields.emplace_back(arrow::field(std::string(kAcctbal), arrow::decimal128(10, 2)));
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
@@ -69,11 +70,13 @@ Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_d
 
   program.AddAssign(Assignment("s_suppkey_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(),
                                {SupplierTable::kSuppkey}));
+  program.AddAssign(Assignment("s_suppkey_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>(9),
+                               {"s_suppkey_string"}));
 
   program.AddAssign(Assignment("s_name_prefix", std::make_shared<ConstantGenerator<arrow::StringType>>("Supplier#")));
 
   program.AddAssign(Assignment(SupplierTable::kName, std::make_shared<ConcatenateGenerator>(""),
-                               {"s_name_prefix", "s_suppkey_string"}));
+                               {"s_name_prefix", "s_suppkey_string_zeros"}));
 
   program.AddAssign(
       Assignment(SupplierTable::kAddress, std::make_shared<tpch::VStringGenerator>(10, 40, random_device)));
@@ -84,8 +87,11 @@ Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_d
   program.AddAssign(Assignment(SupplierTable::kPhone, std::make_shared<tpch::PhoneGenerator>(random_device),
                                {SupplierTable::kSuppkey}));
 
-  program.AddAssign(Assignment(SupplierTable::kAcctbal, std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(
-                                                            -99'999, 999'999, random_device)));
+  program.AddAssign(Assignment(
+      "acctbal_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(-99'999, 999'999, random_device)));
+
+  program.AddAssign(Assignment(SupplierTable::kAcctbal, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
+                               {"acctbal_int"}));
 
   program.AddAssign(
       Assignment(SupplierTable::kComment, std::make_shared<tpch::supplier::CommentGenerator>(text, random_device)));
@@ -106,7 +112,7 @@ struct PartTable : public Table {
   static constexpr std::string_view kRetailprice = "p_retailprice";
   static constexpr std::string_view kComment = "p_comment";
 
-  std::shared_ptr<const arrow::Schema> MakeArrowSchema() const override {
+  std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
     arrow::FieldVector fields;
     fields.emplace_back(arrow::field(std::string(kPartkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kName), arrow::utf8()));
@@ -115,7 +121,7 @@ struct PartTable : public Table {
     fields.emplace_back(arrow::field(std::string(kType), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kSize), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kContainer), arrow::utf8()));
-    fields.emplace_back(arrow::field(std::string(kRetailprice), arrow::decimal128(7, 2)));
+    fields.emplace_back(arrow::field(std::string(kRetailprice), arrow::decimal128(10, 2)));
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
@@ -128,12 +134,12 @@ struct PartsuppTable : public Table {
   static constexpr std::string_view kSupplycost = "ps_supplycost";
   static constexpr std::string_view kComment = "ps_comment";
 
-  std::shared_ptr<const arrow::Schema> MakeArrowSchema() const override {
+  std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
     arrow::FieldVector fields;
     fields.emplace_back(arrow::field(std::string(kPartkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kSuppkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kAvailqty), arrow::int32()));
-    fields.emplace_back(arrow::field(std::string(kSupplycost), arrow::decimal128(7, 2)));
+    fields.emplace_back(arrow::field(std::string(kSupplycost), arrow::decimal128(10, 2)));
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
@@ -175,7 +181,9 @@ Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& r
       Assignment(PartTable::kContainer, std::make_shared<StringFromListGenerator>(*container_list, random_device)));
 
   program.AddAssign(
-      Assignment(PartTable::kRetailprice, std::make_shared<tpch::part::RetailPriceGenerator>(), {PartTable::kPartkey}));
+      Assignment("retailprice_int", std::make_shared<tpch::part::RetailPriceGenerator>(), {PartTable::kPartkey}));
+  program.AddAssign(Assignment(PartTable::kRetailprice, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
+                               {"retailprice_int"}));
 
   program.AddAssign(
       Assignment(PartTable::kComment, std::make_shared<tpch::TextStringGenerator>(text, random_device, 5, 22)));
@@ -184,11 +192,10 @@ Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& r
 
   program.AddAssign(Assignment("ps_repetition_levels", std::make_shared<RepetitionLevelsGenerator>(), {"ps_vec_size"}));
 
-  program.AddAssign(Assignment(PartsuppTable::kPartkey, std::make_shared<CopyGenerator>(),
+  program.AddAssign(Assignment(PartsuppTable::kPartkey, std::make_shared<CopyGenerator<arrow::Int32Type>>(),
                                {"ps_repetition_levels", PartTable::kPartkey}));
 
-  program.AddAssign(Assignment("corresponding_supplier",
-                               std::make_shared<UniqueWithinArrayGenerator>(0, 3, random_device),
+  program.AddAssign(Assignment("corresponding_supplier", std::make_shared<PositionWithinArrayGenerator>(0),
                                {"ps_repetition_levels"}));
   program.AddAssign(Assignment(PartsuppTable::kSuppkey,
                                std::make_shared<tpch::partsupp::SuppkeyGenerator>(scale_factor),
@@ -197,8 +204,10 @@ Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& r
   program.AddAssign(Assignment(PartsuppTable::kAvailqty,
                                std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 9999, random_device)));
 
-  program.AddAssign(Assignment(PartsuppTable::kSupplycost, std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(
-                                                               100, 100000, random_device)));
+  program.AddAssign(Assignment(
+      "supplycost_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(100, 100000, random_device)));
+  program.AddAssign(Assignment(PartsuppTable::kSupplycost,
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2), {"supplycost_int"}));
 
   program.AddAssign(
       Assignment(PartsuppTable::kComment, std::make_shared<tpch::TextStringGenerator>(text, random_device, 49, 198)));
@@ -221,14 +230,14 @@ struct CustomerTable : public Table {
   static constexpr std::string_view kMktsegment = "c_mktsegment";
   static constexpr std::string_view kComment = "c_comment";
 
-  std::shared_ptr<const arrow::Schema> MakeArrowSchema() const override {
+  std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
     arrow::FieldVector fields;
     fields.emplace_back(arrow::field(std::string(kCustkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kName), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kAddress), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kNationkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kPhone), arrow::utf8()));
-    fields.emplace_back(arrow::field(std::string(kAcctbal), arrow::decimal128(7, 2)));
+    fields.emplace_back(arrow::field(std::string(kAcctbal), arrow::decimal128(10, 2)));
     fields.emplace_back(arrow::field(std::string(kMktsegment), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
@@ -242,10 +251,12 @@ Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_d
 
   program.AddAssign(Assignment("c_custkey_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(),
                                {CustomerTable::kCustkey}));
+  program.AddAssign(Assignment("c_custkey_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>(9),
+                               {"c_custkey_string"}));
   program.AddAssign(
       Assignment("c_custname_prefix", std::make_shared<ConstantGenerator<arrow::StringType>>("Customer#")));
   program.AddAssign(Assignment(CustomerTable::kName, std::make_shared<ConcatenateGenerator>(""),
-                               {"c_custname_prefix", "c_custkey_string"}));
+                               {"c_custname_prefix", "c_custkey_string_zeros"}));
 
   program.AddAssign(
       Assignment(CustomerTable::kAddress, std::make_shared<tpch::VStringGenerator>(10, 40, random_device)));
@@ -256,8 +267,10 @@ Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_d
   program.AddAssign(Assignment(CustomerTable::kPhone, std::make_shared<tpch::PhoneGenerator>(random_device),
                                {CustomerTable::kNationkey}));
 
-  program.AddAssign(Assignment(CustomerTable::kAcctbal, std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(
-                                                            -99999, 999999, random_device)));
+  program.AddAssign(Assignment(
+      "acctbal_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(-99999, 999999, random_device)));
+  program.AddAssign(Assignment(CustomerTable::kAcctbal, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
+                               {"acctbal_int"}));
 
   auto segments_list = tpch::GetSegmentsList();
 
@@ -283,12 +296,12 @@ struct OrdersTable : public Table {
   static constexpr std::string_view kShippriority = "o_shippriority";
   static constexpr std::string_view kComment = "o_comment";
 
-  std::shared_ptr<const arrow::Schema> MakeArrowSchema() const override {
+  std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
     arrow::FieldVector fields;
     fields.emplace_back(arrow::field(std::string(kOrderkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kCustkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kOrderstatus), arrow::utf8()));
-    fields.emplace_back(arrow::field(std::string(kTotalprice), arrow::decimal128(7, 2)));
+    fields.emplace_back(arrow::field(std::string(kTotalprice), arrow::decimal128(10, 2)));
     fields.emplace_back(arrow::field(std::string(kOrderdate), arrow::date32()));
     fields.emplace_back(arrow::field(std::string(kOrderpriority), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kClerk), arrow::utf8()));
@@ -316,16 +329,16 @@ struct LineitemTable : public Table {
   static constexpr std::string_view kShipmode = "l_shipmode";
   static constexpr std::string_view kComment = "l_comment";
 
-  std::shared_ptr<const arrow::Schema> MakeArrowSchema() const override {
+  std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
     arrow::FieldVector fields;
     fields.emplace_back(arrow::field(std::string(kOrderkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kPartkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kSuppkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kLinenumber), arrow::int32()));
-    fields.emplace_back(arrow::field(std::string(kQuantity), arrow::decimal128(7, 2)));
-    fields.emplace_back(arrow::field(std::string(kExtendedprice), arrow::decimal128(7, 2)));
-    fields.emplace_back(arrow::field(std::string(kDiscount), arrow::decimal128(7, 2)));
-    fields.emplace_back(arrow::field(std::string(kTax), arrow::decimal128(7, 2)));
+    fields.emplace_back(arrow::field(std::string(kQuantity), arrow::decimal128(10, 2)));
+    fields.emplace_back(arrow::field(std::string(kExtendedprice), arrow::decimal128(10, 2)));
+    fields.emplace_back(arrow::field(std::string(kDiscount), arrow::decimal128(10, 2)));
+    fields.emplace_back(arrow::field(std::string(kTax), arrow::decimal128(10, 2)));
     fields.emplace_back(arrow::field(std::string(kReturnflag), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kLinestatus), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kShipdate), arrow::date32()));
@@ -342,12 +355,14 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
                                     const int32_t scale_factor) {
   Program program;
 
-  program.AddAssign(Assignment(OrdersTable::kOrderkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
+  program.AddAssign(Assignment("orderkey_notsparse", std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
+  program.AddAssign(
+      Assignment(OrdersTable::kOrderkey, std::make_shared<tpch::SparseKeyGenerator>(3, 2), {"orderkey_notsparse"}));
 
   program.AddAssign(Assignment(OrdersTable::kCustkey, std::make_shared<tpch::orders::CustomerkeyGenerator>(
                                                           1, scale_factor * 150'000, random_device)));
 
-  program.AddAssign(Assignment(OrdersTable::kOrderdate, std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(
+  program.AddAssign(Assignment(OrdersTable::kOrderdate, std::make_shared<UniformIntegerGenerator<arrow::Date32Type>>(
                                                             kStartDate, kEndDate - 151, random_device)));
 
   auto priorities_list = tpch::GetPrioritiesList();
@@ -358,9 +373,11 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
       "clerk_id", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, scale_factor * 1'000, random_device)));
   program.AddAssign(
       Assignment("clerk_id_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(), {"clerk_id"}));
+  program.AddAssign(
+      Assignment("clerk_id_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>(9), {"clerk_id_string"}));
   program.AddAssign(Assignment("clerk_name_prefix", std::make_shared<ConstantGenerator<arrow::StringType>>("Clerk#")));
   program.AddAssign(Assignment(OrdersTable::kClerk, std::make_shared<ConcatenateGenerator>(""),
-                               {"clerk_name_prefix", "clerk_id_string"}));
+                               {"clerk_name_prefix", "clerk_id_string_zeros"}));
   program.AddProjection(Projection({OrdersTable::kOrderkey, OrdersTable::kCustkey, OrdersTable::kOrderdate,
                                     OrdersTable::kOrderpriority, OrdersTable::kClerk}));
 
@@ -372,7 +389,7 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
   program.AddAssign(
       Assignment("l_vec_size", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 7, random_device)));
   program.AddAssign(Assignment("l_repetition_levels", std::make_shared<RepetitionLevelsGenerator>(), {"l_vec_size"}));
-  program.AddAssign(Assignment(LineitemTable::kOrderkey, std::make_shared<CopyGenerator>(),
+  program.AddAssign(Assignment(LineitemTable::kOrderkey, std::make_shared<CopyGenerator<arrow::Int32Type>>(),
                                {"l_repetition_levels", OrdersTable::kOrderkey}));
 
   program.AddAssign(Assignment(LineitemTable::kPartkey, std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(
@@ -384,40 +401,56 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
                                std::make_shared<tpch::partsupp::SuppkeyGenerator>(scale_factor),
                                {LineitemTable::kPartkey, "corresponding_supplier"}));
 
-  program.AddAssign(Assignment(LineitemTable::kLinenumber,
-                               std::make_shared<UniqueWithinArrayGenerator>(1, 7, random_device),
+  program.AddAssign(Assignment(LineitemTable::kLinenumber, std::make_shared<PositionWithinArrayGenerator>(1),
                                {"l_repetition_levels"}));
 
-  program.AddAssign(Assignment(LineitemTable::kQuantity,
-                               std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 50, random_device)));
+  program.AddAssign(
+      Assignment("quantity_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(1, 50, random_device)));
+  program.AddAssign(Assignment("100", std::make_shared<ConstantGenerator<arrow::Int32Type>>(100)));
+  program.AddAssign(
+      Assignment("quantity_int_scaled",
+                 std::make_shared<MultiplyGenerator<arrow::Int64Type, arrow::Int64Type, arrow::Int32Type>>(),
+                 {"quantity_int", "100"}));
+  program.AddAssign(Assignment(LineitemTable::kQuantity, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
+                               {"quantity_int_scaled"}));
 
   program.AddAssign(
       Assignment("l_retailprice", std::make_shared<tpch::part::RetailPriceGenerator>(), {LineitemTable::kPartkey}));
 
-  program.AddAssign(Assignment(LineitemTable::kExtendedprice, std::make_shared<MultiplyGenerator>(),
-                               {LineitemTable::kQuantity, "l_retailprice"}));
-
-  program.AddAssign(Assignment(LineitemTable::kDiscount,
-                               std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(0, 10, random_device)));
-
-  program.AddAssign(Assignment(LineitemTable::kTax,
-                               std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(0, 8, random_device)));
+  program.AddAssign(Assignment(
+      "extendedprice_int", std::make_shared<MultiplyGenerator<arrow::Int64Type, arrow::Int64Type, arrow::Int64Type>>(),
+      {"quantity_int", "l_retailprice"}));
+  program.AddAssign(Assignment(LineitemTable::kExtendedprice,
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2), {"extendedprice_int"}));
 
   program.AddAssign(
-      Assignment("tmp_orderdate", std::make_shared<CopyGenerator>(), {"l_repetition_levels", OrdersTable::kOrderdate}));
+      Assignment("discount_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(0, 10, random_device)));
+  program.AddAssign(Assignment(LineitemTable::kDiscount, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
+                               {"discount_int"}));
+
+  program.AddAssign(
+      Assignment("tax_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(0, 8, random_device)));
+  program.AddAssign(
+      Assignment(LineitemTable::kTax, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2), {"tax_int"}));
+
+  program.AddAssign(Assignment("tmp_orderdate", std::make_shared<CopyGenerator<arrow::Date32Type>>(),
+                               {"l_repetition_levels", OrdersTable::kOrderdate}));
   program.AddAssign(
       Assignment("shiptime", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 121, random_device)));
-  program.AddAssign(
-      Assignment(LineitemTable::kShipdate, std::make_shared<AddGenerator>(), {"tmp_orderdate", "shiptime"}));
+  program.AddAssign(Assignment(LineitemTable::kShipdate,
+                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(),
+                               {"tmp_orderdate", "shiptime"}));
 
   program.AddAssign(
       Assignment("committime", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(30, 90, random_device)));
-  program.AddAssign(
-      Assignment(LineitemTable::kCommitdate, std::make_shared<AddGenerator>(), {"tmp_orderdate", "committime"}));
+  program.AddAssign(Assignment(LineitemTable::kCommitdate,
+                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(),
+                               {"tmp_orderdate", "committime"}));
 
   program.AddAssign(
       Assignment("receipttime", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 30, random_device)));
-  program.AddAssign(Assignment(LineitemTable::kReceiptdate, std::make_shared<AddGenerator>(),
+  program.AddAssign(Assignment(LineitemTable::kReceiptdate,
+                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(),
                                {LineitemTable::kShipdate, "receipttime"}));
 
   auto shipinstruct_list = tpch::GetInstructionsList();
@@ -442,9 +475,11 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
   program.AddAssign(Assignment(OrdersTable::kOrderstatus, std::make_shared<tpch::orders::OrderstatusGenerator>(),
                                {"l_repetition_levels", LineitemTable::kLinestatus}));
 
-  program.AddAssign(Assignment(
-      OrdersTable::kTotalprice, std::make_shared<tpch::orders::TotalpriceGenerator>(),
-      {"l_repetition_levels", LineitemTable::kExtendedprice, LineitemTable::kTax, LineitemTable::kDiscount}));
+  program.AddAssign(Assignment("totalprice_int", std::make_shared<tpch::orders::TotalpriceGenerator>(),
+                               {"l_repetition_levels", "extendedprice_int", "tax_int", "discount_int"}));
+
+  program.AddAssign(Assignment(OrdersTable::kTotalprice, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
+                               {"totalprice_int"}));
 
   std::vector<std::string> all_columns = OrdersTable().MakeColumnNames();
   std::vector<std::string> lineitem_columns = LineitemTable().MakeColumnNames();
@@ -454,17 +489,97 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
   return program;
 }
 
+struct NationTable : public Table {
+  static constexpr std::string_view kNationKey = "n_nationkey";
+  static constexpr std::string_view kName = "n_name";
+  static constexpr std::string_view kRegionKey = "n_regionkey";
+  static constexpr std::string_view kComment = "n_comment";
+
+  std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
+    arrow::FieldVector fields;
+    fields.emplace_back(arrow::field(std::string(kNationKey), arrow::int32()));
+    fields.emplace_back(arrow::field(std::string(kName), arrow::utf8()));
+    fields.emplace_back(arrow::field(std::string(kRegionKey), arrow::int32()));
+    fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
+    return std::make_shared<arrow::Schema>(fields);
+  }
+};
+
+Program MakeNationProgram(const tpch::text::Text& text, RandomDevice& random_device) {
+  Program program;
+
+  std::vector<int32_t> nation_keys(25);
+  std::iota(nation_keys.begin(), nation_keys.end(), 0);
+  std::vector<std::string> nation_names = {"ALGERIA",      "ARGENTINA",  "BRAZIL",  "CANADA",         "EGYPT",
+                                           "ETHIOPIA",     "FRANCE",     "GERMANY", "INDIA",          "INDONESIA",
+                                           "IRAN",         "IRAQ",       "JAPAN",   "JORDAN",         "KENYA",
+                                           "MOROCCO",      "MOZAMBIQUE", "PERU",    "CHINA",          "ROMANIA",
+                                           "SAUDI ARABIA", "VIETNAM",    "RUSSIA",  "UNITED KINGDOM", "UNITED STATES"};
+  std::vector<int32_t> region_keys = {0, 1, 1, 1, 4, 0, 3, 3, 2, 2, 4, 4, 2, 4, 0, 0, 0, 1, 2, 3, 4, 2, 3, 3, 1};
+  program.AddAssign(
+      Assignment(NationTable::kNationKey, std::make_shared<FromArrayGenerator<arrow::Int32Type>>(nation_keys)));
+  program.AddAssign(
+      Assignment(NationTable::kName, std::make_shared<FromArrayGenerator<arrow::StringType>>(nation_names)));
+  program.AddAssign(
+      Assignment(NationTable::kRegionKey, std::make_shared<FromArrayGenerator<arrow::Int32Type>>(region_keys)));
+  program.AddAssign(
+      Assignment(NationTable::kComment, std::make_shared<tpch::TextStringGenerator>(text, random_device, 31, 114)));
+
+  return program;
+}
+
+struct RegionTable : public Table {
+  static constexpr std::string_view kRegionKey = "r_regionkey";
+  static constexpr std::string_view kName = "r_name";
+  static constexpr std::string_view kComment = "r_comment";
+
+  std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
+    arrow::FieldVector fields;
+    fields.emplace_back(arrow::field(std::string(kRegionKey), arrow::int32()));
+    fields.emplace_back(arrow::field(std::string(kName), arrow::utf8()));
+    fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
+    return std::make_shared<arrow::Schema>(fields);
+  }
+};
+
+Program MakeRegionProgram(const tpch::text::Text& text, RandomDevice& random_device) {
+  Program program;
+
+  std::vector<int32_t> region_keys = {0, 1, 2, 3, 4};
+  std::vector<std::string> region_names = {"AFRICA", "AMERICA", "ASIA", "EUROPE", "MIDDLE EAST"};
+  program.AddAssign(
+      Assignment(RegionTable::kRegionKey, std::make_shared<FromArrayGenerator<arrow::Int32Type>>(region_keys)));
+  program.AddAssign(
+      Assignment(RegionTable::kName, std::make_shared<FromArrayGenerator<arrow::StringType>>(region_names)));
+  program.AddAssign(
+      Assignment(RegionTable::kComment, std::make_shared<tpch::TextStringGenerator>(text, random_device, 31, 115)));
+
+  return program;
+}
+
+arrow::csv::WriteOptions TpchCsvWriteOptions() {
+  arrow::csv::WriteOptions options;
+  options.include_header = false;
+  options.delimiter = '|';
+  options.quoting_style = arrow::csv::QuotingStyle::None;
+  return options;
+}
+
 arrow::Status Main() {
   RandomDevice random_device(2101);
 
   tpch::text::Text text = tpch::text::GenerateText(random_device);
 
   constexpr int32_t kBatchSize = 8192;
-  constexpr int32_t kScaleFactor = 1;
+  constexpr int32_t kScaleFactor = 5;
   constexpr int64_t kSupplierRows = kScaleFactor * 10'000;
   constexpr int64_t kPartRows = kScaleFactor * 200'000;
   constexpr int64_t kCustomerRows = kScaleFactor * 150'000;
   constexpr int64_t kOrdersRows = kScaleFactor * 1'500'000;
+  constexpr int64_t kNationRows = 25;
+  constexpr int64_t kRegionRows = 5;
+
+  auto csv_writer_options = TpchCsvWriteOptions();
 
   {
     Program supplier_program = MakeSupplierProgram(text, random_device, kScaleFactor);
@@ -473,12 +588,14 @@ arrow::Status Main() {
     SupplierTable supplier_table;
 
     Writer writer("supplier.parquet", supplier_table.MakeParquetSchema());
+    CSVWriter csv_writer("supplier.csv", supplier_table.MakeArrowSchema(), csv_writer_options);
 
     for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
          rows_in_next_batch = batch_size_maker.NextBatchSize()) {
       ARROW_ASSIGN_OR_RAISE(auto batch, supplier_program.Generate(rows_in_next_batch));
       ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(supplier_table.MakeColumnNames()));
       ARROW_RETURN_NOT_OK(writer.WriteRecordBatch(arrow_batch));
+      ARROW_RETURN_NOT_OK(csv_writer.WriteRecordBatch(arrow_batch));
     }
   }
 
@@ -490,7 +607,9 @@ arrow::Status Main() {
     PartsuppTable partsupp_table;
 
     Writer part_writer("part.parquet", part_table.MakeParquetSchema());
+    CSVWriter csv_part_writer("part.csv", part_table.MakeArrowSchema(), csv_writer_options);
     Writer partsupp_writer("partsupp.parquet", partsupp_table.MakeParquetSchema());
+    CSVWriter csv_partsupp_writer("partsupp.csv", partsupp_table.MakeArrowSchema(), csv_writer_options);
 
     for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
          rows_in_next_batch = batch_size_maker.NextBatchSize()) {
@@ -498,9 +617,11 @@ arrow::Status Main() {
 
       ARROW_ASSIGN_OR_RAISE(auto part_arrow_batch, batch->GetArrowBatch(part_table.MakeColumnNames()));
       ARROW_RETURN_NOT_OK(part_writer.WriteRecordBatch(part_arrow_batch));
+      ARROW_RETURN_NOT_OK(csv_part_writer.WriteRecordBatch(part_arrow_batch));
 
       ARROW_ASSIGN_OR_RAISE(auto partsupp_arrow_batch, batch->GetArrowBatch(partsupp_table.MakeColumnNames()));
       ARROW_RETURN_NOT_OK(partsupp_writer.WriteRecordBatch(partsupp_arrow_batch));
+      ARROW_RETURN_NOT_OK(csv_partsupp_writer.WriteRecordBatch(partsupp_arrow_batch));
     }
   }
 
@@ -511,6 +632,7 @@ arrow::Status Main() {
     CustomerTable customer_table;
 
     Writer customer_writer("customer.parquet", customer_table.MakeParquetSchema());
+    CSVWriter csv_customer_writer("customer.csv", customer_table.MakeArrowSchema(), csv_writer_options);
 
     for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
          rows_in_next_batch = batch_size_maker.NextBatchSize()) {
@@ -518,6 +640,7 @@ arrow::Status Main() {
 
       ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(customer_table.MakeColumnNames()));
       ARROW_RETURN_NOT_OK(customer_writer.WriteRecordBatch(arrow_batch));
+      ARROW_RETURN_NOT_OK(csv_customer_writer.WriteRecordBatch(arrow_batch));
     }
   }
 
@@ -529,7 +652,9 @@ arrow::Status Main() {
     LineitemTable lineitem_table;
 
     Writer order_writer("orders.parquet", orders_table.MakeParquetSchema());
+    CSVWriter csv_order_writer("orders.csv", orders_table.MakeArrowSchema(), csv_writer_options);
     Writer lineitem_writer("lineitem.parquet", lineitem_table.MakeParquetSchema());
+    CSVWriter csv_lineitem_writer("lineitem.csv", lineitem_table.MakeArrowSchema(), csv_writer_options);
 
     for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
          rows_in_next_batch = batch_size_maker.NextBatchSize()) {
@@ -537,9 +662,47 @@ arrow::Status Main() {
 
       ARROW_ASSIGN_OR_RAISE(auto order_arrow_batch, batch->GetArrowBatch(orders_table.MakeColumnNames()));
       ARROW_RETURN_NOT_OK(order_writer.WriteRecordBatch(order_arrow_batch));
+      ARROW_RETURN_NOT_OK(csv_order_writer.WriteRecordBatch(order_arrow_batch));
 
       ARROW_ASSIGN_OR_RAISE(auto lineitem_arrow_batch, batch->GetArrowBatch(lineitem_table.MakeColumnNames()));
       ARROW_RETURN_NOT_OK(lineitem_writer.WriteRecordBatch(lineitem_arrow_batch));
+      ARROW_RETURN_NOT_OK(csv_lineitem_writer.WriteRecordBatch(lineitem_arrow_batch));
+    }
+  }
+
+  {
+    Program nation_program = MakeNationProgram(text, random_device);
+    BatchSizeMaker batch_size_maker(kBatchSize, kNationRows);
+
+    NationTable nation_table;
+    Writer nation_writer("nation.parquet", nation_table.MakeParquetSchema());
+    CSVWriter csv_nation_writer("nation.csv", nation_table.MakeArrowSchema(), csv_writer_options);
+
+    for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
+         rows_in_next_batch = batch_size_maker.NextBatchSize()) {
+      ARROW_ASSIGN_OR_RAISE(auto batch, nation_program.Generate(rows_in_next_batch));
+
+      ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(nation_table.MakeColumnNames()));
+      ARROW_RETURN_NOT_OK(nation_writer.WriteRecordBatch(arrow_batch));
+      ARROW_RETURN_NOT_OK(csv_nation_writer.WriteRecordBatch(arrow_batch));
+    }
+  }
+
+  {
+    Program region_program = MakeRegionProgram(text, random_device);
+    BatchSizeMaker batch_size_maker(kBatchSize, kRegionRows);
+
+    RegionTable region_table;
+    Writer region_writer("region.parquet", region_table.MakeParquetSchema());
+    CSVWriter csv_region_writer("region.csv", region_table.MakeArrowSchema(), csv_writer_options);
+
+    for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
+         rows_in_next_batch = batch_size_maker.NextBatchSize()) {
+      ARROW_ASSIGN_OR_RAISE(auto batch, region_program.Generate(rows_in_next_batch));
+
+      ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(region_table.MakeColumnNames()));
+      ARROW_RETURN_NOT_OK(region_writer.WriteRecordBatch(arrow_batch));
+      ARROW_RETURN_NOT_OK(csv_region_writer.WriteRecordBatch(arrow_batch));
     }
   }
 
@@ -550,7 +713,7 @@ int main() {
   auto status = Main();
 
   if (!status.ok()) {
-    std::cerr << status.message();
+    std::cerr << status.message() << std::endl;
     return 1;
   }
 

@@ -9,11 +9,14 @@
 #include <stdexcept>
 
 #include "arrow/array.h"
+#include "arrow/array/array_decimal.h"
 #include "arrow/array/builder_binary.h"
+#include "arrow/array/builder_decimal.h"
 #include "arrow/array/builder_primitive.h"
 #include "arrow/record_batch.h"
 #include "arrow/status.h"
 #include "arrow/type_fwd.h"
+#include "arrow/util/decimal.h"
 #include "gen/src/batch.h"
 #include "gen/src/list.h"
 
@@ -51,9 +54,34 @@ using ArrayPtr = std::shared_ptr<arrow::Array>;
 
 class Generator {
  public:
+  explicit Generator(const std::vector<std::shared_ptr<arrow::DataType>>& argument_types)
+      : argument_types_(argument_types) {}
+
+  Generator() = default;
+
+  virtual arrow::Status ValidateInput(BatchPtr batch) const {
+    if (batch->NumColumns() != static_cast<int32_t>(argument_types_.size())) {
+      return arrow::Status::ExecutionError("Invalid number of arguments, expected ", batch->NumColumns(), ", got ",
+                                           argument_types_.size());
+    }
+
+    auto column_types = batch->ColumnTypes();
+    for (size_t i = 0; i < argument_types_.size(); ++i) {
+      if (!column_types[i]->Equals(argument_types_[i])) {
+        return arrow::Status::ExecutionError("Invalid argument type for column ", i, ": expected ",
+                                             argument_types_[i]->ToString(), ", got ", column_types[i]->ToString());
+      }
+    }
+
+    return arrow::Status::OK();
+  }
+
   virtual arrow::Result<ArrayPtr> Generate(BatchPtr) = 0;
 
   virtual ~Generator() = default;
+
+ private:
+  std::vector<std::shared_ptr<arrow::DataType>> argument_types_;
 };
 
 namespace internal {
@@ -82,25 +110,7 @@ class TypedGenerator : public Generator {
 
   TypedGenerator() = default;
 
-  TypedGenerator(const std::vector<std::shared_ptr<arrow::DataType>>& argument_types)
-      : argument_types_(argument_types) {}
-
-  virtual arrow::Status ValidateInput(BatchPtr batch) {
-    if (batch->NumColumns() != static_cast<int32_t>(argument_types_.size())) {
-      return arrow::Status::ExecutionError("Invalid number of arguments, expected ", batch->NumColumns(), ", got ",
-                                           argument_types_.size());
-    }
-
-    auto column_types = batch->ColumnTypes();
-    for (size_t i = 0; i < argument_types_.size(); ++i) {
-      if (!column_types[i]->Equals(argument_types_[i])) {
-        return arrow::Status::ExecutionError("Invalid argument type, expected ", argument_types_[i]->ToString(),
-                                             ", got ", column_types[i]->ToString());
-      }
-    }
-
-    return arrow::Status::OK();
-  }
+  TypedGenerator(const std::vector<std::shared_ptr<arrow::DataType>>& argument_types) : Generator(argument_types) {}
 
   virtual arrow::Result<ArrayPtr> Generate(BatchPtr batch) final {
     ARROW_RETURN_NOT_OK(ValidateInput(batch));
@@ -114,9 +124,6 @@ class TypedGenerator : public Generator {
   virtual arrow::Result<std::vector<ValueType>> GenerateValues(BatchPtr) = 0;
 
   virtual ~TypedGenerator() = default;
-
- private:
-  std::vector<std::shared_ptr<arrow::DataType>> argument_types_;
 };
 
 using Int32Generator = TypedGenerator<arrow::Int32Type>;
@@ -242,11 +249,41 @@ class ToStringGenerator : public WithArgsStringGenerator {
   }
 };
 
+template <typename InputArrowType>
+class ToDecimalGenerator : public Generator {
+  using InputArrayType = arrow::NumericArray<InputArrowType>;
+
+ public:
+  ToDecimalGenerator(int32_t precision, int32_t scale)
+      : Generator({std::make_shared<InputArrowType>()}), precision_(precision), scale_(scale) {}
+
+  virtual arrow::Result<ArrayPtr> Generate(BatchPtr batch) {
+    ARROW_RETURN_NOT_OK(ValidateInput(batch));
+
+    auto column = std::static_pointer_cast<InputArrayType>(batch->Column(0));
+
+    arrow::Decimal128Builder builder(arrow::decimal(precision_, scale_));
+    ARROW_RETURN_NOT_OK(builder.Reserve(batch->NumRows()));
+
+    for (int64_t i = 0; i < batch->NumRows(); ++i) {
+      auto val = column->GetView(i);
+      ARROW_ASSIGN_OR_RAISE(auto dec, arrow::Decimal128::FromReal(static_cast<double>(val), precision_, 0));
+      ARROW_RETURN_NOT_OK(builder.Append(dec));
+    }
+
+    return builder.Finish();
+  }
+
+ private:
+  const int32_t precision_;
+  const int32_t scale_;
+};
+
 class ConcatenateGenerator : public WithArgsStringGenerator {
  public:
   ConcatenateGenerator(const std::string& delimiter) : WithArgsStringGenerator({}), delimiter_(delimiter) {}
 
-  arrow::Status ValidateInput(BatchPtr record_batch) override {
+  arrow::Status ValidateInput(BatchPtr record_batch) const override {
     for (int32_t col_id = 0; col_id < record_batch->NumColumns(); ++col_id) {
       auto column = record_batch->Column(col_id);
       if (column->type_id() != arrow::Type::STRING) {
@@ -283,7 +320,26 @@ class UniqueIntegerGenerator : public TrivialGenerator<ArrowType> {
   ValueType GenerateValue() override { return static_cast<ValueType>(last_value_++); }
 
  private:
-  int64_t last_value_ = 0;
+  int64_t last_value_ = 1;
+};
+
+template <typename ArrowType>
+class FromArrayGenerator : public TrivialGenerator<ArrowType> {
+  using ValueType = TrivialGenerator<ArrowType>::ValueType;
+
+ public:
+  FromArrayGenerator(const std::vector<ValueType>& values) : values_(values) {}
+
+  ValueType GenerateValue() override {
+    if (last_index_ >= values_.size()) {
+      throw std::runtime_error("FromArrayGenerator: index out of range");
+    }
+    return values_[last_index_++];
+  }
+
+ private:
+  const std::vector<ValueType> values_;
+  uint64_t last_index_ = 0;
 };
 
 template <typename ArrowType>
@@ -304,35 +360,48 @@ class UniformIntegerGenerator : public TrivialGenerator<ArrowType> {
   UniformInt64Distribution generator_;
 };
 
-class MultiplyGenerator : public WithArgsInt32Generator {
- public:
-  MultiplyGenerator() : WithArgsInt32Generator({arrow::int32(), arrow::int32()}) {}
+template <typename OutputArrowType, typename LhsArrowType, typename RhsArrowType>
+class MultiplyGenerator : public WithArgsGenerator<OutputArrowType> {
+  using ValueType = WithArgsGenerator<OutputArrowType>::ValueType;
+  using LhsArrowArray = arrow::NumericArray<LhsArrowType>;
+  using RhsArrowArray = arrow::NumericArray<RhsArrowType>;
 
-  int32_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
-    auto lhs_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0));
-    auto rhs_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(1));
+ public:
+  MultiplyGenerator()
+      : WithArgsGenerator<OutputArrowType>({std::make_shared<LhsArrowType>(), std::make_shared<RhsArrowType>()}) {}
+
+  ValueType GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
+    auto lhs_column = std::static_pointer_cast<LhsArrowArray>(record_batch->Column(0));
+    auto rhs_column = std::static_pointer_cast<RhsArrowArray>(record_batch->Column(1));
     return lhs_column->GetView(row_index) * rhs_column->GetView(row_index);
   }
 };
 
-class AddGenerator : public WithArgsInt32Generator {
- public:
-  AddGenerator() : WithArgsInt32Generator({arrow::int32(), arrow::int32()}) {}
+template <typename OutputArrowType, typename LhsArrowType, typename RhsArrowType>
+class AddGenerator : public WithArgsGenerator<OutputArrowType> {
+  using ValueType = WithArgsGenerator<OutputArrowType>::ValueType;
+  using LhsArrowArray = arrow::NumericArray<LhsArrowType>;
+  using RhsArrowArray = arrow::NumericArray<RhsArrowType>;
 
-  int32_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
-    auto lhs_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0));
-    auto rhs_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(1));
+ public:
+  AddGenerator()
+      : WithArgsGenerator<OutputArrowType>({std::make_shared<LhsArrowType>(), std::make_shared<RhsArrowType>()}) {}
+
+  ValueType GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
+    auto lhs_column = std::static_pointer_cast<LhsArrowArray>(record_batch->Column(0));
+    auto rhs_column = std::static_pointer_cast<RhsArrowArray>(record_batch->Column(1));
     return lhs_column->GetView(row_index) + rhs_column->GetView(row_index);
   }
 };
 
-class CopyGenerator : public Int32Generator {
+template <typename ArrowType>
+class CopyGenerator : public TypedGenerator<ArrowType> {
+  using ValueType = TypedGenerator<ArrowType>::ValueType;
+
  public:
-  CopyGenerator() : Int32Generator({arrow::int32(), arrow::int32()}) {}
+  CopyGenerator() : TypedGenerator<ArrowType>({arrow::int32(), std::make_shared<ArrowType>()}) {}
 
-  arrow::Result<std::vector<int32_t>> GenerateValues(BatchPtr record_batch) override {
-    ARROW_RETURN_NOT_OK(ValidateInput(record_batch));
-
+  arrow::Result<std::vector<ValueType>> GenerateValues(BatchPtr record_batch) override {
     auto levels_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0));
     auto values_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(1));
 
@@ -378,6 +447,24 @@ class AggregatorGenerator : public TypedGenerator<ArrowType> {
   }
 
   virtual arrow::Status HandleArray(BatchPtr args, int64_t from, int64_t to, std::vector<ValueType>& result) = 0;
+};
+
+class PositionWithinArrayGenerator : public AggregatorGenerator<arrow::Int32Type> {
+ public:
+  PositionWithinArrayGenerator(int32_t first_index)
+      : AggregatorGenerator<arrow::Int32Type>({arrow::int32()}), first_index_(first_index) {}
+
+  arrow::Status HandleArray(BatchPtr args, int64_t from, int64_t to, std::vector<ValueType>& result) override {
+    for (int k = from; k < to; ++k) {
+      int32_t value = k - from + first_index_;
+      result.emplace_back(value);
+    }
+
+    return arrow::Status::OK();
+  }
+
+ private:
+  const int32_t first_index_;
 };
 
 class UniqueWithinArrayGenerator : public AggregatorGenerator<arrow::Int32Type> {

@@ -4,8 +4,13 @@
 #include <memory>
 #include <string>
 
+#include "arrow/csv/api.h"
+#include "arrow/csv/options.h"
+#include "arrow/csv/writer.h"
 #include "arrow/io/file.h"
+#include "arrow/ipc/writer.h"
 #include "arrow/record_batch.h"
+#include "arrow/status.h"
 #include "gen/src/log.h"
 #include "parquet/arrow/writer.h"
 #include "parquet/file_writer.h"
@@ -33,6 +38,7 @@ class Writer {
                                                            record_batch->schema(),
                                                            parquet::default_arrow_writer_properties(), &arrow_writer_));
     }
+    ARROW_RETURN_NOT_OK(record_batch->Validate());
 
     return arrow_writer_->WriteRecordBatch(*record_batch);
   }
@@ -58,6 +64,52 @@ class Writer {
   std::shared_ptr<arrow::io::FileOutputStream> outfile_;
   std::unique_ptr<parquet::ParquetFileWriter> parquet_writer_;
   std::unique_ptr<parquet::arrow::FileWriter> arrow_writer_;
+};
+
+class CSVWriter {
+ public:
+  CSVWriter(const std::string& filename, const std::shared_ptr<arrow::Schema> schema,
+            const arrow::csv::WriteOptions& options = arrow::csv::WriteOptions::Defaults())
+      : schema_(schema), outfile_([&filename]() {
+          auto maybe_outfile = arrow::io::FileOutputStream::Open(filename);
+          if (!maybe_outfile.ok()) {
+            throw maybe_outfile.status();
+          }
+          return maybe_outfile.ValueUnsafe();
+        }()) {
+    auto maybe_writer = arrow::csv::MakeCSVWriter(outfile_, schema, options);
+    if (!maybe_writer.ok()) {
+      throw maybe_writer;
+    }
+    arrow_writer_ = *maybe_writer;
+  }
+
+  arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) {
+    ARROW_RETURN_NOT_OK(record_batch->Validate());
+    if (!record_batch->schema()->Equals(schema_)) {
+      return arrow::Status::ExecutionError("Record batch schema does not match CSVWriter schema:\n",
+                                           record_batch->schema()->ToString(), "\n!=\n", schema_->ToString());
+    }
+    return arrow_writer_->WriteRecordBatch(*record_batch);
+  }
+
+  arrow::Status Finalize() {
+    if (arrow_writer_) {
+      ARROW_RETURN_NOT_OK(arrow_writer_->Close());
+      arrow_writer_ = nullptr;
+    }
+    return arrow::Status::OK();
+  }
+
+  ~CSVWriter() {
+    auto status = Finalize();
+    LOG_NOT_OK(status);
+  }
+
+ private:
+  const std::shared_ptr<arrow::Schema> schema_;
+  std::shared_ptr<arrow::io::FileOutputStream> outfile_;
+  std::shared_ptr<arrow::ipc::RecordBatchWriter> arrow_writer_;
 };
 
 class BatchSizeMaker {
