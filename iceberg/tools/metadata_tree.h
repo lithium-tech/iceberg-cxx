@@ -1,3 +1,5 @@
+#pragma once
+
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -36,6 +38,9 @@ class ManifestEntryHelper {
   const iceberg::ManifestEntry& entry_;
 };
 
+using ManifestList = std::vector<iceberg::ManifestFile>;
+using Manifest = std::vector<iceberg::ManifestEntry>;
+
 class MetadataTree {
  public:
   struct MetadataFile {
@@ -43,16 +48,6 @@ class MetadataTree {
 
     size_t ListsCount() const { return table_metadata->snapshots.size(); }
     std::filesystem::path ManifestListPath(size_t i) { return table_metadata->snapshots[i]->manifest_list_location; }
-  };
-
-  struct ManifestList {
-    std::vector<iceberg::ManifestFile> manifests;
-
-    std::filesystem::path ManifestPath(size_t i) const { return manifests[i].path; }
-  };
-
-  struct Manifest {
-    std::vector<iceberg::ManifestEntry> files;
   };
 
   explicit MetadataTree(const std::filesystem::path& path);

@@ -59,6 +59,15 @@ struct SortOrder {
   std::vector<SortField> fields;
 
   bool operator==(const SortOrder& other) const { return order_id == other.order_id && fields == other.fields; }
+
+  std::vector<int32_t> FieldIds() const {
+    std::vector<int32_t> ids;
+    ids.reserve(fields.size());
+    for (auto& field : fields) {
+      ids.push_back(field.source_id);
+    }
+    return ids;
+  }
 };
 
 struct PartitionField {

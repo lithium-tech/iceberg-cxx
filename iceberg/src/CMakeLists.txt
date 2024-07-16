@@ -17,6 +17,8 @@ add_library(iceberg
     tea_scan.h
     type.cpp
     type.h
+    write.cpp
+    write.h
 )
 
 target_link_libraries(iceberg PRIVATE rapidjson _avrocpp _boost_iostreams _hivemetastore)

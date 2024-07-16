@@ -1,7 +1,8 @@
+#include <absl/flags/flag.h>
+#include <absl/flags/parse.h>
+
 #include <filesystem>
 
-#include "absl/flags/flag.h"
-#include "absl/flags/parse.h"
 #include "iceberg/tools/metadata_tree.h"
 
 ABSL_FLAG(std::string, metadata, "", "path to iceberg metadata JSON file");

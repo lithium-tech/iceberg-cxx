@@ -6,6 +6,9 @@
 #include <string>
 #include <utility>
 
+#include "iceberg/src/write.h"
+#include "iceberg/tools/common.h"
+
 namespace iceberg::tools {
 
 namespace {
@@ -60,11 +63,10 @@ MetadataTree::MetadataTree(const std::filesystem::path& path) : medatada_file_pa
       throw std::runtime_error("No manifests list file '" + list_file_path.string() + "'");
     }
     std::ifstream list_input(list_file_path);
-    auto list =
-        std::make_shared<ManifestList>(ManifestList{.manifests = iceberg::ice_tea::ReadManifestList(list_input)});
+    auto list = std::make_shared<ManifestList>(iceberg::ice_tea::ReadManifestList(list_input));
 
     if (manifests_lists.try_emplace(list_path.filename(), list).second) {
-      for (auto& man_file : list->manifests) {
+      for (auto& man_file : *list) {
         std::filesystem::path man_path = man_file.path;
 
         if (!manifests.contains(man_path.filename())) {
@@ -73,7 +75,7 @@ MetadataTree::MetadataTree(const std::filesystem::path& path) : medatada_file_pa
             throw std::runtime_error("No manifest file '" + man_file_path.string() + "'");
           }
           std::ifstream list_input(man_file_path);
-          auto man = std::make_shared<Manifest>(Manifest{.files = iceberg::ice_tea::ReadManifestEntries(list_input)});
+          auto man = std::make_shared<Manifest>(iceberg::ice_tea::ReadManifestEntries(list_input));
 
           manifests.emplace(man_path.filename(), std::move(man));
         }
@@ -104,13 +106,13 @@ void MetadataTree::FixLocation(const StringFix& fix_meta, const StringFix& fix_d
   }
 
   for (auto& [_, man_list] : manifests_lists) {
-    for (auto& man : man_list->manifests) {
+    for (auto& man : *man_list) {
       FixString(man.path, fix_meta, renames);
     }
   }
 
   for (auto& [_, man] : manifests) {
-    for (auto& file : man->files) {
+    for (auto& file : *man) {
       FixString(file.data_file.file_path, fix_data, renames);
     }
   }
@@ -121,25 +123,14 @@ std::string MetadataTree::SerializeMetadataFile() const {
 }
 
 void MetadataTree::WriteFiles(const std::filesystem::path& out_dir) const {
-  {
-    auto out_path = out_dir / medatada_file_path.filename();
-    std::string serialized = SerializeMetadataFile();
-    std::ofstream ofstream(out_path);
-    ofstream.write(serialized.data(), serialized.size());
-  }
+  iceberg::ice_tea::WriteMetadataFile(out_dir / medatada_file_path.filename(), medatada_file.table_metadata);
 
   for (auto& [path, man_list] : manifests_lists) {
-    auto out_path = out_dir / std::filesystem::path(path).filename();
-    std::string serialized = iceberg::ice_tea::WriteManifestList(man_list->manifests);
-    std::ofstream ofstream(out_path);
-    ofstream.write(serialized.data(), serialized.size());
+    iceberg::ice_tea::WriteManifestList(out_dir / std::filesystem::path(path).filename(), *man_list);
   }
 
   for (auto& [path, man] : manifests) {
-    auto out_path = out_dir / std::filesystem::path(path).filename();
-    std::string serialized = iceberg::ice_tea::WriteManifestEntries(man->files);
-    std::ofstream ofstream(out_path);
-    ofstream.write(serialized.data(), serialized.size());
+    iceberg::ice_tea::WriteManifest(out_dir / std::filesystem::path(path).filename(), *man);
   }
 }
 
@@ -154,7 +145,7 @@ void MetadataTree::Print(std::ostream& os, size_t limit_files) const {
   }
   for (auto& [list_filename, man_list] : manifests_lists) {
     os << "manlist " << list_filename << " [";
-    for (auto& man : man_list->manifests) {
+    for (auto& man : *man_list) {
       os << man.path << ", ";
     }
     os << "]" << std::endl;
@@ -163,12 +154,12 @@ void MetadataTree::Print(std::ostream& os, size_t limit_files) const {
   for (auto& [man_filename, man] : manifests) {
     size_t count = limit_files;
     os << "manifest " << man_filename << std::endl;
-    for (auto& entry : man->files) {
+    for (auto& entry : *man) {
       os << FileType(entry.data_file.content) << " " << entry.data_file.file_path << std::endl;
       if (limit_files) {
         --count;
         if (!count) {
-          os << "... (total: " << man->files.size() << ")" << std::endl;
+          os << "... (total: " << man->size() << ")" << std::endl;
           break;
         }
       }
