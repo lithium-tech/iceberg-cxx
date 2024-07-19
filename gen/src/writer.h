@@ -22,7 +22,16 @@ namespace gen {
 
 class Writer {
  public:
-  Writer(const std::string& filename, const std::shared_ptr<parquet::schema::GroupNode>& schema)
+  virtual arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) = 0;
+
+  virtual arrow::Status Close() = 0;
+
+  virtual ~Writer() = default;
+};
+
+class ParquetWriter : public Writer {
+ public:
+  ParquetWriter(const std::string& filename, const std::shared_ptr<parquet::schema::GroupNode>& schema)
       : outfile_([&filename]() {
           auto maybe_outfile = arrow::io::FileOutputStream::Open(filename);
           if (!maybe_outfile.ok()) {
@@ -32,7 +41,7 @@ class Writer {
         }()),
         parquet_writer_(parquet::ParquetFileWriter::Open(outfile_, schema)) {}
 
-  arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) {
+  arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) override {
     if (arrow_writer_ == nullptr) {
       ARROW_RETURN_NOT_OK(parquet::arrow::FileWriter::Make(arrow::default_memory_pool(), std::move(parquet_writer_),
                                                            record_batch->schema(),
@@ -43,7 +52,7 @@ class Writer {
     return arrow_writer_->WriteRecordBatch(*record_batch);
   }
 
-  arrow::Status Finalize() {
+  arrow::Status Close() override {
     if (parquet_writer_) {
       parquet_writer_->Close();
       parquet_writer_.reset();
@@ -55,8 +64,8 @@ class Writer {
     return arrow::Status::OK();
   }
 
-  ~Writer() {
-    auto status = Finalize();
+  ~ParquetWriter() {
+    auto status = Close();
     LOG_NOT_OK(status);
   }
 
@@ -66,7 +75,7 @@ class Writer {
   std::unique_ptr<parquet::arrow::FileWriter> arrow_writer_;
 };
 
-class CSVWriter {
+class CSVWriter : public Writer {
  public:
   CSVWriter(const std::string& filename, const std::shared_ptr<arrow::Schema> schema,
             const arrow::csv::WriteOptions& options = arrow::csv::WriteOptions::Defaults())
@@ -84,7 +93,7 @@ class CSVWriter {
     arrow_writer_ = *maybe_writer;
   }
 
-  arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) {
+  arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) override {
     ARROW_RETURN_NOT_OK(record_batch->Validate());
     if (!record_batch->schema()->Equals(schema_)) {
       return arrow::Status::ExecutionError("Record batch schema does not match CSVWriter schema:\n",
@@ -93,7 +102,7 @@ class CSVWriter {
     return arrow_writer_->WriteRecordBatch(*record_batch);
   }
 
-  arrow::Status Finalize() {
+  arrow::Status Close() override {
     if (arrow_writer_) {
       ARROW_RETURN_NOT_OK(arrow_writer_->Close());
       arrow_writer_ = nullptr;
@@ -102,7 +111,7 @@ class CSVWriter {
   }
 
   ~CSVWriter() {
-    auto status = Finalize();
+    auto status = Close();
     LOG_NOT_OK(status);
   }
 

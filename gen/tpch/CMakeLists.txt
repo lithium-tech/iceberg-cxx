@@ -5,4 +5,4 @@ add_executable(tpch-gen
 )
 
 target_include_directories(tpch-gen PUBLIC ${CMAKE_SOURCE_DIR})
-target_link_libraries(tpch-gen data-gen)
+target_link_libraries(tpch-gen data-gen absl::flags absl::flags_parse)

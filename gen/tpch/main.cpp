@@ -2,8 +2,11 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <ostream>
 #include <stdexcept>
 
+#include "absl/flags/flag.h"
+#include "absl/flags/parse.h"
 #include "arrow/csv/options.h"
 #include "arrow/record_batch.h"
 #include "arrow/result.h"
@@ -13,6 +16,7 @@
 #include "gen/src/fields.h"
 #include "gen/src/generators.h"
 #include "gen/src/program.h"
+#include "gen/src/table.h"
 #include "gen/src/writer.h"
 #include "gen/tpch/generators.h"
 #include "gen/tpch/list.h"
@@ -24,23 +28,6 @@ using namespace gen;
 constexpr int32_t kStartDate = 8035;
 constexpr int32_t kCurrentDate = 9298;
 constexpr int32_t kEndDate = 10591;
-
-struct Table {
-  std::shared_ptr<parquet::schema::GroupNode> MakeParquetSchema() const {
-    return ParquetSchemaFromArrowSchema(MakeArrowSchema());
-  }
-
-  virtual std::shared_ptr<arrow::Schema> MakeArrowSchema() const = 0;
-
-  std::vector<std::string> MakeColumnNames() const {
-    std::vector<std::string> result;
-    auto schema = MakeArrowSchema();
-    for (const auto& field : schema->fields()) {
-      result.emplace_back(field->name());
-    }
-    return result;
-  }
-};
 
 struct SupplierTable : public Table {
   static constexpr std::string_view kSuppkey = "s_suppkey";
@@ -62,6 +49,8 @@ struct SupplierTable : public Table {
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
+
+  std::string Name() const override { return "supplier"; }
 };
 
 Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor) {
@@ -125,6 +114,8 @@ struct PartTable : public Table {
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
+
+  std::string Name() const override { return "part"; }
 };
 
 struct PartsuppTable : public Table {
@@ -143,6 +134,8 @@ struct PartsuppTable : public Table {
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
+
+  std::string Name() const override { return "partsupp"; }
 };
 
 Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& random_device,
@@ -242,6 +235,8 @@ struct CustomerTable : public Table {
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
+
+  std::string Name() const override { return "customer"; }
 };
 
 Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor) {
@@ -309,6 +304,8 @@ struct OrdersTable : public Table {
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
+
+  std::string Name() const override { return "orders"; }
 };
 
 struct LineitemTable : public Table {
@@ -349,6 +346,8 @@ struct LineitemTable : public Table {
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
+
+  std::string Name() const override { return "lineitem"; }
 };
 
 Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& random_device,
@@ -503,6 +502,8 @@ struct NationTable : public Table {
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
+
+  std::string Name() const override { return "nation"; }
 };
 
 Program MakeNationProgram(const tpch::text::Text& text, RandomDevice& random_device) {
@@ -540,6 +541,8 @@ struct RegionTable : public Table {
     fields.emplace_back(arrow::field(std::string(kComment), arrow::utf8()));
     return std::make_shared<arrow::Schema>(fields);
   }
+
+  std::string Name() const override { return "region"; }
 };
 
 Program MakeRegionProgram(const tpch::text::Text& text, RandomDevice& random_device) {
@@ -565,156 +568,158 @@ arrow::csv::WriteOptions TpchCsvWriteOptions() {
   return options;
 }
 
-arrow::Status Main() {
-  RandomDevice random_device(2101);
+struct WriteFlags {
+  std::string output_dir;
+  bool write_parquet;
+  bool write_csv;
+
+  friend std::ostream& operator<<(std::ostream& os, const WriteFlags& flags) {
+    return os << "output_dir: " << flags.output_dir << ", write_parquet: " << flags.write_parquet
+              << ", write_csv: " << flags.write_csv;
+  }
+};
+
+struct GenerateFlags {
+  int32_t scale_factor;
+  int32_t arrow_batch_size;
+  int64_t seed;
+
+  friend std::ostream& operator<<(std::ostream& os, const GenerateFlags& flags) {
+    return os << "scale_factor: " << flags.scale_factor << ", arrow_batch_size: " << flags.arrow_batch_size
+              << ", seed: " << flags.seed;
+  }
+};
+
+struct TableGeneratorInfo {
+  Program program;
+  std::vector<std::shared_ptr<Table>> tables;
+  uint64_t rows;
+
+  TableGeneratorInfo(const Program& program, const std::vector<std::shared_ptr<Table>>& tables, uint64_t rows)
+      : program(program), tables(tables), rows(rows) {}
+};
+
+arrow::Status Main(const WriteFlags& write_flags, const GenerateFlags& generate_flags) {
+  RandomDevice random_device(generate_flags.seed);
 
   tpch::text::Text text = tpch::text::GenerateText(random_device);
 
-  constexpr int32_t kBatchSize = 8192;
-  constexpr int32_t kScaleFactor = 5;
-  constexpr int64_t kSupplierRows = kScaleFactor * 10'000;
-  constexpr int64_t kPartRows = kScaleFactor * 200'000;
-  constexpr int64_t kCustomerRows = kScaleFactor * 150'000;
-  constexpr int64_t kOrdersRows = kScaleFactor * 1'500'000;
+  const int32_t kBatchSize = generate_flags.arrow_batch_size;
+  const int32_t kScaleFactor = generate_flags.scale_factor;
+
+  constexpr int64_t kSupplierRowsPerScaleFactor = 10'000;
+  constexpr int64_t kPartRowsPerScaleFactor = 200'000;
+  constexpr int64_t kCustomerRowsPerScaleFactor = 150'000;
+  constexpr int64_t kOrdersRowsPerScaleFactor = 1'500'000;
+
+  const int64_t kSupplierRows = kScaleFactor * kSupplierRowsPerScaleFactor;
+  const int64_t kPartRows = kScaleFactor * kPartRowsPerScaleFactor;
+  const int64_t kCustomerRows = kScaleFactor * kCustomerRowsPerScaleFactor;
+  const int64_t kOrdersRows = kScaleFactor * kOrdersRowsPerScaleFactor;
   constexpr int64_t kNationRows = 25;
   constexpr int64_t kRegionRows = 5;
 
   auto csv_writer_options = TpchCsvWriteOptions();
 
-  {
-    Program supplier_program = MakeSupplierProgram(text, random_device, kScaleFactor);
-    BatchSizeMaker batch_size_maker(kBatchSize, kSupplierRows);
+  std::vector<TableGeneratorInfo> table_generator_infos;
+  table_generator_infos.emplace_back(MakeSupplierProgram(text, random_device, kScaleFactor),
+                                     std::vector<std::shared_ptr<Table>>{std::make_shared<SupplierTable>()},
+                                     kSupplierRows);
+  table_generator_infos.emplace_back(
+      MakePartAndPartsuppProgram(text, random_device, kScaleFactor),
+      std::vector<std::shared_ptr<Table>>{std::make_shared<PartTable>(), std::make_shared<PartsuppTable>()}, kPartRows);
+  table_generator_infos.emplace_back(MakeCustomerProgram(text, random_device, kScaleFactor),
+                                     std::vector<std::shared_ptr<Table>>{std::make_shared<CustomerTable>()},
+                                     kCustomerRows);
+  table_generator_infos.emplace_back(
+      MakeOrderAndLineitemProgram(text, random_device, kScaleFactor),
+      std::vector<std::shared_ptr<Table>>{std::make_shared<OrdersTable>(), std::make_shared<LineitemTable>()},
+      kOrdersRows);
+  table_generator_infos.emplace_back(MakeNationProgram(text, random_device),
+                                     std::vector<std::shared_ptr<Table>>{std::make_shared<NationTable>()}, kNationRows);
+  table_generator_infos.emplace_back(MakeRegionProgram(text, random_device),
+                                     std::vector<std::shared_ptr<Table>>{std::make_shared<RegionTable>()}, kRegionRows);
 
-    SupplierTable supplier_table;
+  for (auto& info : table_generator_infos) {
+    Program& program = info.program;
+    const std::vector<std::shared_ptr<Table>>& tables = info.tables;
+    uint64_t rows = info.rows;
 
-    Writer writer("supplier.parquet", supplier_table.MakeParquetSchema());
-    CSVWriter csv_writer("supplier.csv", supplier_table.MakeArrowSchema(), csv_writer_options);
-
-    for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
-         rows_in_next_batch = batch_size_maker.NextBatchSize()) {
-      ARROW_ASSIGN_OR_RAISE(auto batch, supplier_program.Generate(rows_in_next_batch));
-      ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(supplier_table.MakeColumnNames()));
-      ARROW_RETURN_NOT_OK(writer.WriteRecordBatch(arrow_batch));
-      ARROW_RETURN_NOT_OK(csv_writer.WriteRecordBatch(arrow_batch));
+    std::vector<std::vector<std::shared_ptr<Writer>>> writers_per_table;
+    for (auto table : tables) {
+      std::vector<std::shared_ptr<Writer>> writers_for_table;
+      if (write_flags.write_parquet) {
+        writers_for_table.emplace_back(table->GetParquetWriter(write_flags.output_dir));
+      }
+      if (write_flags.write_csv) {
+        writers_for_table.emplace_back(table->GetCSVWriter(write_flags.output_dir, csv_writer_options));
+      }
+      writers_per_table.emplace_back(std::move(writers_for_table));
     }
-  }
 
-  {
-    Program part_program = MakePartAndPartsuppProgram(text, random_device, kScaleFactor);
-    BatchSizeMaker batch_size_maker(kBatchSize, kPartRows);
-
-    PartTable part_table;
-    PartsuppTable partsupp_table;
-
-    Writer part_writer("part.parquet", part_table.MakeParquetSchema());
-    CSVWriter csv_part_writer("part.csv", part_table.MakeArrowSchema(), csv_writer_options);
-    Writer partsupp_writer("partsupp.parquet", partsupp_table.MakeParquetSchema());
-    CSVWriter csv_partsupp_writer("partsupp.csv", partsupp_table.MakeArrowSchema(), csv_writer_options);
+    BatchSizeMaker batch_size_maker(kBatchSize, rows);
 
     for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
          rows_in_next_batch = batch_size_maker.NextBatchSize()) {
-      ARROW_ASSIGN_OR_RAISE(auto batch, part_program.Generate(rows_in_next_batch));
-
-      ARROW_ASSIGN_OR_RAISE(auto part_arrow_batch, batch->GetArrowBatch(part_table.MakeColumnNames()));
-      ARROW_RETURN_NOT_OK(part_writer.WriteRecordBatch(part_arrow_batch));
-      ARROW_RETURN_NOT_OK(csv_part_writer.WriteRecordBatch(part_arrow_batch));
-
-      ARROW_ASSIGN_OR_RAISE(auto partsupp_arrow_batch, batch->GetArrowBatch(partsupp_table.MakeColumnNames()));
-      ARROW_RETURN_NOT_OK(partsupp_writer.WriteRecordBatch(partsupp_arrow_batch));
-      ARROW_RETURN_NOT_OK(csv_partsupp_writer.WriteRecordBatch(partsupp_arrow_batch));
-    }
-  }
-
-  {
-    Program customer_program = MakeCustomerProgram(text, random_device, kScaleFactor);
-    BatchSizeMaker batch_size_maker(kBatchSize, kCustomerRows);
-
-    CustomerTable customer_table;
-
-    Writer customer_writer("customer.parquet", customer_table.MakeParquetSchema());
-    CSVWriter csv_customer_writer("customer.csv", customer_table.MakeArrowSchema(), csv_writer_options);
-
-    for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
-         rows_in_next_batch = batch_size_maker.NextBatchSize()) {
-      ARROW_ASSIGN_OR_RAISE(auto batch, customer_program.Generate(rows_in_next_batch));
-
-      ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(customer_table.MakeColumnNames()));
-      ARROW_RETURN_NOT_OK(customer_writer.WriteRecordBatch(arrow_batch));
-      ARROW_RETURN_NOT_OK(csv_customer_writer.WriteRecordBatch(arrow_batch));
-    }
-  }
-
-  {
-    Program order_and_lineitem_program = MakeOrderAndLineitemProgram(text, random_device, kScaleFactor);
-    BatchSizeMaker batch_size_maker(kBatchSize, kOrdersRows);
-
-    OrdersTable orders_table;
-    LineitemTable lineitem_table;
-
-    Writer order_writer("orders.parquet", orders_table.MakeParquetSchema());
-    CSVWriter csv_order_writer("orders.csv", orders_table.MakeArrowSchema(), csv_writer_options);
-    Writer lineitem_writer("lineitem.parquet", lineitem_table.MakeParquetSchema());
-    CSVWriter csv_lineitem_writer("lineitem.csv", lineitem_table.MakeArrowSchema(), csv_writer_options);
-
-    for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
-         rows_in_next_batch = batch_size_maker.NextBatchSize()) {
-      ARROW_ASSIGN_OR_RAISE(auto batch, order_and_lineitem_program.Generate(rows_in_next_batch));
-
-      ARROW_ASSIGN_OR_RAISE(auto order_arrow_batch, batch->GetArrowBatch(orders_table.MakeColumnNames()));
-      ARROW_RETURN_NOT_OK(order_writer.WriteRecordBatch(order_arrow_batch));
-      ARROW_RETURN_NOT_OK(csv_order_writer.WriteRecordBatch(order_arrow_batch));
-
-      ARROW_ASSIGN_OR_RAISE(auto lineitem_arrow_batch, batch->GetArrowBatch(lineitem_table.MakeColumnNames()));
-      ARROW_RETURN_NOT_OK(lineitem_writer.WriteRecordBatch(lineitem_arrow_batch));
-      ARROW_RETURN_NOT_OK(csv_lineitem_writer.WriteRecordBatch(lineitem_arrow_batch));
-    }
-  }
-
-  {
-    Program nation_program = MakeNationProgram(text, random_device);
-    BatchSizeMaker batch_size_maker(kBatchSize, kNationRows);
-
-    NationTable nation_table;
-    Writer nation_writer("nation.parquet", nation_table.MakeParquetSchema());
-    CSVWriter csv_nation_writer("nation.csv", nation_table.MakeArrowSchema(), csv_writer_options);
-
-    for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
-         rows_in_next_batch = batch_size_maker.NextBatchSize()) {
-      ARROW_ASSIGN_OR_RAISE(auto batch, nation_program.Generate(rows_in_next_batch));
-
-      ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(nation_table.MakeColumnNames()));
-      ARROW_RETURN_NOT_OK(nation_writer.WriteRecordBatch(arrow_batch));
-      ARROW_RETURN_NOT_OK(csv_nation_writer.WriteRecordBatch(arrow_batch));
-    }
-  }
-
-  {
-    Program region_program = MakeRegionProgram(text, random_device);
-    BatchSizeMaker batch_size_maker(kBatchSize, kRegionRows);
-
-    RegionTable region_table;
-    Writer region_writer("region.parquet", region_table.MakeParquetSchema());
-    CSVWriter csv_region_writer("region.csv", region_table.MakeArrowSchema(), csv_writer_options);
-
-    for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
-         rows_in_next_batch = batch_size_maker.NextBatchSize()) {
-      ARROW_ASSIGN_OR_RAISE(auto batch, region_program.Generate(rows_in_next_batch));
-
-      ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(region_table.MakeColumnNames()));
-      ARROW_RETURN_NOT_OK(region_writer.WriteRecordBatch(arrow_batch));
-      ARROW_RETURN_NOT_OK(csv_region_writer.WriteRecordBatch(arrow_batch));
+      ARROW_ASSIGN_OR_RAISE(auto batch, program.Generate(rows_in_next_batch));
+      for (size_t table_num = 0; table_num < tables.size(); table_num++) {
+        auto table = tables[table_num];
+        auto column_names = table->MakeColumnNames();
+        ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(column_names));
+        for (auto writer : writers_per_table[table_num]) {
+          ARROW_RETURN_NOT_OK(writer->WriteRecordBatch(arrow_batch));
+        }
+      }
     }
   }
 
   return arrow::Status::OK();
 }
 
-int main() {
-  auto status = Main();
+ABSL_FLAG(std::string, output_dir, "", "output directory");
+ABSL_FLAG(int64_t, seed, 0, "seed for random device");
+ABSL_FLAG(int32_t, arrow_batch_size, 8192, "arrow batch size (rows)");
+ABSL_FLAG(int32_t, scale_factor, 1, "scale factor");
+ABSL_FLAG(bool, write_parquet, false, "write parquet files");
+ABSL_FLAG(bool, write_csv, false, "write csv files");
 
-  if (!status.ok()) {
-    std::cerr << status.message() << std::endl;
+int main(int argc, char** argv) {
+  absl::ParseCommandLine(argc, argv);
+
+  std::string output_dir = absl::GetFlag(FLAGS_output_dir);
+  int64_t seed = absl::GetFlag(FLAGS_seed);
+  int32_t arrow_batch_size = absl::GetFlag(FLAGS_arrow_batch_size);
+  int32_t scale_factor = absl::GetFlag(FLAGS_scale_factor);
+  bool write_parquet = absl::GetFlag(FLAGS_write_parquet);
+  bool write_csv = absl::GetFlag(FLAGS_write_csv);
+
+  if (output_dir.empty()) {
+    std::cerr << "output_dir must be set" << std::endl;
     return 1;
+  }
+
+  if (!write_parquet && !write_csv) {
+    std::cerr << "Nothing to do. Please set --write_parquet or/and --write_csv" << std::endl;
+    return 1;
+  }
+
+  WriteFlags write_flags{.output_dir = output_dir, .write_parquet = write_parquet, .write_csv = write_csv};
+  GenerateFlags generate_flags{.scale_factor = scale_factor, .arrow_batch_size = arrow_batch_size, .seed = seed};
+
+  std::cerr << "write_flags: " << write_flags << std::endl;
+  std::cerr << "generate_flags: " << generate_flags << std::endl;
+
+  try {
+    auto status = Main(write_flags, generate_flags);
+
+    if (!status.ok()) {
+      std::cerr << status.message() << std::endl;
+      return 1;
+    }
+  } catch (const std::exception& e) {
+    std::cerr << e.what() << std::endl;
+  } catch (const arrow::Status& status) {
+    std::cerr << status.message() << std::endl;
   }
 
   return 0;
