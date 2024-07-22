@@ -4,6 +4,7 @@
 #include <arrow/io/api.h>
 #include <parquet/type_fwd.h>
 
+#include <cinttypes>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -131,7 +132,7 @@ struct MetadataNameMaker {
   __int128 uuid_added_delete_manifest = 4;
 
   static std::string StrUUID(__int128 x) {
-    uint64_t p0 = x >> (12 * 8);
+    uint32_t p0 = x >> (12 * 8);
     uint16_t p1 = x >> (10 * 8);  // & 0xffff;
     uint16_t p2 = x >> (8 * 8);   // & 0xffff;
     uint16_t p3 = x >> (6 * 8);   // & 0xffff;
@@ -140,7 +141,7 @@ struct MetadataNameMaker {
     return std::format("{:08x}-{:04x}-{:04x}-{:04x}-{:012x}", p0, p1, p2, p3, p4);
 #else
     char buf[1024];
-    snprintf(buf, sizeof(buf), "%08lu-%04d-%04d-%04d-%012lu", p0, p1, p2, p3, p4);
+    snprintf(buf, sizeof(buf), "%08x-%04x-%04x-%04x-%012" PRIx64, p0, p1, p2, p3, p4);
     return buf;
 #endif
   }
@@ -160,7 +161,7 @@ struct MetadataNameMaker {
     return std::format("snap-{}-{}-{}.avro", snap_id, 1, StrUUID(uuid));
 #else
     char buf[1024];
-    snprintf(buf, sizeof(buf), "snap-%lu-%d-%s.avro", snap_id, 1, StrUUID(uuid).c_str());
+    snprintf(buf, sizeof(buf), "snap-%" PRId64 "-%d-%s.avro", snap_id, 1, StrUUID(uuid).c_str());
     return buf;
 #endif
   }
