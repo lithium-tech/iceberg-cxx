@@ -57,15 +57,16 @@ Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_d
   Program program;
   program.AddAssign(Assignment(SupplierTable::kSuppkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
 
-  program.AddAssign(Assignment("s_suppkey_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(),
-                               {SupplierTable::kSuppkey}));
-  program.AddAssign(Assignment("s_suppkey_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>(9),
-                               {"s_suppkey_string"}));
+  program.AddAssign(
+      Assignment("s_suppkey_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(SupplierTable::kSuppkey)));
+  program.AddAssign(
+      Assignment("s_suppkey_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>("s_suppkey_string", 9)));
 
   program.AddAssign(Assignment("s_name_prefix", std::make_shared<ConstantGenerator<arrow::StringType>>("Supplier#")));
 
-  program.AddAssign(Assignment(SupplierTable::kName, std::make_shared<ConcatenateGenerator>(""),
-                               {"s_name_prefix", "s_suppkey_string_zeros"}));
+  program.AddAssign(Assignment(
+      SupplierTable::kName,
+      std::make_shared<ConcatenateGenerator>(std::vector<std::string>{"s_name_prefix", "s_suppkey_string_zeros"}, "")));
 
   program.AddAssign(
       Assignment(SupplierTable::kAddress, std::make_shared<tpch::VStringGenerator>(10, 40, random_device)));
@@ -73,14 +74,14 @@ Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_d
   program.AddAssign(Assignment(SupplierTable::kNationkey,
                                std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(0, 24, random_device)));
 
-  program.AddAssign(Assignment(SupplierTable::kPhone, std::make_shared<tpch::PhoneGenerator>(random_device),
-                               {SupplierTable::kSuppkey}));
+  program.AddAssign(Assignment(SupplierTable::kPhone,
+                               std::make_shared<tpch::PhoneGenerator>(SupplierTable::kSuppkey, random_device)));
 
   program.AddAssign(Assignment(
       "acctbal_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(-99'999, 999'999, random_device)));
 
-  program.AddAssign(Assignment(SupplierTable::kAcctbal, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
-                               {"acctbal_int"}));
+  program.AddAssign(Assignment(SupplierTable::kAcctbal,
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("acctbal_int", 10, 2)));
 
   program.AddAssign(
       Assignment(SupplierTable::kComment, std::make_shared<tpch::supplier::CommentGenerator>(text, random_device)));
@@ -149,17 +150,17 @@ Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& r
   program.AddAssign(Assignment(PartTable::kName, p_name_generator));
 
   program.AddAssign(Assignment("M", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 5, random_device)));
-  program.AddAssign(Assignment("M_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(), {"M"}));
+  program.AddAssign(Assignment("M_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>("M")));
   program.AddAssign(
       Assignment("Manufacturer#", std::make_shared<ConstantGenerator<arrow::StringType>>("Manufacturer#")));
-  program.AddAssign(
-      Assignment(PartTable::kMfgr, std::make_shared<ConcatenateGenerator>(""), {"Manufacturer#", "M_string"}));
+  program.AddAssign(Assignment(PartTable::kMfgr, std::make_shared<ConcatenateGenerator>(
+                                                     std::vector<std::string>{"Manufacturer#", "M_string"}, "")));
 
   program.AddAssign(Assignment("N", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 5, random_device)));
-  program.AddAssign(Assignment("N_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(), {"N"}));
+  program.AddAssign(Assignment("N_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>("N")));
   program.AddAssign(Assignment("Brand#", std::make_shared<ConstantGenerator<arrow::StringType>>("Brand#")));
-  program.AddAssign(
-      Assignment(PartTable::kBrand, std::make_shared<ConcatenateGenerator>(""), {"Brand#", "M_string", "N_string"}));
+  program.AddAssign(Assignment(PartTable::kBrand, std::make_shared<ConcatenateGenerator>(
+                                                      std::vector<std::string>{"Brand#", "M_string", "N_string"}, "")));
   program.AddProjection(Projection({PartTable::kPartkey, PartTable::kName, PartTable::kMfgr, PartTable::kBrand}));
 
   auto types_list = tpch::GetTypesList();
@@ -174,25 +175,25 @@ Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& r
       Assignment(PartTable::kContainer, std::make_shared<StringFromListGenerator>(*container_list, random_device)));
 
   program.AddAssign(
-      Assignment("retailprice_int", std::make_shared<tpch::part::RetailPriceGenerator>(), {PartTable::kPartkey}));
-  program.AddAssign(Assignment(PartTable::kRetailprice, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
-                               {"retailprice_int"}));
+      Assignment("retailprice_int", std::make_shared<tpch::part::RetailPriceGenerator>(PartTable::kPartkey)));
+  program.AddAssign(Assignment(PartTable::kRetailprice,
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("retailprice_int", 10, 2)));
 
   program.AddAssign(
       Assignment(PartTable::kComment, std::make_shared<tpch::TextStringGenerator>(text, random_device, 5, 22)));
 
   program.AddAssign(Assignment("ps_vec_size", std::make_shared<ConstantGenerator<arrow::Int32Type>>(4)));
 
-  program.AddAssign(Assignment("ps_repetition_levels", std::make_shared<RepetitionLevelsGenerator>(), {"ps_vec_size"}));
+  program.AddAssign(Assignment("ps_repetition_levels", std::make_shared<RepetitionLevelsGenerator>("ps_vec_size")));
 
-  program.AddAssign(Assignment(PartsuppTable::kPartkey, std::make_shared<CopyGenerator<arrow::Int32Type>>(),
-                               {"ps_repetition_levels", PartTable::kPartkey}));
+  program.AddAssign(Assignment(PartsuppTable::kPartkey, std::make_shared<CopyGenerator<arrow::Int32Type>>(
+                                                            "ps_repetition_levels", PartTable::kPartkey)));
 
-  program.AddAssign(Assignment("corresponding_supplier", std::make_shared<PositionWithinArrayGenerator>(0),
-                               {"ps_repetition_levels"}));
-  program.AddAssign(Assignment(PartsuppTable::kSuppkey,
-                               std::make_shared<tpch::partsupp::SuppkeyGenerator>(scale_factor),
-                               {PartsuppTable::kPartkey, "corresponding_supplier"}));
+  program.AddAssign(
+      Assignment("corresponding_supplier", std::make_shared<PositionWithinArrayGenerator>("ps_repetition_levels", 0)));
+  program.AddAssign(
+      Assignment(PartsuppTable::kSuppkey, std::make_shared<tpch::partsupp::SuppkeyGenerator>(
+                                              PartsuppTable::kPartkey, "corresponding_supplier", scale_factor)));
 
   program.AddAssign(Assignment(PartsuppTable::kAvailqty,
                                std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 9999, random_device)));
@@ -200,7 +201,7 @@ Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& r
   program.AddAssign(Assignment(
       "supplycost_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(100, 100000, random_device)));
   program.AddAssign(Assignment(PartsuppTable::kSupplycost,
-                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2), {"supplycost_int"}));
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("supplycost_int", 10, 2)));
 
   program.AddAssign(
       Assignment(PartsuppTable::kComment, std::make_shared<tpch::TextStringGenerator>(text, random_device, 49, 198)));
@@ -244,14 +245,15 @@ Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_d
 
   program.AddAssign(Assignment(CustomerTable::kCustkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
 
-  program.AddAssign(Assignment("c_custkey_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(),
-                               {CustomerTable::kCustkey}));
-  program.AddAssign(Assignment("c_custkey_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>(9),
-                               {"c_custkey_string"}));
+  program.AddAssign(
+      Assignment("c_custkey_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(CustomerTable::kCustkey)));
+  program.AddAssign(
+      Assignment("c_custkey_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>("c_custkey_string", 9)));
   program.AddAssign(
       Assignment("c_custname_prefix", std::make_shared<ConstantGenerator<arrow::StringType>>("Customer#")));
-  program.AddAssign(Assignment(CustomerTable::kName, std::make_shared<ConcatenateGenerator>(""),
-                               {"c_custname_prefix", "c_custkey_string_zeros"}));
+  program.AddAssign(Assignment(CustomerTable::kName,
+                               std::make_shared<ConcatenateGenerator>(
+                                   std::vector<std::string>{"c_custname_prefix", "c_custkey_string_zeros"}, "")));
 
   program.AddAssign(
       Assignment(CustomerTable::kAddress, std::make_shared<tpch::VStringGenerator>(10, 40, random_device)));
@@ -259,13 +261,13 @@ Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_d
   program.AddAssign(Assignment(CustomerTable::kNationkey,
                                std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(0, 24, random_device)));
 
-  program.AddAssign(Assignment(CustomerTable::kPhone, std::make_shared<tpch::PhoneGenerator>(random_device),
-                               {CustomerTable::kNationkey}));
+  program.AddAssign(Assignment(CustomerTable::kPhone,
+                               std::make_shared<tpch::PhoneGenerator>(CustomerTable::kNationkey, random_device)));
 
   program.AddAssign(Assignment(
       "acctbal_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(-99999, 999999, random_device)));
-  program.AddAssign(Assignment(CustomerTable::kAcctbal, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
-                               {"acctbal_int"}));
+  program.AddAssign(Assignment(CustomerTable::kAcctbal,
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("acctbal_int", 10, 2)));
 
   auto segments_list = tpch::GetSegmentsList();
 
@@ -356,7 +358,7 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
 
   program.AddAssign(Assignment("orderkey_notsparse", std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
   program.AddAssign(
-      Assignment(OrdersTable::kOrderkey, std::make_shared<tpch::SparseKeyGenerator>(3, 2), {"orderkey_notsparse"}));
+      Assignment(OrdersTable::kOrderkey, std::make_shared<tpch::SparseKeyGenerator>("orderkey_notsparse", 3, 2)));
 
   program.AddAssign(Assignment(OrdersTable::kCustkey, std::make_shared<tpch::orders::CustomerkeyGenerator>(
                                                           1, scale_factor * 150'000, random_device)));
@@ -370,13 +372,13 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
 
   program.AddAssign(Assignment(
       "clerk_id", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, scale_factor * 1'000, random_device)));
+  program.AddAssign(Assignment("clerk_id_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>("clerk_id")));
   program.AddAssign(
-      Assignment("clerk_id_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(), {"clerk_id"}));
-  program.AddAssign(
-      Assignment("clerk_id_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>(9), {"clerk_id_string"}));
+      Assignment("clerk_id_string_zeros", std::make_shared<tpch::AppendLeadingZerosGenerator>("clerk_id_string", 9)));
   program.AddAssign(Assignment("clerk_name_prefix", std::make_shared<ConstantGenerator<arrow::StringType>>("Clerk#")));
-  program.AddAssign(Assignment(OrdersTable::kClerk, std::make_shared<ConcatenateGenerator>(""),
-                               {"clerk_name_prefix", "clerk_id_string_zeros"}));
+  program.AddAssign(
+      Assignment(OrdersTable::kClerk, std::make_shared<ConcatenateGenerator>(
+                                          std::vector<std::string>{"clerk_name_prefix", "clerk_id_string_zeros"}, "")));
   program.AddProjection(Projection({OrdersTable::kOrderkey, OrdersTable::kCustkey, OrdersTable::kOrderdate,
                                     OrdersTable::kOrderpriority, OrdersTable::kClerk}));
 
@@ -387,70 +389,69 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
 
   program.AddAssign(
       Assignment("l_vec_size", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 7, random_device)));
-  program.AddAssign(Assignment("l_repetition_levels", std::make_shared<RepetitionLevelsGenerator>(), {"l_vec_size"}));
-  program.AddAssign(Assignment(LineitemTable::kOrderkey, std::make_shared<CopyGenerator<arrow::Int32Type>>(),
-                               {"l_repetition_levels", OrdersTable::kOrderkey}));
+  program.AddAssign(Assignment("l_repetition_levels", std::make_shared<RepetitionLevelsGenerator>("l_vec_size")));
+  program.AddAssign(Assignment(LineitemTable::kOrderkey, std::make_shared<CopyGenerator<arrow::Int32Type>>(
+                                                             "l_repetition_levels", OrdersTable::kOrderkey)));
 
   program.AddAssign(Assignment(LineitemTable::kPartkey, std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(
                                                             1, scale_factor * 200'000, random_device)));
 
   program.AddAssign(Assignment("corresponding_supplier",
                                std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(0, 3, random_device)));
-  program.AddAssign(Assignment(LineitemTable::kSuppkey,
-                               std::make_shared<tpch::partsupp::SuppkeyGenerator>(scale_factor),
-                               {LineitemTable::kPartkey, "corresponding_supplier"}));
+  program.AddAssign(
+      Assignment(LineitemTable::kSuppkey, std::make_shared<tpch::partsupp::SuppkeyGenerator>(
+                                              LineitemTable::kPartkey, "corresponding_supplier", scale_factor)));
 
-  program.AddAssign(Assignment(LineitemTable::kLinenumber, std::make_shared<PositionWithinArrayGenerator>(1),
-                               {"l_repetition_levels"}));
+  program.AddAssign(
+      Assignment(LineitemTable::kLinenumber, std::make_shared<PositionWithinArrayGenerator>("l_repetition_levels", 1)));
 
   program.AddAssign(
       Assignment("quantity_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(1, 50, random_device)));
   program.AddAssign(Assignment("100", std::make_shared<ConstantGenerator<arrow::Int32Type>>(100)));
-  program.AddAssign(
-      Assignment("quantity_int_scaled",
-                 std::make_shared<MultiplyGenerator<arrow::Int64Type, arrow::Int64Type, arrow::Int32Type>>(),
-                 {"quantity_int", "100"}));
-  program.AddAssign(Assignment(LineitemTable::kQuantity, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
-                               {"quantity_int_scaled"}));
+  program.AddAssign(Assignment(
+      "quantity_int_scaled", std::make_shared<MultiplyGenerator<arrow::Int64Type, arrow::Int64Type, arrow::Int32Type>>(
+                                 "quantity_int", "100")));
+  program.AddAssign(Assignment(LineitemTable::kQuantity,
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("quantity_int_scaled", 10, 2)));
 
   program.AddAssign(
-      Assignment("l_retailprice", std::make_shared<tpch::part::RetailPriceGenerator>(), {LineitemTable::kPartkey}));
+      Assignment("l_retailprice", std::make_shared<tpch::part::RetailPriceGenerator>(LineitemTable::kPartkey)));
 
   program.AddAssign(Assignment(
-      "extendedprice_int", std::make_shared<MultiplyGenerator<arrow::Int64Type, arrow::Int64Type, arrow::Int64Type>>(),
-      {"quantity_int", "l_retailprice"}));
+      "extendedprice_int", std::make_shared<MultiplyGenerator<arrow::Int64Type, arrow::Int64Type, arrow::Int64Type>>(
+                               "quantity_int", "l_retailprice")));
   program.AddAssign(Assignment(LineitemTable::kExtendedprice,
-                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2), {"extendedprice_int"}));
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("extendedprice_int", 10, 2)));
 
   program.AddAssign(
       Assignment("discount_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(0, 10, random_device)));
-  program.AddAssign(Assignment(LineitemTable::kDiscount, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
-                               {"discount_int"}));
+  program.AddAssign(Assignment(LineitemTable::kDiscount,
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("discount_int", 10, 2)));
 
   program.AddAssign(
       Assignment("tax_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(0, 8, random_device)));
   program.AddAssign(
-      Assignment(LineitemTable::kTax, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2), {"tax_int"}));
+      Assignment(LineitemTable::kTax, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("tax_int", 10, 2)));
 
-  program.AddAssign(Assignment("tmp_orderdate", std::make_shared<CopyGenerator<arrow::Date32Type>>(),
-                               {"l_repetition_levels", OrdersTable::kOrderdate}));
+  program.AddAssign(Assignment("tmp_orderdate", std::make_shared<CopyGenerator<arrow::Date32Type>>(
+                                                    "l_repetition_levels", OrdersTable::kOrderdate)));
   program.AddAssign(
       Assignment("shiptime", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 121, random_device)));
   program.AddAssign(Assignment(LineitemTable::kShipdate,
-                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(),
-                               {"tmp_orderdate", "shiptime"}));
+                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(
+                                   "tmp_orderdate", "shiptime")));
 
   program.AddAssign(
       Assignment("committime", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(30, 90, random_device)));
   program.AddAssign(Assignment(LineitemTable::kCommitdate,
-                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(),
-                               {"tmp_orderdate", "committime"}));
+                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(
+                                   "tmp_orderdate", "committime")));
 
   program.AddAssign(
       Assignment("receipttime", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 30, random_device)));
   program.AddAssign(Assignment(LineitemTable::kReceiptdate,
-                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(),
-                               {LineitemTable::kShipdate, "receipttime"}));
+                               std::make_shared<AddGenerator<arrow::Date32Type, arrow::Date32Type, arrow::Int32Type>>(
+                                   LineitemTable::kShipdate, "receipttime")));
 
   auto shipinstruct_list = tpch::GetInstructionsList();
   program.AddAssign(Assignment(LineitemTable::kShipinstruct,
@@ -463,22 +464,22 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
   program.AddAssign(
       Assignment(LineitemTable::kComment, std::make_shared<tpch::TextStringGenerator>(text, random_device, 10, 43)));
 
-  program.AddAssign(Assignment(LineitemTable::kReturnflag,
-                               std::make_shared<tpch::lineitem::ReturnflagGenerator>(kCurrentDate, random_device),
-                               {LineitemTable::kReceiptdate}));
+  program.AddAssign(Assignment(
+      LineitemTable::kReturnflag,
+      std::make_shared<tpch::lineitem::ReturnflagGenerator>(LineitemTable::kReceiptdate, kCurrentDate, random_device)));
 
-  program.AddAssign(Assignment(LineitemTable::kLinestatus,
-                               std::make_shared<tpch::lineitem::LinestatusGenerator>(kCurrentDate),
-                               {LineitemTable::kShipdate}));
+  program.AddAssign(Assignment(LineitemTable::kLinestatus, std::make_shared<tpch::lineitem::LinestatusGenerator>(
+                                                               LineitemTable::kShipdate, kCurrentDate)));
 
-  program.AddAssign(Assignment(OrdersTable::kOrderstatus, std::make_shared<tpch::orders::OrderstatusGenerator>(),
-                               {"l_repetition_levels", LineitemTable::kLinestatus}));
+  program.AddAssign(Assignment(OrdersTable::kOrderstatus, std::make_shared<tpch::orders::OrderstatusGenerator>(
+                                                              "l_repetition_levels", LineitemTable::kLinestatus)));
 
-  program.AddAssign(Assignment("totalprice_int", std::make_shared<tpch::orders::TotalpriceGenerator>(),
-                               {"l_repetition_levels", "extendedprice_int", "tax_int", "discount_int"}));
+  program.AddAssign(
+      Assignment("totalprice_int", std::make_shared<tpch::orders::TotalpriceGenerator>(
+                                       "l_repetition_levels", "extendedprice_int", "tax_int", "discount_int")));
 
-  program.AddAssign(Assignment(OrdersTable::kTotalprice, std::make_shared<ToDecimalGenerator<arrow::Int64Type>>(10, 2),
-                               {"totalprice_int"}));
+  program.AddAssign(Assignment(OrdersTable::kTotalprice,
+                               std::make_shared<ToDecimalGenerator<arrow::Int64Type>>("totalprice_int", 10, 2)));
 
   std::vector<std::string> all_columns = OrdersTable().MakeColumnNames();
   std::vector<std::string> lineitem_columns = LineitemTable().MakeColumnNames();

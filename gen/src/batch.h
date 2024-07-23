@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include "arrow/array.h"
@@ -27,7 +28,12 @@ class Batch {
 
   int32_t NumColumns() const { return arrays_.size(); }
 
-  std::shared_ptr<arrow::Array> Column(int32_t i) const { return arrays_[i]; }
+  std::shared_ptr<arrow::Array> Column(int32_t i) const {
+    if (i < 0 || i >= static_cast<int>(arrays_.size())) {
+      throw std::runtime_error("Index " + std::to_string(i) + " is out of bounds");
+    }
+    return arrays_[i];
+  }
 
   std::shared_ptr<arrow::Schema> Schema() const {
     arrow::FieldVector fields;

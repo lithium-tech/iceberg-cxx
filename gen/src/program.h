@@ -16,15 +16,8 @@ class Assignment {
   Assignment(std::string_view result_name, std::shared_ptr<Generator> generator)
       : result_name_(std::string(result_name)), generator_(generator) {}
 
-  Assignment(std::string_view result_name, std::shared_ptr<Generator> generator,
-             const std::vector<std::string_view>& argument_names)
-      : result_name_(std::string(result_name)),
-        generator_(generator),
-        argument_names_(argument_names.begin(), argument_names.end()) {}
-
   arrow::Status Apply(BatchPtr& batch) {
-    ARROW_ASSIGN_OR_RAISE(auto arg_batch, batch->GetProjection(argument_names_));
-    ARROW_ASSIGN_OR_RAISE(auto new_data, generator_->Generate(arg_batch));
+    ARROW_ASSIGN_OR_RAISE(auto new_data, generator_->Generate(batch));
     ARROW_ASSIGN_OR_RAISE(batch, batch->AddColumn(result_name_, new_data));
     return arrow::Status::OK();
   }
@@ -32,7 +25,6 @@ class Assignment {
  private:
   std::string result_name_;
   std::shared_ptr<Generator> generator_;
-  std::vector<std::string> argument_names_;
 };
 
 struct Projection {
