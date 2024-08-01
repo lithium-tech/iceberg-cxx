@@ -27,6 +27,8 @@ struct Task {
   std::optional<int64_t> GetColumnSize(int32_t field_id) const;
 
   ManifestEntry entry;
+  std::vector<int32_t> pos_del_ids;
+  std::vector<int32_t> eq_del_ids;
   std::vector<Segment> parts;  // empty <=> full file
 
   inline void SortParts() {
@@ -38,7 +40,9 @@ struct Task {
 
 struct ScanMetadata {
   std::shared_ptr<Schema> schema;
-  std::vector<Task> entries;
+  std::vector<Task> data_entries;
+  std::vector<ManifestEntry> positional_delete_entries;
+  std::vector<ManifestEntry> equality_delete_entries;
 
   arrow::Result<ColumnStats> GetColumnStats(const std::string& column_name) const;
 };

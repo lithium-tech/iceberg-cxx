@@ -146,7 +146,7 @@ arrow::Result<ColumnStats> ScanMetadata::GetColumnStats(const std::string& colum
                      .total_compressed_size = 0,
                      .total_uncompressed_size = 0};
 
-  for (const auto& task : entries) {
+  for (const auto& task : data_entries) {
     if (task.entry.data_file.content != DataFile::FileContent::kData) {
       continue;
     }
@@ -190,7 +190,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
 
   std::shared_ptr<Schema> schema = table_metadata->GetCurrentSchema();
   if (table_metadata->snapshots.empty()) {
-    return ScanMetadata{.schema = schema, .entries = {}};
+    return ScanMetadata{.schema = schema};
   }
 
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
@@ -205,6 +205,9 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   const std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
 
   std::vector<Task> entries_output;
+
+  ScanMetadata result;
+  result.schema = schema;
 
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
@@ -224,11 +227,50 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         return arrow::Status::ExecutionError("no sequence_number");
       }
       entry.sequence_number = data_sequence_number;
-      entries_output.emplace_back(Task{.entry = std::move(entry)});
+
+      switch (entry.data_file.content) {
+        case ContentFile::FileContent::kData:
+          result.data_entries.emplace_back(Task{.entry = std::move(entry)});
+          break;
+        case ContentFile::FileContent::kPositionDeletes:
+          result.positional_delete_entries.emplace_back(std::move(entry));
+          break;
+        case ContentFile::FileContent::kEqualityDeletes:
+          result.equality_delete_entries.emplace_back(std::move(entry));
+          break;
+      }
     }
   }
 
-  return ScanMetadata{.schema = schema, .entries = std::move(entries_output)};
+  for (auto& task : result.data_entries) {
+    auto& task_entry = task.entry;
+    /*
+    A position delete file must be applied to a data file when all of the following are true:
+    - The data file's data sequence number is less than or equal to the delete file's data sequence number
+    - The data file's partition (both spec and partition values) is equal to the delete file's partition
+    */
+    for (size_t i = 0; i < result.positional_delete_entries.size(); ++i) {
+      const auto& pos_entry = result.positional_delete_entries[i];
+      if (pos_entry.sequence_number >= task_entry.sequence_number) {
+        task.pos_del_ids.emplace_back(i);
+      }
+    }
+
+    /*
+    An equality delete file must be applied to a data file when all of the following are true:
+    - The data file's data sequence number is strictly less than the delete's data sequence number
+    - The data file's partition (both spec id and partition values) is equal to the delete file's partition or the
+    delete file's partition spec is unpartitioned
+    */
+    for (size_t i = 0; i < result.equality_delete_entries.size(); ++i) {
+      const auto& eq_entry = result.equality_delete_entries[i];
+      if (eq_entry.sequence_number > task_entry.sequence_number) {
+        task.eq_del_ids.emplace_back(i);
+      }
+    }
+  }
+
+  return result;
 }
 
 }  // namespace iceberg::ice_tea

@@ -57,10 +57,11 @@ TEST(Scan, Test) {
   std::string expected_path = "s3://warehouse/" + table_ident.db + "/" + table_ident.name;
   auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, table->Location());
   ASSERT_TRUE(maybe_scan_metadata.ok());
-  auto tasks = maybe_scan_metadata.ValueUnsafe().entries;
+  auto tasks = maybe_scan_metadata.ValueUnsafe().data_entries;
+  auto pos_dels = maybe_scan_metadata.ValueUnsafe().positional_delete_entries;
   auto schema = maybe_scan_metadata.ValueUnsafe().schema;
   SortEntries(tasks);
-  ASSERT_EQ(tasks.size(), 7);
+  ASSERT_EQ(tasks.size(), 6);
   {
     EXPECT_EQ(tasks[0].entry.data_file.file_size_in_bytes, 3980);
     EXPECT_EQ(tasks[0].entry.data_file.file_path,
@@ -74,10 +75,10 @@ TEST(Scan, Test) {
     EXPECT_EQ(tasks[3].entry.data_file.content, DataFile::FileContent::kData);
   }
   {
-    EXPECT_EQ(tasks[6].entry.data_file.file_size_in_bytes, 1391);
-    EXPECT_EQ(tasks[6].entry.data_file.file_path,
+    EXPECT_EQ(pos_dels[0].data_file.file_size_in_bytes, 1391);
+    EXPECT_EQ(pos_dels[0].data_file.file_path,
               expected_path + "/data/00000-13-85b2f39e-780b-4214-912b-df665f506333-00001-deletes.parquet");
-    EXPECT_EQ(tasks[6].entry.data_file.content, DataFile::FileContent::kPositionDeletes);
+    EXPECT_EQ(pos_dels[0].data_file.content, DataFile::FileContent::kPositionDeletes);
   }
   EXPECT_EQ(schema->SchemaId(), 0);
   EXPECT_EQ(schema->Columns().size(), 2);
