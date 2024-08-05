@@ -28,7 +28,7 @@ class ThriftHiveMetastoreHandler : public Apache::Hadoop::Hive::ThriftHiveMetast
 
   void get_all_tables(std::vector<std::string>& _return, const std::string& db_name) override {
     std::lock_guard lg(mutex_);
-    std::cerr << __FUNCTION__ << std::endl;
+    std::cerr << __FUNCTION__ << " " << db_name << std::endl;
     _return.clear();
     auto db_it = tables_.find(db_name);
     if (db_it == tables_.end()) {
@@ -42,21 +42,25 @@ class ThriftHiveMetastoreHandler : public Apache::Hadoop::Hive::ThriftHiveMetast
   void get_table(Apache::Hadoop::Hive::Table& table, const std::string& db_name,
                  const std::string& table_name) override {
     std::lock_guard lg(mutex_);
-    std::cerr << __FUNCTION__ << std::endl;
+    std::cerr << __FUNCTION__ << " " << db_name << " " << table_name << std::endl;
     auto db_it = tables_.find(db_name);
     if (db_it == tables_.end()) {
-      throw hive::NoSuchObjectException();
+      hive::NoSuchObjectException ex;
+      ex.message = "no db '" + db_name + "'";
+      throw ex;
     }
     auto table_it = db_it->second.find(table_name);
     if (table_it == db_it->second.end()) {
-      throw hive::NoSuchObjectException();
+      hive::NoSuchObjectException ex;
+      ex.message = "no table '" + table_name + "'";
+      throw ex;
     }
     table = table_it->second;
   }
 
   void create_table(const Apache::Hadoop::Hive::Table& table) override {
     std::lock_guard lg(mutex_);
-    std::cerr << __FUNCTION__ << std::endl;
+    std::cerr << __FUNCTION__ << " " << table.dbName << " " << table.tableName << std::endl;
     tables_[table.dbName][table.tableName] = table;
   }
 
