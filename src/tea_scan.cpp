@@ -1,4 +1,4 @@
-#include "iceberg/src/tea_scan.h"
+#include "src/tea_scan.h"
 
 #include <iostream>
 #include <memory>
@@ -9,12 +9,12 @@
 #include "arrow/io/file.h"
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
-#include "iceberg/src/generated/manifest_file.hh"
-#include "iceberg/src/manifest_entry.h"
-#include "iceberg/src/manifest_file.h"
-#include "iceberg/src/table_metadata.h"
-#include "iceberg/src/tea_column_stats.h"
-#include "iceberg/src/tea_hive_catalog.h"
+#include "src/generated/manifest_file.hh"
+#include "src/manifest_entry.h"
+#include "src/manifest_file.h"
+#include "src/table_metadata.h"
+#include "src/tea_column_stats.h"
+#include "src/tea_hive_catalog.h"
 
 namespace iceberg::ice_tea {
 

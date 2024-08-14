@@ -1,4 +1,4 @@
-#include "iceberg/tools/common.h"
+#include "tools/common.h"
 
 #include <parquet/arrow/reader.h>
 #include <parquet/metadata.h>
@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "iceberg/src/write.h"
+#include "src/write.h"
 
 namespace iceberg::tools {
 

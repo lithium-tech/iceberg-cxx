@@ -5,9 +5,9 @@
 #include <string>
 
 #include "arrow/filesystem/s3fs.h"
-#include "iceberg/src/catalog.h"
-#include "iceberg/src/table.h"
-#include "iceberg/src/table_metadata.h"
+#include "src/catalog.h"
+#include "src/table.h"
+#include "src/table_metadata.h"
 
 namespace iceberg::ice_tea {
 

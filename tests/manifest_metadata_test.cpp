@@ -3,7 +3,7 @@
 #include <string>
 
 #include "gtest/gtest.h"
-#include "iceberg/src/manifest_file.h"
+#include "src/manifest_file.h"
 
 namespace iceberg {
 namespace {

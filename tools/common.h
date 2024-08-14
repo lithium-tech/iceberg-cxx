@@ -12,11 +12,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "iceberg/src/manifest_entry.h"
-#include "iceberg/src/manifest_file.h"
-#include "iceberg/src/schema.h"
-#include "iceberg/src/table_metadata.h"
-#include "iceberg/tools/metadata_tree.h"
+#include "src/manifest_entry.h"
+#include "src/manifest_file.h"
+#include "src/schema.h"
+#include "src/table_metadata.h"
+#include "tools/metadata_tree.h"
 
 namespace iceberg::tools {
 

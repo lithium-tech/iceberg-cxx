@@ -7,10 +7,10 @@
 
 #include "arrow/filesystem/s3fs.h"
 #include "arrow/result.h"
-#include "iceberg/src/manifest_entry.h"
-#include "iceberg/src/schema.h"
-#include "iceberg/src/tea_column_stats.h"
-#include "iceberg/src/tea_hive_catalog.h"
+#include "src/manifest_entry.h"
+#include "src/schema.h"
+#include "src/tea_column_stats.h"
+#include "src/tea_hive_catalog.h"
 
 namespace iceberg::ice_tea {
 

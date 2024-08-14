@@ -10,12 +10,12 @@
 #include <filesystem>
 #include <fstream>
 
-#include "iceberg/src/nested_field.h"
-#include "iceberg/src/schema.h"
-#include "iceberg/src/table_metadata.h"
-#include "iceberg/tools/metadata_tree.h"
-#include "iceberg/tools/metastore_client.h"
-#include "iceberg/tools/s3client.h"
+#include "src/nested_field.h"
+#include "src/schema.h"
+#include "src/table_metadata.h"
+#include "tools/metadata_tree.h"
+#include "tools/metastore_client.h"
+#include "tools/s3client.h"
 
 namespace hive = Apache::Hadoop::Hive;
 namespace thrift = apache::thrift;

@@ -8,12 +8,11 @@
 #include "arrow/filesystem/s3fs.h"
 #include "arrow/status.h"
 #include "gtest/gtest.h"
-#include "iceberg/src/tea_hive_catalog.h"
-#include "iceberg/src/tea_scan.h"
+#include "src/tea_hive_catalog.h"
+#include "src/tea_scan.h"
 
 namespace iceberg {
 
-#ifdef USE_ICEBERG
 catalog::TableIdentifier GetTestTable();
 
 namespace {
@@ -109,6 +108,5 @@ TEST(Catalog, Test) {
   EXPECT_EQ(schema->Columns()[0].type->ToString(), "long");
   EXPECT_EQ(schema->Columns()[1].type->ToString(), "long");
 }
-#endif
 
 }  // namespace iceberg

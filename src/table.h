@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-#include "iceberg/src/schema.h"
+#include "src/schema.h"
 
 namespace iceberg {
 

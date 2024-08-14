@@ -1,4 +1,4 @@
-add_library(iceberg
+add_library(iceberg-cpp
     catalog.h
     manifest_entry.cpp
     manifest_entry.h
@@ -21,7 +21,12 @@ add_library(iceberg
     write.h
 )
 
-target_link_libraries(iceberg PRIVATE rapidjson _avrocpp _boost_iostreams _hivemetastore)
-target_link_libraries(iceberg PUBLIC Arrow::arrow_static)
-target_include_directories(iceberg PUBLIC "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/vendor/boost")
-set_target_properties(iceberg PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(iceberg-cpp PRIVATE rapidjson _avrocpp _boost_iostreams _hivemetastore)
+target_link_libraries(iceberg-cpp PUBLIC Arrow::arrow_static)
+
+target_include_directories(iceberg-cpp
+    PUBLIC
+    "${CMAKE_SOURCE_DIR}/src"
+)
+
+set_target_properties(iceberg-cpp PROPERTIES POSITION_INDEPENDENT_CODE ON)

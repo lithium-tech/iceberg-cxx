@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "iceberg/src/type.h"
+#include "src/type.h"
 
 namespace iceberg::types {
 

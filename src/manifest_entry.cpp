@@ -1,13 +1,15 @@
-#include "iceberg/src/manifest_entry.h"
+#include "src/manifest_entry.h"
+#include "src/schema.h"
 
 #include <fstream>
 #include <sstream>
 
+#include "src/generated/manifest_entry.hh"
+#include "src/generated/manifest_entry_schema.h"
+
 #include "avro/Compiler.hh"
 #include "avro/DataFile.hh"
 #include "avro/ValidSchema.hh"
-#include "iceberg/src/generated/manifest_entry.hh"
-#include "iceberg/src/generated/manifest_entry_schema.h"
 
 namespace iceberg::ice_tea {
 

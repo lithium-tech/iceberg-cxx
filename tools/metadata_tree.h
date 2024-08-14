@@ -8,9 +8,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "iceberg/src/manifest_entry.h"
-#include "iceberg/src/manifest_file.h"
-#include "iceberg/src/table_metadata.h"
+#include "src/manifest_entry.h"
+#include "src/manifest_file.h"
+#include "src/table_metadata.h"
 
 namespace iceberg::tools {
 

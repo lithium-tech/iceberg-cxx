@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "iceberg/src/nested_field.h"
+#include "src/nested_field.h"
 
 namespace iceberg {
 

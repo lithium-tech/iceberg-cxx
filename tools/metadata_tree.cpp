@@ -1,4 +1,4 @@
-#include "iceberg/tools/metadata_tree.h"
+#include "tools/metadata_tree.h"
 
 #include <fstream>
 #include <map>
@@ -6,8 +6,8 @@
 #include <string>
 #include <utility>
 
-#include "iceberg/src/write.h"
-#include "iceberg/tools/common.h"
+#include "src/write.h"
+#include "tools/common.h"
 
 namespace iceberg::tools {
 

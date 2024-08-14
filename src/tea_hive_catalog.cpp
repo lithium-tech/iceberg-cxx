@@ -1,4 +1,4 @@
-#include "iceberg/src/tea_hive_catalog.h"
+#include "src/tea_hive_catalog.h"
 
 #include <ThriftHiveMetastore.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "arrow/api.h"
-#include "iceberg/src/tea_scan.h"
+#include "src/tea_scan.h"
 
 namespace iceberg::ice_tea {
 

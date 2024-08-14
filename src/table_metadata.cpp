@@ -1,4 +1,4 @@
-#include "iceberg/src/table_metadata.h"
+#include "src/table_metadata.h"
 
 #include <functional>
 #include <memory>
@@ -6,8 +6,8 @@
 #include <stdexcept>
 #include <unordered_set>
 
-#include "iceberg/src/nested_field.h"
-#include "iceberg/src/type.h"
+#include "src/nested_field.h"
+#include "src/type.h"
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
 #include "rapidjson/prettywriter.h"

@@ -7,8 +7,8 @@
 #include <utility>
 #include <vector>
 
-#include "iceberg/src/schema.h"
-#include "iceberg/src/snapshot.h"
+#include "src/schema.h"
+#include "src/snapshot.h"
 
 namespace iceberg {
 

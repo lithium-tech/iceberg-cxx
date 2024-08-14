@@ -3,7 +3,7 @@
 
 #include <filesystem>
 
-#include "iceberg/tools/metadata_tree.h"
+#include "tools/metadata_tree.h"
 
 ABSL_FLAG(std::string, metadata, "", "path to iceberg metadata JSON file");
 ABSL_FLAG(std::string, old, "", "old location");

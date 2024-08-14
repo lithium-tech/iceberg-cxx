@@ -1,9 +1,9 @@
-#include "iceberg/src/table_metadata.h"
+#include "table_metadata.h"
 
 #include <fstream>
 
 #include "gtest/gtest.h"
-#include "iceberg/src/type.h"
+#include "src/type.h"
 
 namespace iceberg {
 namespace {
