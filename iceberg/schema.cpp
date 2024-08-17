@@ -1,4 +1,4 @@
-#include "src/schema.h"
+#include "iceberg/schema.h"
 
 #include <algorithm>
 

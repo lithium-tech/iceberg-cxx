@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "src/write.h"
+#include "iceberg/write.h"
 
 namespace iceberg::tools {
 

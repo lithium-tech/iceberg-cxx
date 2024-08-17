@@ -5,9 +5,9 @@
 #include "avro/Compiler.hh"
 #include "avro/DataFile.hh"
 #include "avro/ValidSchema.hh"
-#include "src/generated/manifest_file.hh"
-#include "src/generated/manifest_file_schema.h"
-#include "src/manifest_file.h"
+#include "iceberg/generated/manifest_file.hh"
+#include "iceberg/generated/manifest_file_schema.h"
+#include "iceberg/manifest_file.h"
 
 namespace iceberg::ice_tea {
 namespace {

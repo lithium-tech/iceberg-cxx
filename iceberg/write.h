@@ -4,9 +4,9 @@
 #include <memory>
 #include <vector>
 
-#include "src/manifest_entry.h"
-#include "src/manifest_file.h"
-#include "src/table_metadata.h"
+#include "iceberg/manifest_entry.h"
+#include "iceberg/manifest_file.h"
+#include "iceberg/table_metadata.h"
 
 namespace iceberg::ice_tea {
 

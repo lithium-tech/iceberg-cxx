@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "src/table.h"
+#include "iceberg/table.h"
 
 namespace iceberg::catalog {
 

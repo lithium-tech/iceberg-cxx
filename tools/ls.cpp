@@ -10,9 +10,9 @@
 #include <filesystem>
 #include <fstream>
 
-#include "src/nested_field.h"
-#include "src/schema.h"
-#include "src/table_metadata.h"
+#include "iceberg/nested_field.h"
+#include "iceberg/schema.h"
+#include "iceberg/table_metadata.h"
 #include "tools/metadata_tree.h"
 #include "tools/metastore_client.h"
 #include "tools/s3client.h"

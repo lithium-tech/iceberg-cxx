@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "arrow/filesystem/s3fs.h"
-#include "src/catalog.h"
+#include "iceberg/catalog.h"
 
 namespace iceberg {
 

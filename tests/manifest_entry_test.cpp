@@ -1,4 +1,4 @@
-#include "src/manifest_entry.h"
+#include "iceberg/manifest_entry.h"
 
 #include <fstream>
 #include <sstream>

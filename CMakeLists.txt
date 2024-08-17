@@ -14,7 +14,7 @@ include_directories(
 
 add_subdirectory(vendor)
 
-add_subdirectory(src)
+add_subdirectory(iceberg)
 
 add_subdirectory(tools)
 add_subdirectory(tests)

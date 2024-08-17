@@ -1,11 +1,11 @@
-#include "src/manifest_entry.h"
-#include "src/schema.h"
+#include "iceberg/manifest_entry.h"
+#include "iceberg/schema.h"
 
 #include <fstream>
 #include <sstream>
 
-#include "src/generated/manifest_entry.hh"
-#include "src/generated/manifest_entry_schema.h"
+#include "iceberg/generated/manifest_entry.hh"
+#include "iceberg/generated/manifest_entry_schema.h"
 
 #include "avro/Compiler.hh"
 #include "avro/DataFile.hh"

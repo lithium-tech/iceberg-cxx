@@ -6,7 +6,7 @@
 #include <string>
 #include <utility>
 
-#include "src/write.h"
+#include "iceberg/write.h"
 #include "tools/common.h"
 
 namespace iceberg::tools {
