@@ -9,3 +9,16 @@ target_link_libraries(ice_ls PUBLIC _hivemetastore _thrift
   iceberg-cpp rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Arrow::arrow_static)
 set_target_properties(ice_ls PROPERTIES LINK_FLAGS_RELEASE -s)
 set_target_properties(ice_ls PROPERTIES LINK_FLAGS_RELWITHDEBINFO -s)
+
+add_library(iceberg-tools
+  common.cpp
+  common.h
+  metadata_tree.cpp
+  metadata_tree.h
+  metastore_client.h
+  s3client.h
+)
+
+target_include_directories(iceberg-tools PUBLIC "${PROJECT_SOURCE_DIR}")
+target_link_libraries(iceberg-tools PUBLIC _hivemetastore _thrift
+  iceberg-cpp rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Arrow::arrow_static)
