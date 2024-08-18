@@ -21,4 +21,4 @@ add_library(iceberg-tools
 
 target_include_directories(iceberg-tools PUBLIC "${PROJECT_SOURCE_DIR}")
 target_link_libraries(iceberg-tools PUBLIC _hivemetastore _thrift
-  iceberg-cpp rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Arrow::arrow_static)
+  iceberg-cpp rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Arrow::arrow_static Parquet::parquet_static)

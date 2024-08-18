@@ -7,6 +7,7 @@ include(cmake/gtest.cmake)
 
 find_package(Arrow REQUIRED)
 find_package(absl REQUIRED)
+find_package(Parquet REQUIRED)
 
 include_directories(
   ${ICEBERG_SOURCE_DIR}
