@@ -15,6 +15,11 @@
 
 namespace iceberg::tools {
 
+struct CopyOptions {
+  bool use_threads = false;
+  bool no_check_dest = false;
+};
+
 struct S3Init {
   explicit S3Init(arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error) { InitS3(log_level); }
   ~S3Init() { FinalizeS3(); }
@@ -100,7 +105,7 @@ class S3Client {
  public:
   S3Client(bool force, arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error,
            const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_")
-      : s3init_(log_level), continue_on_fail_(force) {
+      : s3init_(log_level) {
     src_access_.LoadEnvOptions(src_env_prefix);
     S3Access::ClearEnvOptions("AWS_");
 
@@ -136,34 +141,22 @@ class S3Client {
   arrow::fs::FileLocator SrcFileLocator(const std::string& name) const { return MakeFileLocator(src_s3fs_, name); }
   arrow::fs::FileLocator DstFileLocator(const std::string& name) const { return MakeFileLocator(dst_s3fs_, name); }
 
-  bool CopyFiles(const std::unordered_map<std::string, std::string>& renames, bool use_threads) {
-    std::unordered_set<std::string> found = CheckFiles(renames);
-
+  bool CopyFiles(const std::unordered_map<std::string, std::string>& renames, const CopyOptions& opts) {
     std::vector<arrow::fs::FileLocator> src;
     std::vector<arrow::fs::FileLocator> dst;
     src.reserve(renames.size());
     dst.reserve(renames.size());
 
-    for (auto& [src_name, dst_name] : renames) {
-      arrow::fs::FileLocator from = SrcFileLocator(src_name);
-
-      if (!found.contains(from.path)) {
-        if (!continue_on_fail_) {
-          throw std::runtime_error(std::string("file not found ") + src_name);
-        }
-        continue;
-      }
-
-      src.emplace_back(std::move(from));
-      dst.emplace_back(DstFileLocator(dst_name));
+    CheckFiles(renames, opts.no_check_dest, src, dst);
+    if (src.empty()) {
+      return true;
     }
-
-    return CopyFiles(src, dst, use_threads);
+    return CopyFiles(src, dst, opts);
   }
 
   bool CopyFiles(const std::vector<arrow::fs::FileLocator>& src, const std::vector<arrow::fs::FileLocator>& dst,
-                 bool use_threads) {
-    auto status = arrow::fs::CopyFiles(src, dst, arrow::io::default_io_context(), CHUNK_SIZE, use_threads);
+                 const CopyOptions& opts) {
+    auto status = arrow::fs::CopyFiles(src, dst, arrow::io::default_io_context(), CHUNK_SIZE, opts.use_threads);
     if (!status.ok()) {
       throw std::runtime_error(status.ToString());
     }
@@ -203,54 +196,56 @@ class S3Client {
 
  private:
   S3Init s3init_;
-  bool continue_on_fail_;
   S3Access src_access_;
   S3Access dst_access_;
   std::shared_ptr<arrow::fs::FileSystem> fs_;
   std::shared_ptr<arrow::fs::FileSystem> src_s3fs_;
   std::shared_ptr<arrow::fs::FileSystem> dst_s3fs_;
 
-  static arrow::fs::FileInfoVector GetFileInfos(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                const std::vector<std::string>& paths) {
-    if (paths.empty()) {
-      return {};
+  static std::vector<arrow::fs::FileInfo> GetFileInfos(const std::vector<arrow::fs::FileLocator>& locations) {
+    std::vector<arrow::fs::FileInfo> out;
+    out.reserve(locations.size());
+    for (auto& [fs, path] : locations) {
+      arrow::Result<arrow::fs::FileInfo> res = fs->GetFileInfo(path);
+      out.emplace_back(res.ok() ? std::move(*res) : arrow::fs::FileInfo());
     }
-
-    arrow::Result<arrow::fs::FileInfoVector> res = fs->GetFileInfo(paths);
-    if (!res.ok()) {
-      throw std::runtime_error(res.status().ToString());
-    }
-    return *res;
+    return out;
   }
 
-  std::unordered_set<std::string> CheckFiles(const std::unordered_map<std::string, std::string>& renames) const {
-    std::unordered_set<std::string> found;
-    std::vector<std::string> src_s3_paths;
-    src_s3_paths.reserve(renames.size());
+  static bool CheckSame(const arrow::fs::FileInfo& src, const arrow::fs::FileInfo& dst) {
+    // TODO(chertus): compare checksums
+    return src.size() == dst.size();
+  }
 
-    std::vector<std::string> src_local_paths;
-    src_local_paths.reserve(renames.size());
+  void CheckFiles(const std::unordered_map<std::string, std::string>& renames, bool force_override,
+                  std::vector<arrow::fs::FileLocator>& out_src, std::vector<arrow::fs::FileLocator>& out_dst) const {
+    std::vector<arrow::fs::FileLocator> src_paths;
+    src_paths.reserve(renames.size());
+    std::vector<arrow::fs::FileLocator> dst_paths;
+    dst_paths.reserve(renames.size());
 
-    for (auto& [src_name, _] : renames) {
-      auto name = CropPrefix(src_name);
-      if (name == src_name) {
-        src_local_paths.push_back(name);
-      } else {
-        src_s3_paths.push_back(name);
-      }
+    for (auto& [src_name, dst_name] : renames) {
+      src_paths.push_back(SrcFileLocator(src_name));
+      dst_paths.push_back(DstFileLocator(dst_name));
     }
 
-    for (auto& info : GetFileInfos(src_s3fs_, src_s3_paths)) {
-      if (info.IsFile()) {
-        found.insert(info.path());
+    std::vector<arrow::fs::FileInfo> src_infos = GetFileInfos(src_paths);
+    std::vector<arrow::fs::FileInfo> dst_infos;
+    if (!force_override) {
+      dst_infos = GetFileInfos(dst_paths);
+    }
+
+    for (size_t i = 0; i < src_infos.size(); ++i) {
+      auto& src_info = src_infos[i];
+      bool need_copy = src_info.IsFile();
+      if (need_copy && !force_override) {
+        need_copy = !CheckSame(src_info, dst_infos[i]);
+      }
+      if (need_copy) {
+        out_src.emplace_back(std::move(src_paths[i]));
+        out_dst.emplace_back(std::move(dst_paths[i]));
       }
     }
-    for (auto& info : GetFileInfos(fs_, src_local_paths)) {
-      if (info.IsFile()) {
-        found.insert(info.path());
-      }
-    }
-    return found;
   }
 
   static std::string CropPrefix(const std::string& src, const std::string& prefix = "://") {
@@ -290,14 +285,21 @@ inline void CopyDirOrThrow(std::shared_ptr<S3Client> s3client, const std::string
 }
 
 inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_map<std::string, std::string>& renames,
-                      bool use_threads) {
+                      const CopyOptions& opts) {
   if (s3client) {
-    if (!s3client->CopyFiles(renames, use_threads)) {
+    if (!s3client->CopyFiles(renames, opts)) {
       return false;
     }
   } else {
+    std::string flags;
+    if (opts.no_check_dest) {
+      flags = "--no-check-dest ";
+    } else {
+      // By default it checks file size and checksum
+      // flags = "--ignore-existing --ignore-checksum --ignore-size ";
+    }
     for (auto& [src, dst] : renames) {
-      if (!Rclone("copyto", src, dst)) {
+      if (!Rclone(flags + "copyto", src, dst)) {
         return false;
       }
     }
@@ -306,8 +308,8 @@ inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_m
 }
 
 inline void CopyFilesOrThrow(std::shared_ptr<S3Client> s3client,
-                             const std::unordered_map<std::string, std::string>& renames, bool use_threads) {
-  if (!CopyFiles(s3client, renames, use_threads)) {
+                             const std::unordered_map<std::string, std::string>& renames, const CopyOptions& opts) {
+  if (!CopyFiles(s3client, renames, opts)) {
     throw std::runtime_error("cannot copy files");
   }
 }
