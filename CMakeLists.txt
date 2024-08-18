@@ -22,6 +22,7 @@ add_subdirectory(tests)
 add_library(iceberg INTERFACE)
 target_link_libraries(iceberg INTERFACE
   iceberg-cpp
+  iceberg-tools
 )
 target_include_directories(iceberg SYSTEM INTERFACE
   ${ICEBERG_SOURCE_DIR}
