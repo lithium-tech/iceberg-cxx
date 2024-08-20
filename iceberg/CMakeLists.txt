@@ -17,6 +17,8 @@ add_library(iceberg-cpp STATIC
     tea_scan.h
     type.cpp
     type.h
+    uuid.cpp
+    uuid.h
     write.cpp
     write.h
 )

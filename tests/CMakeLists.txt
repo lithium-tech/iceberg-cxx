@@ -2,6 +2,7 @@ add_executable(iceberg_local_test
     manifest_entry_test.cpp
     manifest_metadata_test.cpp
     table_metadata_test.cpp
+    snapshot_test.cpp
     run_tests.cpp
 )
 target_link_libraries(iceberg_local_test PRIVATE gtest iceberg-cpp dl)
