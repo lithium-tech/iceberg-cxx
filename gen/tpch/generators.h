@@ -84,14 +84,14 @@ class VStringGenerator : public TrivialStringGenerator {
 };
 
 // Append zeros to positions [sparse_keep, sparse_keep + sparse_bits)
-class SparseKeyGenerator : public WithArgsInt32Generator {
+class SparseKeyGenerator : public WithArgsInt64Generator {
  public:
   SparseKeyGenerator(const std::string& arg_name, int32_t sparse_keep, int32_t sparse_bits)
-      : WithArgsInt32Generator({std::make_shared<arrow::Field>(arg_name, arrow::int32())}),
+      : WithArgsInt64Generator({std::make_shared<arrow::Field>(arg_name, arrow::int32())}),
         sparse_keep_(sparse_keep),
         sparse_bits_(sparse_bits) {}
 
-  int32_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
+  int64_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {
     int32_t key = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0))->GetView(row_index);
     int32_t low_bits = key & ((1 << sparse_keep_) - 1);
     key >>= sparse_keep_;

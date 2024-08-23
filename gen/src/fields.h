@@ -10,15 +10,26 @@
 
 namespace gen {
 
+static constexpr int kUnsetLength = -1;
+static constexpr int kUnsetPrecision = -1;
+static constexpr int kUnsetScale = -1;
+
 inline std::shared_ptr<parquet::schema::Node> MakePrimitiveInt32Node(std::string_view name, int32_t field_id = -1) {
   return parquet::schema::PrimitiveNode::Make(std::string(name), parquet::Repetition::REQUIRED, parquet::Type::INT32,
-                                              parquet::ConvertedType::NONE, -1, -1, -1, field_id);
+                                              parquet::ConvertedType::INT_32, kUnsetLength, kUnsetPrecision,
+                                              kUnsetScale, field_id);
+}
+
+inline std::shared_ptr<parquet::schema::Node> MakePrimitiveInt64Node(std::string_view name, int32_t field_id = -1) {
+  return parquet::schema::PrimitiveNode::Make(std::string(name), parquet::Repetition::REQUIRED, parquet::Type::INT64,
+                                              parquet::ConvertedType::INT_64, kUnsetLength, kUnsetPrecision,
+                                              kUnsetScale, field_id);
 }
 
 inline std::shared_ptr<parquet::schema::Node> MakeStringNode(std::string_view name, int32_t field_id = -1) {
   return parquet::schema::PrimitiveNode::Make(std::string(name), parquet::Repetition::REQUIRED,
-                                              parquet::Type::BYTE_ARRAY, parquet::ConvertedType::UTF8, -1, -1, -1,
-                                              field_id);
+                                              parquet::Type::BYTE_ARRAY, parquet::ConvertedType::UTF8, kUnsetLength,
+                                              kUnsetPrecision, kUnsetScale, field_id);
 }
 
 inline parquet::Type::type GetDecimalPhysicalType(int32_t precision) {
@@ -61,6 +72,8 @@ inline std::shared_ptr<parquet::schema::Node> ParquetNodeFromArrowField(const st
       return MakeStringNode(field->name());
     case arrow::Type::INT32:
       return MakePrimitiveInt32Node(field->name());
+    case arrow::Type::INT64:
+      return MakePrimitiveInt64Node(field->name());
     case arrow::Type::DATE32:
       return MakeDateNode(field->name());
     case arrow::Type::DECIMAL: {

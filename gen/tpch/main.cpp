@@ -75,7 +75,7 @@ Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_d
                                std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(0, 24, random_device)));
 
   program.AddAssign(Assignment(SupplierTable::kPhone,
-                               std::make_shared<tpch::PhoneGenerator>(SupplierTable::kSuppkey, random_device)));
+                               std::make_shared<tpch::PhoneGenerator>(SupplierTable::kNationkey, random_device)));
 
   program.AddAssign(Assignment(
       "acctbal_int", std::make_shared<UniformIntegerGenerator<arrow::Int64Type>>(-99'999, 999'999, random_device)));
@@ -295,7 +295,7 @@ struct OrdersTable : public Table {
 
   std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
     arrow::FieldVector fields;
-    fields.emplace_back(arrow::field(std::string(kOrderkey), arrow::int32()));
+    fields.emplace_back(arrow::field(std::string(kOrderkey), arrow::int64()));
     fields.emplace_back(arrow::field(std::string(kCustkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kOrderstatus), arrow::utf8()));
     fields.emplace_back(arrow::field(std::string(kTotalprice), arrow::decimal128(10, 2)));
@@ -330,7 +330,7 @@ struct LineitemTable : public Table {
 
   std::shared_ptr<arrow::Schema> MakeArrowSchema() const override {
     arrow::FieldVector fields;
-    fields.emplace_back(arrow::field(std::string(kOrderkey), arrow::int32()));
+    fields.emplace_back(arrow::field(std::string(kOrderkey), arrow::int64()));
     fields.emplace_back(arrow::field(std::string(kPartkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kSuppkey), arrow::int32()));
     fields.emplace_back(arrow::field(std::string(kLinenumber), arrow::int32()));
@@ -390,7 +390,7 @@ Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& 
   program.AddAssign(
       Assignment("l_vec_size", std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(1, 7, random_device)));
   program.AddAssign(Assignment("l_repetition_levels", std::make_shared<RepetitionLevelsGenerator>("l_vec_size")));
-  program.AddAssign(Assignment(LineitemTable::kOrderkey, std::make_shared<CopyGenerator<arrow::Int32Type>>(
+  program.AddAssign(Assignment(LineitemTable::kOrderkey, std::make_shared<CopyGenerator<arrow::Int64Type>>(
                                                              "l_repetition_levels", OrdersTable::kOrderkey)));
 
   program.AddAssign(Assignment(LineitemTable::kPartkey, std::make_shared<UniformIntegerGenerator<arrow::Int32Type>>(

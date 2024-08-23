@@ -407,6 +407,7 @@ class AddGenerator : public WithArgsGenerator<OutputArrowType> {
 template <typename ArrowType>
 class CopyGenerator : public TypedGenerator<ArrowType> {
   using ValueType = TypedGenerator<ArrowType>::ValueType;
+  using ArrayType = arrow::NumericArray<ArrowType>;
 
  public:
   CopyGenerator(std::string_view levels_name, std::string_view values_name)
@@ -418,7 +419,7 @@ class CopyGenerator : public TypedGenerator<ArrowType> {
     auto levels_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0));
     auto values_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(1));
 
-    std::vector<int32_t> result;
+    std::vector<ValueType> result;
     result.reserve(levels_column->length());
 
     int32_t current_value_index = -1;
