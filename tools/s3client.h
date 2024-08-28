@@ -141,6 +141,17 @@ class S3Client {
   arrow::fs::FileLocator SrcFileLocator(const std::string& name) const { return MakeFileLocator(src_s3fs_, name); }
   arrow::fs::FileLocator DstFileLocator(const std::string& name) const { return MakeFileLocator(dst_s3fs_, name); }
 
+  static void MakeDstDirs(const std::vector<arrow::fs::FileLocator>& dst) {
+    for (auto& locator : dst) {
+      if (dynamic_cast<arrow::fs::LocalFileSystem*>(locator.filesystem.get())) {
+        auto dir = std::filesystem::path(locator.path).parent_path();
+        if (!std::filesystem::exists(dir)) {
+          std::filesystem::create_directories(dir);
+        }
+      }
+    }
+  }
+
   bool CopyFiles(const std::unordered_map<std::string, std::string>& renames, const CopyOptions& opts) {
     std::vector<arrow::fs::FileLocator> src;
     std::vector<arrow::fs::FileLocator> dst;
@@ -151,6 +162,7 @@ class S3Client {
     if (src.empty()) {
       return true;
     }
+    MakeDstDirs(dst);
     return CopyFiles(src, dst, opts);
   }
 
