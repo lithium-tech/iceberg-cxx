@@ -104,8 +104,9 @@ class S3Client {
 
  public:
   S3Client(bool force, arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error,
-           const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_")
-      : s3init_(log_level) {
+           const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_",
+           const arrow::io::IOContext& io_context = arrow::io::default_io_context(), int64_t chunk_size = CHUNK_SIZE)
+      : s3init_(log_level), io_context_(io_context), copy_chunk_size_(chunk_size) {
     src_access_.LoadEnvOptions(src_env_prefix);
     S3Access::ClearEnvOptions("AWS_");
 
@@ -168,7 +169,7 @@ class S3Client {
 
   bool CopyFiles(const std::vector<arrow::fs::FileLocator>& src, const std::vector<arrow::fs::FileLocator>& dst,
                  const CopyOptions& opts) {
-    auto status = arrow::fs::CopyFiles(src, dst, arrow::io::default_io_context(), CHUNK_SIZE, opts.use_threads);
+    auto status = arrow::fs::CopyFiles(src, dst, io_context_, copy_chunk_size_, opts.use_threads);
     if (!status.ok()) {
       throw std::runtime_error(status.ToString());
     }
@@ -198,8 +199,7 @@ class S3Client {
       throw std::runtime_error("dst fs is not set");
     }
 
-    auto status = arrow::fs::CopyFiles(src_fs, selector, dst_fs, dst_path, arrow::io::default_io_context(), CHUNK_SIZE,
-                                       use_threads);
+    auto status = arrow::fs::CopyFiles(src_fs, selector, dst_fs, dst_path, io_context_, copy_chunk_size_, use_threads);
     if (!status.ok()) {
       throw std::runtime_error(status.ToString());
     }
@@ -213,6 +213,8 @@ class S3Client {
   std::shared_ptr<arrow::fs::FileSystem> fs_;
   std::shared_ptr<arrow::fs::FileSystem> src_s3fs_;
   std::shared_ptr<arrow::fs::FileSystem> dst_s3fs_;
+  const arrow::io::IOContext& io_context_;
+  const int64_t copy_chunk_size_;
 
   static std::vector<arrow::fs::FileInfo> GetFileInfos(const std::vector<arrow::fs::FileLocator>& locations) {
     std::vector<arrow::fs::FileInfo> out;

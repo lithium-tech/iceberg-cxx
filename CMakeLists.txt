@@ -5,9 +5,11 @@ set(ICEBERG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 include(cmake/gtest.cmake)
 
-find_package(Arrow REQUIRED)
+find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
 find_package(absl REQUIRED)
-find_package(Parquet REQUIRED)
+find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
+
+set(CMAKE_CXX_STANDARD 20)
 
 include_directories(
   ${ICEBERG_SOURCE_DIR}
