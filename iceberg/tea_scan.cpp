@@ -58,7 +58,7 @@ std::string UrlToPath(const std::string& url) {
 
 }  // namespace
 
-std::optional<int64_t> Task::GetValueCounts(int32_t field_id) const {
+std::optional<int64_t> DataEntry::GetValueCounts(int32_t field_id) const {
   for (const auto& [id, cnt] : entry.data_file.value_counts) {
     if (id == field_id) {
       return cnt;
@@ -67,7 +67,7 @@ std::optional<int64_t> Task::GetValueCounts(int32_t field_id) const {
   return std::nullopt;
 }
 
-std::optional<int64_t> Task::GetColumnSize(int32_t field_id) const {
+std::optional<int64_t> DataEntry::GetColumnSize(int32_t field_id) const {
   for (const auto& [id, cnt] : entry.data_file.column_sizes) {
     if (id == field_id) {
       return cnt;
@@ -76,7 +76,7 @@ std::optional<int64_t> Task::GetColumnSize(int32_t field_id) const {
   return std::nullopt;
 }
 
-ColumnStats Task::GetColumnStats(int32_t field_id) const {
+ColumnStats DataEntry::GetColumnStats(int32_t field_id) const {
   uint64_t total_rows = entry.data_file.record_count;
   std::optional<int64_t> value_count = GetValueCounts(field_id);
   std::optional<int64_t> column_size = GetColumnSize(field_id);
@@ -146,12 +146,13 @@ arrow::Result<ColumnStats> ScanMetadata::GetColumnStats(const std::string& colum
                      .total_compressed_size = 0,
                      .total_uncompressed_size = 0};
 
-  for (const auto& task : data_entries) {
-    if (task.entry.data_file.content != DataFile::FileContent::kData) {
-      continue;
+  for (const auto& part : partitions) {
+    for (const auto& layer : part) {
+      for (const auto& data_entry : layer.data_entries_) {
+        ColumnStats task_stats = data_entry.GetColumnStats(field_id);
+        Add(result, task_stats);
+      }
     }
-    ColumnStats task_stats = task.GetColumnStats(field_id);
-    Add(result, task_stats);
   }
 
   return result;
@@ -204,11 +205,10 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   std::stringstream ss(manifest_metadatas_content);
   const std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
 
-  std::vector<Task> entries_output;
+  std::vector<DataEntry> entries_output;
 
-  ScanMetadata result;
-  result.schema = schema;
-
+  using SequenceNumber = int64_t;
+  std::map<SequenceNumber, ScanMetadata::Layer> layers;
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
     ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs, manifest_path));
@@ -218,57 +218,48 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         continue;
       }
 
-      int64_t data_sequence_number;
+      SequenceNumber sequence_number;
       if (entry.sequence_number.has_value()) {
-        data_sequence_number = entry.sequence_number.value();
+        sequence_number = entry.sequence_number.value();
       } else if (entry.status == ManifestEntry::Status::kAdded) {
-        data_sequence_number = manifest_metadata.sequence_number;
+        sequence_number = manifest_metadata.sequence_number;
       } else {
         return arrow::Status::ExecutionError("no sequence_number");
       }
-      entry.sequence_number = data_sequence_number;
-
+      entry.sequence_number = sequence_number;
       switch (entry.data_file.content) {
         case ContentFile::FileContent::kData:
-          result.data_entries.emplace_back(Task{.entry = std::move(entry)});
+          layers[sequence_number].data_entries_.emplace_back(DataEntry{.entry = std::move(entry)});
           break;
         case ContentFile::FileContent::kPositionDeletes:
-          result.positional_delete_entries.emplace_back(std::move(entry));
+          /*
+          A position delete file must be applied to a data file when all of the following are true:
+          - The data file's data sequence number is LESS THAN OR EQUAL to the delete file's data sequence number
+          - The data file's partition (both spec and partition values) is equal to the delete file's partition
+          */
+          layers[sequence_number].positional_delete_entries_.emplace_back(std::move(entry));
           break;
         case ContentFile::FileContent::kEqualityDeletes:
-          result.equality_delete_entries.emplace_back(std::move(entry));
+          /*
+          An equality delete file must be applied to a data file when all of the following are true:
+          - The data file's data sequence number is STRICTLY LESS than the delete's data sequence number
+          - The data file's partition (both spec id and partition values) is equal to the delete file's partition or the
+          delete file's partition spec is unpartitioned
+          */
+          layers[sequence_number - 1].equality_delete_entries_.emplace_back(std::move(entry));
           break;
       }
     }
   }
 
-  for (auto& task : result.data_entries) {
-    auto& task_entry = task.entry;
-    /*
-    A position delete file must be applied to a data file when all of the following are true:
-    - The data file's data sequence number is less than or equal to the delete file's data sequence number
-    - The data file's partition (both spec and partition values) is equal to the delete file's partition
-    */
-    for (size_t i = 0; i < result.positional_delete_entries.size(); ++i) {
-      const auto& pos_entry = result.positional_delete_entries[i];
-      if (pos_entry.sequence_number >= task_entry.sequence_number) {
-        task.pos_del_ids.emplace_back(i);
-      }
-    }
+  ScanMetadata result;
+  result.schema = schema;
 
-    /*
-    An equality delete file must be applied to a data file when all of the following are true:
-    - The data file's data sequence number is strictly less than the delete's data sequence number
-    - The data file's partition (both spec id and partition values) is equal to the delete file's partition or the
-    delete file's partition spec is unpartitioned
-    */
-    for (size_t i = 0; i < result.equality_delete_entries.size(); ++i) {
-      const auto& eq_entry = result.equality_delete_entries[i];
-      if (eq_entry.sequence_number > task_entry.sequence_number) {
-        task.eq_del_ids.emplace_back(i);
-      }
-    }
+  ScanMetadata::Partition partition;
+  for (auto&& [seqnum, layer] : layers) {
+    partition.emplace_back(std::move(layer));
   }
+  result.partitions.emplace_back(std::move(partition));
 
   return result;
 }

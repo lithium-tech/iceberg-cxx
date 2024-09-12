@@ -14,7 +14,7 @@
 
 namespace iceberg::ice_tea {
 
-struct Task {
+struct DataEntry {
   struct Segment {
     Segment(int64_t off, int64_t len) : offset(off), length(len) {}
 
@@ -27,8 +27,6 @@ struct Task {
   std::optional<int64_t> GetColumnSize(int32_t field_id) const;
 
   ManifestEntry entry;
-  std::vector<int32_t> pos_del_ids;
-  std::vector<int32_t> eq_del_ids;
   std::vector<Segment> parts;  // empty <=> full file
 
   inline void SortParts() {
@@ -39,10 +37,16 @@ struct Task {
 };
 
 struct ScanMetadata {
+  struct Layer {
+    std::vector<DataEntry> data_entries_;
+    std::vector<ManifestEntry> positional_delete_entries_;
+    std::vector<ManifestEntry> equality_delete_entries_;
+  };
+
+  using Partition = std::vector<Layer>;
+
   std::shared_ptr<Schema> schema;
-  std::vector<Task> data_entries;
-  std::vector<ManifestEntry> positional_delete_entries;
-  std::vector<ManifestEntry> equality_delete_entries;
+  std::vector<Partition> partitions;
 
   arrow::Result<ColumnStats> GetColumnStats(const std::string& column_name) const;
 };
