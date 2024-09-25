@@ -1,5 +1,6 @@
 #include "tools/metadata_tree.h"
 
+#include <exception>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -7,7 +8,6 @@
 #include <utility>
 
 #include "iceberg/write.h"
-#include "tools/common.h"
 
 namespace iceberg::tools {
 
@@ -46,39 +46,84 @@ std::string FileType(iceberg::ContentFile::FileContent content) {
 }  // namespace
 
 MetadataTree::MetadataTree(const std::filesystem::path& path) : medatada_file_path(std::filesystem::absolute(path)) {
-  if (!std::filesystem::exists(medatada_file_path)) {
-    throw std::runtime_error("No metadata file '" + medatada_file_path.string() + "'");
-  }
-  std::ifstream input_metadata(medatada_file_path);
-  medatada_file.table_metadata = iceberg::ice_tea::ReadTableMetadataV2(input_metadata);
-  if (!medatada_file.table_metadata) {
-    throw std::runtime_error("Cannot read metadata file '" + medatada_file_path.string() + "'");
-  }
+  medatada_file = ReadMetadataFile(medatada_file_path);
 
-  for (size_t i = 0; i < medatada_file.ListsCount(); ++i) {
-    auto list_path = medatada_file.ManifestListPath(i);
+  auto files_path = medatada_file_path.parent_path();  // actual local files location
+  for (auto& snap : medatada_file.Snapshots()) {
+    AddSnapshot(snap, files_path);
+  }
+}
 
-    auto list_file_path = FilesPath() / list_path.filename();
-    if (!std::filesystem::exists(list_file_path)) {
-      throw std::runtime_error("No manifests list file '" + list_file_path.string() + "'");
+MetadataTree::MetadataTree(const std::filesystem::path& path, int64_t snapshot_id)
+    : medatada_file_path(std::filesystem::absolute(path)) {
+  medatada_file = ReadMetadataFile(medatada_file_path);
+
+  auto files_path = medatada_file_path.parent_path();  // actual local files location
+  for (auto& snap : medatada_file.Snapshots()) {
+    if (snap->snapshot_id == snapshot_id) {
+      AddSnapshot(snap, files_path);
+      break;
     }
-    std::ifstream list_input(list_file_path);
-    auto list = std::make_shared<ManifestList>(iceberg::ice_tea::ReadManifestList(list_input));
+  }
+}
 
-    if (manifests_lists.try_emplace(list_path.filename(), list).second) {
-      for (auto& man_file : *list) {
-        std::filesystem::path man_path = man_file.path;
+MetadataTree::MetadataTree(const std::filesystem::path& path, const std::string& ref)
+    : medatada_file_path(std::filesystem::absolute(path)) {
+  medatada_file = ReadMetadataFile(medatada_file_path);
 
-        if (!manifests.contains(man_path.filename())) {
-          auto man_file_path = FilesPath() / man_path.filename();
-          if (!std::filesystem::exists(man_file_path)) {
-            throw std::runtime_error("No manifest file '" + man_file_path.string() + "'");
-          }
-          std::ifstream list_input(man_file_path);
-          auto man = std::make_shared<Manifest>(iceberg::ice_tea::ReadManifestEntries(list_input));
+  auto& known_refs = medatada_file.Refs();
+  auto it = known_refs.find(ref);
+  if (it == known_refs.end()) {
+    throw std::runtime_error("No ref (branch or tag) '" + ref + "' in '" + path.string() + "'");
+  }
 
-          manifests.emplace(man_path.filename(), std::move(man));
+  int64_t snapshot_id = it->second.snapshot_id;
+
+  auto files_path = medatada_file_path.parent_path();  // actual local files location
+  for (auto& snap : medatada_file.Snapshots()) {
+    if (snap->snapshot_id == snapshot_id) {
+      AddSnapshot(snap, files_path);
+      break;
+    }
+  }
+}
+
+MetadataTree::MetadataFile MetadataTree::ReadMetadataFile(const std::filesystem::path& path) {
+  if (!std::filesystem::exists(path)) {
+    throw std::runtime_error("No metadata file '" + path.string() + "'");
+  }
+  std::ifstream input_metadata(path);
+  MetadataFile metadata;
+  metadata.table_metadata = iceberg::ice_tea::ReadTableMetadataV2(input_metadata);
+  if (!metadata.table_metadata) {
+    throw std::runtime_error("Cannot read metadata file '" + path.string() + "'");
+  }
+  return metadata;
+}
+
+void MetadataTree::AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std::filesystem::path& files_path) {
+  std::filesystem::path list_path = snap->manifest_list_location;
+
+  auto list_file_path = files_path / list_path.filename();
+  if (!std::filesystem::exists(list_file_path)) {
+    throw std::runtime_error("No manifests list file '" + list_file_path.string() + "'");
+  }
+  std::ifstream list_input(list_file_path);
+  auto list = std::make_shared<ManifestList>(iceberg::ice_tea::ReadManifestList(list_input));
+
+  if (manifests_lists.try_emplace(list_path.filename(), list).second) {
+    for (auto& man_file : *list) {
+      std::filesystem::path man_path = man_file.path;
+
+      if (!manifests.contains(man_path.filename())) {
+        auto man_file_path = files_path / man_path.filename();
+        if (!std::filesystem::exists(man_file_path)) {
+          throw std::runtime_error("No manifest file '" + man_file_path.string() + "'");
         }
+        std::ifstream list_input(man_file_path);
+        auto man = std::make_shared<Manifest>(iceberg::ice_tea::ReadManifestEntries(list_input));
+
+        manifests.emplace(man_path.filename(), std::move(man));
       }
     }
   }
@@ -181,7 +226,7 @@ void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_
       MetadataTree old_meta(path);
       prev_meta.emplace_back(std::move(old_meta));
     } catch (std::exception& ex) {
-      std::cerr << "Error while processing " << path << ": " << ex.what() << std::endl;
+      throw std::runtime_error("Error while processing '" + path.string() + "': " + ex.what());
     }
   }
 

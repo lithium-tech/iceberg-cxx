@@ -10,7 +10,9 @@ find_package(absl REQUIRED)
 find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--copy-dt-needed-entries")
+if(UNIX AND NOT APPLE)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--copy-dt-needed-entries")
+endif()
 
 include_directories(
   ${ICEBERG_SOURCE_DIR}

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <filesystem>
-#include <iostream>
 #include <map>
 #include <memory>
 #include <string>
@@ -46,11 +45,15 @@ class MetadataTree {
   struct MetadataFile {
     std::shared_ptr<iceberg::TableMetadataV2> table_metadata;
 
-    size_t ListsCount() const { return table_metadata->snapshots.size(); }
-    std::filesystem::path ManifestListPath(size_t i) { return table_metadata->snapshots[i]->manifest_list_location; }
+    const std::map<std::string, SnapshotRef>& Refs() const { return table_metadata->refs; }
+    const std::vector<std::shared_ptr<Snapshot>>& Snapshots() const { return table_metadata->snapshots; }
   };
 
+  static MetadataFile ReadMetadataFile(const std::filesystem::path& path);
+
   explicit MetadataTree(const std::filesystem::path& path);
+  MetadataTree(const std::filesystem::path& path, int64_t snapshot_id);
+  MetadataTree(const std::filesystem::path& path, const std::string& ref);
 
   std::map<int64_t, std::string> MetadataLog() const;
 
@@ -72,7 +75,7 @@ class MetadataTree {
   std::unordered_map<std::string, std::shared_ptr<ManifestList>> manifests_lists;
   std::unordered_map<std::string, std::shared_ptr<Manifest>> manifests;
 
-  std::filesystem::path FilesPath() const { return medatada_file_path.parent_path(); }
+  void AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std::filesystem::path& files_path);
 
   friend std::ostream& operator<<(std::ostream& os, const MetadataTree& meta_tree) {
     meta_tree.Print(os);
