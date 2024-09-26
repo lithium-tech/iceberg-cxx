@@ -8,6 +8,7 @@
 #include "arrow/status.h"
 #include "gen/src/batch.h"
 #include "gen/src/generators.h"
+#include "gen/src/processor.h"
 
 namespace gen {
 

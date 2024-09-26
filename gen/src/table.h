@@ -16,10 +16,6 @@ struct Table {
 
   virtual std::string Name() const = 0;
 
-  std::shared_ptr<ParquetWriter> GetParquetWriter(const std::string& output_dir) const {
-    return std::make_shared<ParquetWriter>(output_dir + "/" + Name() + ".parquet", MakeParquetSchema());
-  }
-
   std::shared_ptr<CSVWriter> GetCSVWriter(const std::string& output_dir,
                                           const arrow::csv::WriteOptions& options) const {
     return std::make_shared<CSVWriter>(output_dir + "/" + Name() + ".csv", MakeArrowSchema(), options);

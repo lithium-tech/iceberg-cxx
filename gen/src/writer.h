@@ -12,6 +12,7 @@
 #include "arrow/record_batch.h"
 #include "arrow/status.h"
 #include "gen/src/log.h"
+#include "gen/src/processor.h"
 #include "parquet/arrow/writer.h"
 #include "parquet/file_writer.h"
 #include "parquet/properties.h"
@@ -23,8 +24,6 @@ namespace gen {
 class Writer {
  public:
   virtual arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) = 0;
-
-  virtual arrow::Status Close() = 0;
 
   virtual ~Writer() = default;
 };
@@ -52,7 +51,13 @@ class ParquetWriter : public Writer {
     return arrow_writer_->WriteRecordBatch(*record_batch);
   }
 
-  arrow::Status Close() override {
+  ~ParquetWriter() {
+    auto status = Close();
+    LOG_NOT_OK(status);
+  }
+
+ private:
+  arrow::Status Close() {
     if (parquet_writer_) {
       parquet_writer_->Close();
       parquet_writer_.reset();
@@ -64,12 +69,6 @@ class ParquetWriter : public Writer {
     return arrow::Status::OK();
   }
 
-  ~ParquetWriter() {
-    auto status = Close();
-    LOG_NOT_OK(status);
-  }
-
- private:
   std::shared_ptr<arrow::io::FileOutputStream> outfile_;
   std::unique_ptr<parquet::ParquetFileWriter> parquet_writer_;
   std::unique_ptr<parquet::arrow::FileWriter> arrow_writer_;
@@ -102,7 +101,13 @@ class CSVWriter : public Writer {
     return arrow_writer_->WriteRecordBatch(*record_batch);
   }
 
-  arrow::Status Close() override {
+  ~CSVWriter() {
+    auto status = Close();
+    LOG_NOT_OK(status);
+  }
+
+ private:
+  arrow::Status Close() {
     if (arrow_writer_) {
       ARROW_RETURN_NOT_OK(arrow_writer_->Close());
       arrow_writer_ = nullptr;
@@ -110,12 +115,6 @@ class CSVWriter : public Writer {
     return arrow::Status::OK();
   }
 
-  ~CSVWriter() {
-    auto status = Close();
-    LOG_NOT_OK(status);
-  }
-
- private:
   const std::shared_ptr<arrow::Schema> schema_;
   std::shared_ptr<arrow::io::FileOutputStream> outfile_;
   std::shared_ptr<arrow::ipc::RecordBatchWriter> arrow_writer_;
@@ -135,6 +134,19 @@ class BatchSizeMaker {
   int64_t rows_done_ = 0;
   const int64_t batch_size_;
   const int64_t total_rows_;
+};
+
+class WriterProcessor : public IProcessor {
+ public:
+  WriterProcessor(std::shared_ptr<Writer> writer) : writer_(writer) {}
+
+  virtual arrow::Status Process(BatchPtr batch) {
+    ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(batch->Schema()->field_names()));
+    return writer_->WriteRecordBatch(arrow_batch);
+  }
+
+ private:
+  std::shared_ptr<Writer> writer_;
 };
 
 }  // namespace gen

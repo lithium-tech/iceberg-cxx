@@ -15,6 +15,7 @@
 #include "arrow/type_fwd.h"
 #include "gen/src/fields.h"
 #include "gen/src/generators.h"
+#include "gen/src/processor.h"
 #include "gen/src/program.h"
 #include "gen/src/table.h"
 #include "gen/src/writer.h"
@@ -584,10 +585,11 @@ struct GenerateFlags {
   int32_t scale_factor;
   int32_t arrow_batch_size;
   int64_t seed;
+  int32_t files_per_table;
 
   friend std::ostream& operator<<(std::ostream& os, const GenerateFlags& flags) {
     return os << "scale_factor: " << flags.scale_factor << ", arrow_batch_size: " << flags.arrow_batch_size
-              << ", seed: " << flags.seed;
+              << ", seed: " << flags.seed << ", files_per_table: " << flags.files_per_table;
   }
 };
 
@@ -646,14 +648,28 @@ arrow::Status Main(const WriteFlags& write_flags, const GenerateFlags& generate_
     const std::vector<std::shared_ptr<Table>>& tables = info.tables;
     uint64_t rows = info.rows;
 
-    std::vector<std::vector<std::shared_ptr<Writer>>> writers_per_table;
+    std::vector<std::vector<std::shared_ptr<IProcessor>>> writers_per_table;
     for (auto table : tables) {
-      std::vector<std::shared_ptr<Writer>> writers_for_table;
+      std::vector<std::shared_ptr<IProcessor>> writers_for_table;
       if (write_flags.write_parquet) {
-        writers_for_table.emplace_back(table->GetParquetWriter(write_flags.output_dir));
+        std::vector<std::shared_ptr<IProcessor>> writers;
+        for (int32_t i = 0; i < generate_flags.files_per_table; ++i) {
+          auto writer = std::make_shared<ParquetWriter>(
+              write_flags.output_dir + "/" + table->Name() + std::to_string(i) + ".parquet",
+              table->MakeParquetSchema());
+          writers.emplace_back(std::make_shared<WriterProcessor>(writer));
+        }
+        writers_for_table.emplace_back(std::make_shared<RoundRobinProcessor>(writers));
       }
       if (write_flags.write_csv) {
-        writers_for_table.emplace_back(table->GetCSVWriter(write_flags.output_dir, csv_writer_options));
+        std::vector<std::shared_ptr<IProcessor>> writers;
+        for (int32_t i = 0; i < generate_flags.files_per_table; ++i) {
+          auto writer =
+              std::make_shared<CSVWriter>(write_flags.output_dir + "/" + table->Name() + std::to_string(i) + ".csv",
+                                          table->MakeArrowSchema(), TpchCsvWriteOptions());
+          writers.emplace_back(std::make_shared<WriterProcessor>(writer));
+        }
+        writers_for_table.emplace_back(std::make_shared<RoundRobinProcessor>(writers));
       }
       writers_per_table.emplace_back(std::move(writers_for_table));
     }
@@ -666,9 +682,10 @@ arrow::Status Main(const WriteFlags& write_flags, const GenerateFlags& generate_
       for (size_t table_num = 0; table_num < tables.size(); table_num++) {
         auto table = tables[table_num];
         auto column_names = table->MakeColumnNames();
+        ARROW_ASSIGN_OR_RAISE(auto proj, batch->GetProjection(column_names));
         ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(column_names));
         for (auto writer : writers_per_table[table_num]) {
-          ARROW_RETURN_NOT_OK(writer->WriteRecordBatch(arrow_batch));
+          ARROW_RETURN_NOT_OK(writer->Process(proj));
         }
       }
     }
@@ -681,6 +698,7 @@ ABSL_FLAG(std::string, output_dir, "", "output directory");
 ABSL_FLAG(int64_t, seed, 0, "seed for random device");
 ABSL_FLAG(int32_t, arrow_batch_size, 8192, "arrow batch size (rows)");
 ABSL_FLAG(int32_t, scale_factor, 1, "scale factor");
+ABSL_FLAG(int32_t, files_per_table, 1, "files_per_table");
 ABSL_FLAG(bool, write_parquet, false, "write parquet files");
 ABSL_FLAG(bool, write_csv, false, "write csv files");
 
@@ -691,6 +709,7 @@ int main(int argc, char** argv) {
   int64_t seed = absl::GetFlag(FLAGS_seed);
   int32_t arrow_batch_size = absl::GetFlag(FLAGS_arrow_batch_size);
   int32_t scale_factor = absl::GetFlag(FLAGS_scale_factor);
+  int32_t files_per_table = absl::GetFlag(FLAGS_files_per_table);
   bool write_parquet = absl::GetFlag(FLAGS_write_parquet);
   bool write_csv = absl::GetFlag(FLAGS_write_csv);
 
@@ -705,7 +724,10 @@ int main(int argc, char** argv) {
   }
 
   WriteFlags write_flags{.output_dir = output_dir, .write_parquet = write_parquet, .write_csv = write_csv};
-  GenerateFlags generate_flags{.scale_factor = scale_factor, .arrow_batch_size = arrow_batch_size, .seed = seed};
+  GenerateFlags generate_flags{.scale_factor = scale_factor,
+                               .arrow_batch_size = arrow_batch_size,
+                               .seed = seed,
+                               .files_per_table = files_per_table};
 
   std::cerr << "write_flags: " << write_flags << std::endl;
   std::cerr << "generate_flags: " << generate_flags << std::endl;
