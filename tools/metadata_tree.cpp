@@ -45,6 +45,56 @@ std::string FileType(iceberg::ContentFile::FileContent content) {
 
 }  // namespace
 
+void MetadataTree::MetadataFile::RemoveOtherSnapshots(int64_t snapshot_id, bool switch_main) {
+  std::shared_ptr<Snapshot> snapshot;
+  for (auto& snap : table_metadata->snapshots) {
+    if (snap->snapshot_id == snapshot_id) {
+      snapshot = snap;
+      break;
+    }
+  }
+  if (!snapshot) {
+    throw std::runtime_error("no snapshot " + std::to_string(snapshot_id));
+  }
+  if (!snapshot->schema_id) {
+    throw std::runtime_error("snapshot " + std::to_string(snapshot_id) + " has no schema_id");
+  }
+
+  table_metadata->current_snapshot_id = snapshot_id;
+  table_metadata->snapshots = {snapshot};
+  table_metadata->current_schema_id = *snapshot->schema_id;
+
+  bool schema_found = false;
+  for (auto& schema : table_metadata->schemas) {
+    if (table_metadata->current_schema_id == schema->SchemaId()) {
+      table_metadata->schemas = std::vector<std::shared_ptr<Schema>>{schema};
+      schema_found = true;
+      break;
+    }
+  }
+  if (!schema_found) {
+    throw std::runtime_error("no schema " + std::to_string(table_metadata->current_schema_id) +
+                             " needed for shapshot " + std::to_string(snapshot_id));
+  }
+
+  for (auto& log : table_metadata->snapshot_log) {
+    if (log.snapshot_id == snapshot_id) {
+      table_metadata->snapshot_log = {log};
+      break;
+    }
+  }
+  std::map<std::string, SnapshotRef> refs;
+  for (auto& [name, ref] : table_metadata->refs) {
+    if (ref.snapshot_id == snapshot_id) {
+      refs.emplace(std::move(name), std::move(ref));
+    }
+  }
+  if (switch_main) {
+    refs.emplace("main", SnapshotRef{snapshot_id, "branch"});
+  }
+  table_metadata->refs = std::move(refs);
+}
+
 MetadataTree::MetadataTree(const std::filesystem::path& path) : medatada_file_path(std::filesystem::absolute(path)) {
   medatada_file = ReadMetadataFile(medatada_file_path);
 
@@ -59,12 +109,8 @@ MetadataTree::MetadataTree(const std::filesystem::path& path, int64_t snapshot_i
   medatada_file = ReadMetadataFile(medatada_file_path);
 
   auto files_path = medatada_file_path.parent_path();  // actual local files location
-  for (auto& snap : medatada_file.Snapshots()) {
-    if (snap->snapshot_id == snapshot_id) {
-      AddSnapshot(snap, files_path);
-      break;
-    }
-  }
+  medatada_file.RemoveOtherSnapshots(snapshot_id);
+  AddSnapshot(medatada_file.Snapshots()[0], files_path);
 }
 
 MetadataTree::MetadataTree(const std::filesystem::path& path, const std::string& ref)
@@ -80,12 +126,8 @@ MetadataTree::MetadataTree(const std::filesystem::path& path, const std::string&
   int64_t snapshot_id = it->second.snapshot_id;
 
   auto files_path = medatada_file_path.parent_path();  // actual local files location
-  for (auto& snap : medatada_file.Snapshots()) {
-    if (snap->snapshot_id == snapshot_id) {
-      AddSnapshot(snap, files_path);
-      break;
-    }
-  }
+  medatada_file.RemoveOtherSnapshots(snapshot_id);
+  AddSnapshot(medatada_file.Snapshots()[0], files_path);
 }
 
 MetadataTree::MetadataFile MetadataTree::ReadMetadataFile(const std::filesystem::path& path) {

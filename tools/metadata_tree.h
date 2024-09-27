@@ -47,6 +47,8 @@ class MetadataTree {
 
     const std::map<std::string, SnapshotRef>& Refs() const { return table_metadata->refs; }
     const std::vector<std::shared_ptr<Snapshot>>& Snapshots() const { return table_metadata->snapshots; }
+
+    void RemoveOtherSnapshots(int64_t snapshot_id, bool switch_main = true);
   };
 
   static MetadataFile ReadMetadataFile(const std::filesystem::path& path);
