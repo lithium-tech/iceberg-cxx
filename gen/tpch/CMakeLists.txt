@@ -1,6 +1,7 @@
 add_executable(tpch-gen
   list.cpp
   main.cpp
+  tables.cpp
   text.cpp
 )
 
