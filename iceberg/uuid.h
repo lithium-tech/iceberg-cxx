@@ -29,6 +29,8 @@ class Uuid {
   // Create null uuid
   Uuid();
 
+  Uuid(uint32_t time_low);
+
   explicit Uuid(const std::string& uuid);
 
   void Swap(Uuid& uuid);

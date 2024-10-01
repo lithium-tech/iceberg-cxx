@@ -18,6 +18,8 @@
 #include "iceberg/table_metadata.h"
 #include "tools/metadata_tree.h"
 
+#include "iceberg/uuid.h"
+
 namespace iceberg::tools {
 
 void EnsureSameSchema(std::shared_ptr<iceberg::Schema> src_schema, std::shared_ptr<iceberg::Schema> dst_schema,
@@ -126,10 +128,10 @@ struct FileStats {
 };
 
 struct MetadataNameMaker {
-  __int128 uuid_metadata = 1;
-  __int128 uuid_snapshot = 2;
-  __int128 uuid_added_data_manifest = 3;
-  __int128 uuid_added_delete_manifest = 4;
+  Uuid uuid_metadata = Uuid(1);
+  Uuid uuid_snapshot = Uuid(2);
+  Uuid uuid_added_data_manifest = Uuid(3);
+  Uuid uuid_added_delete_manifest = Uuid(4);
 
   static std::string StrUUID(__int128 x) {
     uint32_t p0 = x >> (12 * 8);
@@ -146,32 +148,32 @@ struct MetadataNameMaker {
 #endif
   }
 
-  static std::string MetadataName(int counter, __int128 uuid) {
+  static std::string MetadataName(int counter, Uuid uuid) {
 #if 0
-    return std::format("{:05}-{}.metadata.json", counter, StrUUID(uuid));
+    return std::format("{:05}-{}.metadata.json", counter, uuid.ToString());
 #else
     char buf[1024];
-    snprintf(buf, sizeof(buf), "%05d-%s.metadata.json", counter, StrUUID(uuid).c_str());
+    snprintf(buf, sizeof(buf), "%05d-%s.metadata.json", counter, uuid.ToString().c_str());
     return buf;
 #endif
   }
 
-  static std::string SnapshotName(int64_t snap_id, __int128 uuid) {
+  static std::string SnapshotName(int64_t snap_id, Uuid uuid) {
 #if 0
-    return std::format("snap-{}-{}-{}.avro", snap_id, 1, StrUUID(uuid));
+    return std::format("snap-{}-{}-{}.avro", snap_id, 1, uuid.ToString());
 #else
     char buf[1024];
-    snprintf(buf, sizeof(buf), "snap-%" PRId64 "-%d-%s.avro", snap_id, 1, StrUUID(uuid).c_str());
+    snprintf(buf, sizeof(buf), "snap-%" PRId64 "-%d-%s.avro", snap_id, 1, uuid.ToString().c_str());
     return buf;
 #endif
   }
 
-  static std::string ManifestName(__int128 uuid, int mode) {
+  static std::string ManifestName(Uuid uuid, int mode) {
 #if 0
     return std::format("{}-m{}.avro", StrUUID(uuid), mode);
 #else
     char buf[1024];
-    snprintf(buf, sizeof(buf), "%s-m%d.avro", StrUUID(uuid).c_str(), mode);
+    snprintf(buf, sizeof(buf), "%s-m%d.avro", uuid.ToString().c_str(), mode);
     return buf;
 #endif
   }
@@ -183,6 +185,7 @@ struct SnapshotMaker {
   std::shared_ptr<iceberg::TableMetadataV2> table_metadata;
   std::shared_ptr<iceberg::Snapshot> parent_snap;
   MetadataNameMaker name_maker;
+  mutable UuidGenerator uuid_generator;
 
   SnapshotMaker(const MetadataTree& dst_meta_tree, int64_t current_time_ms, int meta_seqno = 0);
 
@@ -244,8 +247,8 @@ struct SnapshotMaker {
   static std::map<std::string, std::string> MakeSummary(const FileStats& stats);
   std::shared_ptr<iceberg::Snapshot> MakeSnapshot(const std::string& path, const FileStats& stats) const;
 
-  std::string MakeMetadataName() const { return name_maker.MetadataName(MetaSeqno(), name_maker.uuid_metadata); }
-  std::string MakeSnapshotName() const { return name_maker.SnapshotName(SnapshotId(), name_maker.uuid_snapshot); }
+  std::string MakeMetadataName() const { return name_maker.MetadataName(MetaSeqno(), uuid_generator.CreateRandom()); }
+  std::string MakeSnapshotName() const { return name_maker.SnapshotName(SnapshotId(), uuid_generator.CreateRandom()); }
 };
 
 }  // namespace iceberg::tools

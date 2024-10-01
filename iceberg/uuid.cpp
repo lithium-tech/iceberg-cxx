@@ -37,6 +37,9 @@ Uuid::Uuid() : time_low_(0), time_mid_(0), time_hi_and_version_(0), clock_seq_(0
   std::fill(node_, node_ + sizeof(node_), 0);
 }
 
+Uuid::Uuid(uint32_t time_low) : time_low_(time_low) {
+}
+
 Uuid::Uuid(const std::string& uuid) { Parse(uuid); }
 
 void Uuid::Swap(Uuid& uuid) {
