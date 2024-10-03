@@ -100,12 +100,12 @@ struct S3Access {
 };
 
 class S3Client {
-  static constexpr int64_t CHUNK_SIZE = 1024 * 1024;
-
  public:
-  S3Client(bool force, arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error,
+  static constexpr int64_t CHUNK_SIZE = 8 * 1024 * 1024;
+
+  S3Client(bool force, arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error, int64_t chunk_size = CHUNK_SIZE,
            const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_",
-           const arrow::io::IOContext& io_context = arrow::io::default_io_context(), int64_t chunk_size = CHUNK_SIZE)
+           const arrow::io::IOContext& io_context = arrow::io::default_io_context())
       : s3init_(log_level), io_context_(io_context), copy_chunk_size_(chunk_size) {
     src_access_.LoadEnvOptions(src_env_prefix);
     S3Access::ClearEnvOptions("AWS_");
