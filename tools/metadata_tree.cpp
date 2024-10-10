@@ -179,28 +179,28 @@ std::map<int64_t, std::string> MetadataTree::MetadataLog() const {
   return out;
 }
 
-void MetadataTree::FixLocation(const StringFix& fix_meta, const StringFix& fix_data,
-                               std::unordered_map<std::string, std::string>& renames,
+void MetadataTree::FixLocation(const StringFix& fix_paths, std::unordered_map<std::string, std::string>& renames_data,
+                               std::unordered_map<std::string, std::string>& renames_meta,
                                std::unordered_map<std::string, std::string>& rename_locations) {
   auto& metadata = medatada_file.table_metadata;
-  FixString(metadata->location, fix_meta, rename_locations);
+  FixString(metadata->location, fix_paths, rename_locations);
 
   for (auto& snap : metadata->snapshots) {
-    FixString(snap->manifest_list_location, fix_meta, renames);
+    FixString(snap->manifest_list_location, fix_paths, renames_meta);
   }
   for (auto& meta_log : metadata->metadata_log) {
-    FixString(meta_log.metadata_file, fix_meta, renames);
+    FixString(meta_log.metadata_file, fix_paths, renames_meta);
   }
 
   for (auto& [_, man_list] : manifests_lists) {
     for (auto& man : *man_list) {
-      FixString(man.path, fix_meta, renames);
+      FixString(man.path, fix_paths, renames_meta);
     }
   }
 
   for (auto& [_, man] : manifests) {
     for (auto& file : *man) {
-      FixString(file.data_file.file_path, fix_data, renames);
+      FixString(file.data_file.file_path, fix_paths, renames_data);
     }
   }
 }
@@ -254,9 +254,9 @@ void MetadataTree::Print(std::ostream& os, size_t limit_files) const {
   }
 }
 
-void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_meta,
-                 const StringFix& fix_data, std::vector<MetadataTree>& prev_meta,
-                 std::unordered_map<std::string, std::string>& renames,
+void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_paths,
+                 std::vector<MetadataTree>& prev_meta, std::unordered_map<std::string, std::string>& renames_data,
+                 std::unordered_map<std::string, std::string>& renames_meta,
                  std::unordered_map<std::string, std::string>& rename_locations) {
   auto meta_log = meta_tree.MetadataLog();
   prev_meta.reserve(meta_log.size());
@@ -272,14 +272,22 @@ void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_
     }
   }
 
-  if (!fix_meta.NeedFix() && !fix_data.NeedFix()) {
+  if (!fix_paths.NeedFix()) {
     return;
   }
 
   for (auto& prev_tree : prev_meta) {
-    prev_tree.FixLocation(fix_meta, fix_data, renames, rename_locations);
+    prev_tree.FixLocation(fix_paths, renames_data, renames_meta, rename_locations);
   }
-  meta_tree.FixLocation(fix_meta, fix_data, renames, rename_locations);
+  meta_tree.FixLocation(fix_paths, renames_data, renames_meta, rename_locations);
+}
+
+void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_paths,
+                 std::vector<MetadataTree>& prev_meta) {
+  std::unordered_map<std::string, std::string> renames_data;
+  std::unordered_map<std::string, std::string> renames_meta;
+  std::unordered_map<std::string, std::string> renames_locations;
+  FixLocation(meta_tree, metadata_path, fix_paths, prev_meta, renames_data, renames_meta, renames_locations);
 }
 
 }  // namespace iceberg::tools

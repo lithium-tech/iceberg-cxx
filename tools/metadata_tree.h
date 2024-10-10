@@ -59,8 +59,8 @@ class MetadataTree {
 
   std::map<int64_t, std::string> MetadataLog() const;
 
-  void FixLocation(const StringFix& fix_meta, const StringFix& fix_data,
-                   std::unordered_map<std::string, std::string>& renames,
+  void FixLocation(const StringFix& fix_paths, std::unordered_map<std::string, std::string>& renames_data,
+                   std::unordered_map<std::string, std::string>& renames_meta,
                    std::unordered_map<std::string, std::string>& rename_locations);
 
   MetadataFile& GetMetadataFile() { return medatada_file; }
@@ -85,9 +85,11 @@ class MetadataTree {
   }
 };
 
-void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_meta,
-                 const StringFix& fix_data, std::vector<MetadataTree>& prev_meta,
-                 std::unordered_map<std::string, std::string>& renames,
+void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_paths,
+                 std::vector<MetadataTree>& prev_meta);
+void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_paths,
+                 std::vector<MetadataTree>& prev_meta, std::unordered_map<std::string, std::string>& renames_data,
+                 std::unordered_map<std::string, std::string>& renames_meta,
                  std::unordered_map<std::string, std::string>& rename_locations);
 
 }  // namespace iceberg::tools

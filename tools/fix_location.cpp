@@ -28,14 +28,11 @@ int main(int argc, char** argv) {
       throw std::runtime_error("No metadata set");
     }
 
-    StringFix fix_meta{old, fix};
+    StringFix fix_paths{old, fix};
     StringFix fix_data{old, fix};
     std::vector<MetadataTree> prev_meta;
-    std::unordered_map<std::string, std::string> renames;
-    std::unordered_map<std::string, std::string> unneded;
     MetadataTree meta_tree(metadata_path);
-    iceberg::tools::FixLocation(meta_tree, metadata_path, fix_meta, fix_data, prev_meta, renames, unneded);
-    unneded.clear();
+    iceberg::tools::FixLocation(meta_tree, metadata_path, fix_paths, prev_meta);
 
     for (auto& prev_tree : prev_meta) {
       std::cout << prev_tree << std::endl;
