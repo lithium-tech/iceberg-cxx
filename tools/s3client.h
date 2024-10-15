@@ -153,23 +153,35 @@ class S3Client {
     }
   }
 
-  bool CopyFiles(const std::unordered_map<std::string, std::string>& renames, const CopyOptions& opts) {
-    std::vector<arrow::fs::FileLocator> src;
-    std::vector<arrow::fs::FileLocator> dst;
+  void NamesToLocators(const std::unordered_map<std::string, std::string>& renames,
+                       std::vector<arrow::fs::FileLocator>& src, std::vector<arrow::fs::FileLocator>& dst) {
+    src.clear();
+    dst.clear();
     src.reserve(renames.size());
     dst.reserve(renames.size());
 
-    CheckFiles(renames, opts.no_check_dest, src, dst);
-    if (src.empty()) {
+    for (auto& [src_name, dst_name] : renames) {
+      src.push_back(SrcFileLocator(src_name));
+      dst.push_back(DstFileLocator(dst_name));
+    }
+  }
+
+  bool CopyFiles(const std::unordered_map<std::string, std::string>& renames, bool use_threads) {
+    if (renames.empty()) {
       return true;
     }
+
+    std::vector<arrow::fs::FileLocator> src;
+    std::vector<arrow::fs::FileLocator> dst;
+    NamesToLocators(renames, src, dst);
+
     MakeDstDirs(dst);
-    return CopyFiles(src, dst, opts);
+    return CopyFiles(src, dst, use_threads);
   }
 
   bool CopyFiles(const std::vector<arrow::fs::FileLocator>& src, const std::vector<arrow::fs::FileLocator>& dst,
-                 const CopyOptions& opts) {
-    auto status = arrow::fs::CopyFiles(src, dst, io_context_, copy_chunk_size_, opts.use_threads);
+                 bool use_threads) {
+    auto status = arrow::fs::CopyFiles(src, dst, io_context_, copy_chunk_size_, use_threads);
     if (!status.ok()) {
       throw std::runtime_error(status.ToString());
     }
@@ -226,42 +238,6 @@ class S3Client {
     return out;
   }
 
-  static bool CheckSame(const arrow::fs::FileInfo& src, const arrow::fs::FileInfo& dst) {
-    // TODO(chertus): compare checksums
-    return src.size() == dst.size();
-  }
-
-  void CheckFiles(const std::unordered_map<std::string, std::string>& renames, bool force_override,
-                  std::vector<arrow::fs::FileLocator>& out_src, std::vector<arrow::fs::FileLocator>& out_dst) const {
-    std::vector<arrow::fs::FileLocator> src_paths;
-    src_paths.reserve(renames.size());
-    std::vector<arrow::fs::FileLocator> dst_paths;
-    dst_paths.reserve(renames.size());
-
-    for (auto& [src_name, dst_name] : renames) {
-      src_paths.push_back(SrcFileLocator(src_name));
-      dst_paths.push_back(DstFileLocator(dst_name));
-    }
-
-    std::vector<arrow::fs::FileInfo> src_infos = GetFileInfos(src_paths);
-    std::vector<arrow::fs::FileInfo> dst_infos;
-    if (!force_override) {
-      dst_infos = GetFileInfos(dst_paths);
-    }
-
-    for (size_t i = 0; i < src_infos.size(); ++i) {
-      auto& src_info = src_infos[i];
-      bool need_copy = src_info.IsFile();
-      if (need_copy && !force_override) {
-        need_copy = !CheckSame(src_info, dst_infos[i]);
-      }
-      if (need_copy) {
-        out_src.emplace_back(std::move(src_paths[i]));
-        out_dst.emplace_back(std::move(dst_paths[i]));
-      }
-    }
-  }
-
   static std::string CropPrefix(const std::string& src, const std::string& prefix = "://") {
     auto pos = src.find(prefix);
     if (pos != std::string::npos) {
@@ -301,7 +277,7 @@ inline void CopyDirOrThrow(std::shared_ptr<S3Client> s3client, const std::string
 inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_map<std::string, std::string>& renames,
                       const CopyOptions& opts) {
   if (s3client) {
-    if (!s3client->CopyFiles(renames, opts)) {
+    if (!s3client->CopyFiles(renames, opts.use_threads)) {
       return false;
     }
   } else {
