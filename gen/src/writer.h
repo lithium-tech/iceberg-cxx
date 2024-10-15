@@ -138,12 +138,14 @@ class BatchSizeMaker {
 
 class WriterProcessor : public IProcessor {
  public:
-  WriterProcessor(std::shared_ptr<Writer> writer) : writer_(writer) {}
+  WriterProcessor(std::shared_ptr<Writer> writer)
+      : writer_(writer) {}
 
-  virtual arrow::Status Process(BatchPtr batch) {
+  arrow::Status Process(BatchPtr batch) override {
     ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(batch->Schema()->field_names()));
     return writer_->WriteRecordBatch(arrow_batch);
   }
+
 
  private:
   std::shared_ptr<Writer> writer_;

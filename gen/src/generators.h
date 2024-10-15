@@ -3,13 +3,16 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <random>
 #include <stdexcept>
 
 #include "arrow/array.h"
+#include "arrow/array/array_binary.h"
 #include "arrow/array/array_decimal.h"
+#include "arrow/array/array_primitive.h"
 #include "arrow/array/builder_binary.h"
 #include "arrow/array/builder_decimal.h"
 #include "arrow/array/builder_primitive.h"
@@ -49,6 +52,16 @@ class UniformInt64Distribution {
 
  private:
   std::uniform_int_distribution<> uid_;
+};
+
+class BernouliDistribution {
+ public:
+  BernouliDistribution(double p) : uid_(p) {}
+
+  int64_t operator()(RandomDevice& random_device) { return uid_(random_device); }
+
+ private:
+  std::bernoulli_distribution uid_;
 };
 
 using ArrayPtr = std::shared_ptr<arrow::Array>;
@@ -93,8 +106,8 @@ namespace internal {
 template <typename ArrowType>
 class ArrowTrait {
  public:
-  using ValueType = ArrowType::c_type;
-  using BuilderType = arrow::TypeTraits<ArrowType>::BuilderType;
+  using ValueType = typename ArrowType::c_type;
+  using BuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 };
 
 template <>
@@ -202,7 +215,7 @@ class StringFromListGenerator : public TrivialStringGenerator {
 template <typename ArrowType>
 class ConstantGenerator : public TrivialGenerator<ArrowType> {
  public:
-  using ValueType = TrivialGenerator<ArrowType>::ValueType;
+  using ValueType = typename TrivialGenerator<ArrowType>::ValueType;
 
   ConstantGenerator(ValueType value) : value_(value) {}
 
@@ -241,7 +254,7 @@ template <typename InputArrowType>
 class ToStringGenerator : public WithArgsStringGenerator {
  public:
   using InputArrayType = arrow::NumericArray<InputArrowType>;
-  using InputValueType = InputArrowType::c_type;
+  using InputValueType = typename InputArrowType::c_type;
 
   static_assert(std::is_same_v<arrow::Int32Type, InputArrowType> || std::is_same_v<arrow::Int64Type, InputArrowType>);
 
@@ -318,7 +331,7 @@ class ConcatenateGenerator : public WithArgsStringGenerator {
 
 template <typename ArrowType>
 class UniqueIntegerGenerator : public TrivialGenerator<ArrowType> {
-  using ValueType = TrivialGenerator<ArrowType>::ValueType;
+  using ValueType = typename TrivialGenerator<ArrowType>::ValueType;
 
  public:
   UniqueIntegerGenerator() {}
@@ -331,7 +344,7 @@ class UniqueIntegerGenerator : public TrivialGenerator<ArrowType> {
 
 template <typename ArrowType>
 class FromArrayGenerator : public TrivialGenerator<ArrowType> {
-  using ValueType = TrivialGenerator<ArrowType>::ValueType;
+  using ValueType = typename TrivialGenerator<ArrowType>::ValueType;
 
  public:
   FromArrayGenerator(const std::vector<ValueType>& values) : values_(values) {}
@@ -349,9 +362,24 @@ class FromArrayGenerator : public TrivialGenerator<ArrowType> {
 };
 
 template <typename ArrowType>
+class BernouliGenerator : public TrivialGenerator<ArrowType> {
+ public:
+  using ValueType = typename TrivialGenerator<ArrowType>::ValueType;
+
+ public:
+  BernouliGenerator(double p, RandomDevice& random_device) : random_device_(random_device), generator_(p) {}
+
+  ValueType GenerateValue() override { return static_cast<ValueType>(generator_(random_device_)); }
+
+ private:
+  RandomDevice& random_device_;
+  BernouliDistribution generator_;
+};
+
+template <typename ArrowType>
 class UniformIntegerGenerator : public TrivialGenerator<ArrowType> {
  public:
-  using ValueType = TrivialGenerator<ArrowType>::ValueType;
+  using ValueType = typename TrivialGenerator<ArrowType>::ValueType;
 
   static_assert(std::is_same_v<int32_t, ValueType> || std::is_same_v<int64_t, ValueType>);
 
@@ -368,7 +396,7 @@ class UniformIntegerGenerator : public TrivialGenerator<ArrowType> {
 
 template <typename OutputArrowType, typename LhsArrowType, typename RhsArrowType>
 class MultiplyGenerator : public WithArgsGenerator<OutputArrowType> {
-  using ValueType = WithArgsGenerator<OutputArrowType>::ValueType;
+  using ValueType = typename WithArgsGenerator<OutputArrowType>::ValueType;
   using LhsArrowArray = arrow::NumericArray<LhsArrowType>;
   using RhsArrowArray = arrow::NumericArray<RhsArrowType>;
 
@@ -387,7 +415,7 @@ class MultiplyGenerator : public WithArgsGenerator<OutputArrowType> {
 
 template <typename OutputArrowType, typename LhsArrowType, typename RhsArrowType>
 class AddGenerator : public WithArgsGenerator<OutputArrowType> {
-  using ValueType = WithArgsGenerator<OutputArrowType>::ValueType;
+  using ValueType = typename WithArgsGenerator<OutputArrowType>::ValueType;
   using LhsArrowArray = arrow::NumericArray<LhsArrowType>;
   using RhsArrowArray = arrow::NumericArray<RhsArrowType>;
 
@@ -406,7 +434,7 @@ class AddGenerator : public WithArgsGenerator<OutputArrowType> {
 
 template <typename ArrowType>
 class CopyGenerator : public TypedGenerator<ArrowType> {
-  using ValueType = TypedGenerator<ArrowType>::ValueType;
+  using ValueType = typename TypedGenerator<ArrowType>::ValueType;
   using ArrayType = arrow::NumericArray<ArrowType>;
 
  public:

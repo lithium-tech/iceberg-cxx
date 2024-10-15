@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iterator>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -33,6 +34,14 @@ class Batch {
       throw std::runtime_error("Index " + std::to_string(i) + " is out of bounds");
     }
     return arrays_[i];
+  }
+
+  std::shared_ptr<arrow::Array> ColumnByName(const std::string& column_name) const {
+    auto it = std::find(column_names_.begin(), column_names_.end(), column_name);
+    if (it == column_names_.end()) {
+      throw std::runtime_error("Column " + column_name + " not found in columns");
+    }
+    return Column(std::distance(column_names_.begin(), it));
   }
 
   std::shared_ptr<arrow::Schema> Schema() const {
