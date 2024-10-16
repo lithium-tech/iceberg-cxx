@@ -1,5 +1,7 @@
 #include "gen/tpch/text.h"
 
+#include <utility>
+
 #include "arrow/type_fwd.h"
 #include "gen/src/generators.h"
 #include "gen/tpch/list.h"

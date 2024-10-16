@@ -30,9 +30,9 @@ class Assignment {
 
 struct Projection {
  public:
-  Projection(const std::vector<std::string>& columns) : columns_(columns.begin(), columns.end()) {}
+  explicit Projection(const std::vector<std::string>& columns) : columns_(columns.begin(), columns.end()) {}
 
-  Projection(const std::vector<std::string_view>& columns) : columns_(columns.begin(), columns.end()) {}
+  explicit Projection(const std::vector<std::string_view>& columns) : columns_(columns.begin(), columns.end()) {}
 
   arrow::Status Apply(BatchPtr& batch) {
     ARROW_ASSIGN_OR_RAISE(batch, batch->GetProjection(columns_));

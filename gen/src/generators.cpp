@@ -1,5 +1,8 @@
 #include "gen/src/generators.h"
 
+#include <string>
+#include <vector>
+
 namespace gen {
 
 StringFromListGenerator::StringFromListGenerator(const List& list, RandomDevice& random_device)

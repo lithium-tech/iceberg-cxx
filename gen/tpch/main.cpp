@@ -29,7 +29,7 @@
 #include "gen/tpch/text.h"
 #include "parquet/schema.h"
 
-using namespace gen;
+namespace gen {
 
 arrow::csv::WriteOptions TpchCsvWriteOptions() {
   arrow::csv::WriteOptions options;
@@ -257,6 +257,8 @@ arrow::Status Main(const WriteFlags& write_flags, const GenerateFlags& generate_
   return arrow::Status::OK();
 }
 
+}  // namespace gen
+
 ABSL_FLAG(std::string, output_dir, "", "output directory");
 ABSL_FLAG(int64_t, seed, 0, "seed for random device");
 ABSL_FLAG(int32_t, arrow_batch_size, 8192, "arrow batch size (rows)");
@@ -298,16 +300,16 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  WriteFlags write_flags{.output_dir = output_dir, .write_parquet = write_parquet, .write_csv = write_csv};
-  GenerateFlags generate_flags{.scale_factor = scale_factor,
-                               .arrow_batch_size = arrow_batch_size,
-                               .seed = seed,
-                               .files_per_table = files_per_table,
-                               .use_equality_deletes = use_equality_deletes,
-                               .equality_deletes_columns_count = equality_deletes_columns_count,
-                               .equality_deletes_rows_scale = equality_deletes_rows_scale,
-                               .use_positional_deletes = use_positional_deletes,
-                               .positional_deletes_rows_scale = positional_deletes_rows_scale};
+  gen::WriteFlags write_flags{.output_dir = output_dir, .write_parquet = write_parquet, .write_csv = write_csv};
+  gen::GenerateFlags generate_flags{.scale_factor = scale_factor,
+                                    .arrow_batch_size = arrow_batch_size,
+                                    .seed = seed,
+                                    .files_per_table = files_per_table,
+                                    .use_equality_deletes = use_equality_deletes,
+                                    .equality_deletes_columns_count = equality_deletes_columns_count,
+                                    .equality_deletes_rows_scale = equality_deletes_rows_scale,
+                                    .use_positional_deletes = use_positional_deletes,
+                                    .positional_deletes_rows_scale = positional_deletes_rows_scale};
 
   std::cerr << "write_flags: " << write_flags << std::endl;
   std::cerr << "generate_flags: " << generate_flags << std::endl;

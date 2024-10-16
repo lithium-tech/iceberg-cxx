@@ -1,5 +1,9 @@
 #include "gen/tpch/list.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace gen {
 
 namespace tpch {

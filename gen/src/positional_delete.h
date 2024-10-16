@@ -1,7 +1,10 @@
 #pragma once
 
+#include <memory>
 #include <numeric>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "arrow/array/array_base.h"
 #include "arrow/array/array_binary.h"

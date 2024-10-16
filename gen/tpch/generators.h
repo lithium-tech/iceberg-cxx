@@ -3,6 +3,10 @@
 #include <arrow/status.h>
 
 #include <cstring>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "arrow/array/array_binary.h"
 #include "arrow/array/builder_binary.h"
@@ -177,7 +181,7 @@ namespace part {
 
 class RetailPriceGenerator : public WithArgsInt64Generator {
  public:
-  RetailPriceGenerator(std::string_view arg_name)
+  explicit RetailPriceGenerator(std::string_view arg_name)
       : WithArgsInt64Generator({std::make_shared<arrow::Field>(std::string(arg_name), arrow::int32())}) {}
 
   int64_t GenerateValue(BatchPtr record_batch, uint64_t row_index) override {

@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "arrow/array/array_primitive.h"
@@ -15,9 +16,7 @@
 
 namespace gen {
 
-namespace {
-
-std::shared_ptr<arrow::BooleanArray> GetInversedMask(const std::shared_ptr<arrow::BooleanArray>& mask) {
+inline std::shared_ptr<arrow::BooleanArray> GetInversedMask(const std::shared_ptr<arrow::BooleanArray>& mask) {
   arrow::BooleanBuilder builder;
   std::shared_ptr<arrow::BooleanArray> array;
   for (int64_t i = 0; i < mask->length(); ++i) {
@@ -34,8 +33,6 @@ std::shared_ptr<arrow::BooleanArray> GetInversedMask(const std::shared_ptr<arrow
 
   return array;
 }
-
-}  // namespace
 
 class EqualityDeleteProcessor : public IProcessor {
  public:

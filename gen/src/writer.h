@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "arrow/csv/api.h"
 #include "arrow/csv/options.h"
@@ -138,14 +140,12 @@ class BatchSizeMaker {
 
 class WriterProcessor : public IProcessor {
  public:
-  WriterProcessor(std::shared_ptr<Writer> writer)
-      : writer_(writer) {}
+  explicit WriterProcessor(std::shared_ptr<Writer> writer) : writer_(writer) {}
 
   arrow::Status Process(BatchPtr batch) override {
     ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(batch->Schema()->field_names()));
     return writer_->WriteRecordBatch(arrow_batch);
   }
-
 
  private:
   std::shared_ptr<Writer> writer_;

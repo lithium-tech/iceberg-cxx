@@ -1,6 +1,7 @@
 #include "gen/tpch/tables.h"
 
 #include <string_view>
+#include <vector>
 
 #include "gen/src/program.h"
 #include "gen/src/table.h"

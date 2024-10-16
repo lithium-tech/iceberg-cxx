@@ -3,6 +3,8 @@
 #include <arrow/status.h>
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "gen/src/batch.h"
 
@@ -17,7 +19,8 @@ class IProcessor {
 
 class RoundRobinProcessor : public IProcessor {
  public:
-  RoundRobinProcessor(std::vector<std::shared_ptr<IProcessor>> processors) : processors_(std::move(processors)) {}
+  explicit RoundRobinProcessor(std::vector<std::shared_ptr<IProcessor>> processors)
+      : processors_(std::move(processors)) {}
 
   arrow::Status Process(BatchPtr batch) override {
     ARROW_RETURN_NOT_OK(processors_[processor_to_use_]->Process(batch));
@@ -34,7 +37,7 @@ class RoundRobinProcessor : public IProcessor {
 
 class AllProcessor : public IProcessor {
  public:
-  explicit AllProcessor() {}
+  AllProcessor() {}
 
   arrow::Status Process(BatchPtr batch) override {
     for (auto& processor : processors_) {

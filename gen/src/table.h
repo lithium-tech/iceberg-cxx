@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "gen/src/fields.h"
 #include "gen/src/writer.h"

@@ -8,6 +8,8 @@
 #include <memory>
 #include <random>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "arrow/array.h"
 #include "arrow/array/array_binary.h"
@@ -32,7 +34,7 @@ class RandomDevice {
   static constexpr result_type min() { return std::numeric_limits<result_type>::min(); }
   static constexpr result_type max() { return std::numeric_limits<result_type>::max(); }
 
-  RandomDevice(int64_t seed) : rng_(seed) {}
+  explicit RandomDevice(int64_t seed) : rng_(seed) {}
 
   uint64_t operator()() { return rng_(); }
 
@@ -56,7 +58,7 @@ class UniformInt64Distribution {
 
 class BernouliDistribution {
  public:
-  BernouliDistribution(double p) : uid_(p) {}
+  explicit BernouliDistribution(double p) : uid_(p) {}
 
   int64_t operator()(RandomDevice& random_device) { return uid_(random_device); }
 
@@ -127,9 +129,9 @@ class TypedGenerator : public Generator {
 
   TypedGenerator() = default;
 
-  TypedGenerator(const arrow::FieldVector& fields) : Generator(fields) {}
+  explicit TypedGenerator(const arrow::FieldVector& fields) : Generator(fields) {}
 
-  virtual arrow::Result<ArrayPtr> Generate(BatchPtr batch) final {
+  arrow::Result<ArrayPtr> Generate(BatchPtr batch) final {
     ARROW_ASSIGN_OR_RAISE(batch, PrepareBatch(batch));
 
     BuilderType builder;
@@ -152,7 +154,7 @@ class TrivialGenerator : public TypedGenerator<ArrowType> {
  public:
   using ValueType = typename TypedGenerator<ArrowType>::ValueType;
 
-  virtual arrow::Result<std::vector<ValueType>> GenerateValues(BatchPtr batch) final {
+  arrow::Result<std::vector<ValueType>> GenerateValues(BatchPtr batch) final {
     std::vector<ValueType> result;
     result.reserve(batch->NumRows());
     for (int64_t i = 0; i < batch->NumRows(); ++i) {
@@ -174,9 +176,9 @@ class WithArgsGenerator : public TypedGenerator<ArrowType> {
  public:
   using ValueType = typename TypedGenerator<ArrowType>::ValueType;
 
-  WithArgsGenerator(const arrow::FieldVector& fields) : TypedGenerator<ArrowType>(fields) {}
+  explicit WithArgsGenerator(const arrow::FieldVector& fields) : TypedGenerator<ArrowType>(fields) {}
 
-  virtual arrow::Result<std::vector<ValueType>> GenerateValues(BatchPtr batch) final {
+  arrow::Result<std::vector<ValueType>> GenerateValues(BatchPtr batch) final {
     std::vector<ValueType> result;
     result.reserve(batch->NumRows());
     for (int64_t i = 0; i < batch->NumRows(); ++i) {
@@ -217,7 +219,7 @@ class ConstantGenerator : public TrivialGenerator<ArrowType> {
  public:
   using ValueType = typename TrivialGenerator<ArrowType>::ValueType;
 
-  ConstantGenerator(ValueType value) : value_(value) {}
+  explicit ConstantGenerator(ValueType value) : value_(value) {}
 
   ValueType GenerateValue() override { return value_; }
 
@@ -227,7 +229,7 @@ class ConstantGenerator : public TrivialGenerator<ArrowType> {
 
 class RepetitionLevelsGenerator : public Int32Generator {
  public:
-  RepetitionLevelsGenerator(const std::string& field_name)
+  explicit RepetitionLevelsGenerator(const std::string& field_name)
       : Int32Generator({std::make_shared<arrow::Field>(field_name, arrow::int32())}) {}
 
   arrow::Result<std::vector<int32_t>> GenerateValues(BatchPtr record_batch) override {
@@ -258,7 +260,7 @@ class ToStringGenerator : public WithArgsStringGenerator {
 
   static_assert(std::is_same_v<arrow::Int32Type, InputArrowType> || std::is_same_v<arrow::Int64Type, InputArrowType>);
 
-  ToStringGenerator(std::string_view arg_name)
+  explicit ToStringGenerator(std::string_view arg_name)
       : WithArgsStringGenerator(
             {std::make_shared<arrow::Field>(std::string(arg_name), std::make_shared<InputArrowType>())}) {}
 
@@ -347,7 +349,7 @@ class FromArrayGenerator : public TrivialGenerator<ArrowType> {
   using ValueType = typename TrivialGenerator<ArrowType>::ValueType;
 
  public:
-  FromArrayGenerator(const std::vector<ValueType>& values) : values_(values) {}
+  explicit FromArrayGenerator(const std::vector<ValueType>& values) : values_(values) {}
 
   ValueType GenerateValue() override {
     if (last_index_ >= values_.size()) {
@@ -466,7 +468,7 @@ class AggregatorGenerator : public TypedGenerator<ArrowType> {
  public:
   using ValueType = typename TypedGenerator<ArrowType>::ValueType;
 
-  AggregatorGenerator(const arrow::FieldVector& fields) : TypedGenerator<ArrowType>(fields) {}
+  explicit AggregatorGenerator(const arrow::FieldVector& fields) : TypedGenerator<ArrowType>(fields) {}
 
   arrow::Result<std::vector<ValueType>> GenerateValues(BatchPtr record_batch) override {
     auto levels_column = std::static_pointer_cast<arrow::Int32Array>(record_batch->Column(0));
