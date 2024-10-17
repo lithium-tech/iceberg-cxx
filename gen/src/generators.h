@@ -9,6 +9,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "arrow/array.h"
@@ -212,6 +213,32 @@ class StringFromListGenerator : public TrivialStringGenerator {
   std::vector<std::string> values_;
   std::vector<int64_t> cumulative_weights_;
   UniformInt64Distribution generator_;
+};
+
+class StringFromCharsetGenerator : public TrivialStringGenerator {
+ public:
+  StringFromCharsetGenerator(uint64_t min_length, uint64_t max_length, std::string charset, RandomDevice& random_device)
+      : random_device_(random_device),
+        length_distribution_(min_length, max_length),
+        charset_(std::move(charset)),
+        char_distribution_(0, charset_.size() - 1) {}
+
+  std::string GenerateValue() {
+    uint64_t length = length_distribution_(random_device_);
+    std::string result;
+    result.reserve(length);
+    for (size_t i = 0; i < length; ++i) {
+      result += charset_[char_distribution_(random_device_)];
+    }
+    return result;
+  }
+
+ private:
+  RandomDevice& random_device_;
+  UniformInt64Distribution length_distribution_;
+
+  std::string charset_;
+  UniformInt64Distribution char_distribution_;
 };
 
 template <typename ArrowType>

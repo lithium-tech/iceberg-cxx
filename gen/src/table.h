@@ -18,10 +18,12 @@ struct Table {
 
   virtual std::string Name() const = 0;
 
+#ifdef HAS_ARROW_CSV
   std::shared_ptr<CSVWriter> GetCSVWriter(const std::string& output_dir,
                                           const arrow::csv::WriteOptions& options) const {
     return std::make_shared<CSVWriter>(output_dir + "/" + Name() + ".csv", MakeArrowSchema(), options);
   }
+#endif
 
   std::vector<std::string> MakeColumnNames() const {
     std::vector<std::string> result;

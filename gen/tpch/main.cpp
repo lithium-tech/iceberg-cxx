@@ -226,6 +226,7 @@ arrow::Status Main(const WriteFlags& write_flags, const GenerateFlags& generate_
         }
         processor_root->AttachChild(std::make_shared<RoundRobinProcessor>(writers));
       }
+#ifdef HAS_ARROW_CSV
       if (write_flags.write_csv) {
         std::vector<std::shared_ptr<IProcessor>> writers;
         for (int32_t i = 0; i < generate_flags.files_per_table; ++i) {
@@ -236,6 +237,7 @@ arrow::Status Main(const WriteFlags& write_flags, const GenerateFlags& generate_
         }
         processor_root->AttachChild(std::make_shared<RoundRobinProcessor>(writers));
       }
+#endif
       processor_roots.push_back(processor_root);
     }
 
@@ -282,6 +284,13 @@ int main(int argc, char** argv) {
   int32_t files_per_table = absl::GetFlag(FLAGS_files_per_table);
   bool write_parquet = absl::GetFlag(FLAGS_write_parquet);
   bool write_csv = absl::GetFlag(FLAGS_write_csv);
+
+  if (write_csv) {
+#ifndef HAS_ARROW_CSV
+    std::cout << "arrow built without csv" << std::endl;
+    return 1;
+#endif
+  }
 
   bool use_equality_deletes = absl::GetFlag(FLAGS_use_equality_deletes);
   int32_t equality_deletes_columns_count = absl::GetFlag(FLAGS_equality_deletes_columns_count);

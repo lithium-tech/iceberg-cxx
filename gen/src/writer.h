@@ -6,9 +6,16 @@
 #include <string>
 #include <utility>
 
+#if __has_include("arrow/csv/api.h")
+#define HAS_ARROW_CSV
+#endif
+
+#ifdef HAS_ARROW_CSV
 #include "arrow/csv/api.h"
 #include "arrow/csv/options.h"
 #include "arrow/csv/writer.h"
+#endif
+
 #include "arrow/io/file.h"
 #include "arrow/ipc/writer.h"
 #include "arrow/record_batch.h"
@@ -76,6 +83,7 @@ class ParquetWriter : public Writer {
   std::unique_ptr<parquet::arrow::FileWriter> arrow_writer_;
 };
 
+#ifdef HAS_ARROW_CSV
 class CSVWriter : public Writer {
  public:
   CSVWriter(const std::string& filename, const std::shared_ptr<arrow::Schema> schema,
@@ -121,6 +129,7 @@ class CSVWriter : public Writer {
   std::shared_ptr<arrow::io::FileOutputStream> outfile_;
   std::shared_ptr<arrow::ipc::RecordBatchWriter> arrow_writer_;
 };
+#endif
 
 class BatchSizeMaker {
  public:

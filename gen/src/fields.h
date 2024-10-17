@@ -14,6 +14,12 @@ static constexpr int kUnsetLength = -1;
 static constexpr int kUnsetPrecision = -1;
 static constexpr int kUnsetScale = -1;
 
+inline std::shared_ptr<parquet::schema::Node> MakePrimitiveInt16Node(std::string_view name, int32_t field_id = -1) {
+  return parquet::schema::PrimitiveNode::Make(std::string(name), parquet::Repetition::REQUIRED, parquet::Type::INT32,
+                                              parquet::ConvertedType::INT_16, kUnsetLength, kUnsetPrecision,
+                                              kUnsetScale, field_id);
+}
+
 inline std::shared_ptr<parquet::schema::Node> MakePrimitiveInt32Node(std::string_view name, int32_t field_id = -1) {
   return parquet::schema::PrimitiveNode::Make(std::string(name), parquet::Repetition::REQUIRED, parquet::Type::INT32,
                                               parquet::ConvertedType::INT_32, kUnsetLength, kUnsetPrecision,
@@ -70,6 +76,8 @@ inline std::shared_ptr<parquet::schema::Node> ParquetNodeFromArrowField(const st
   switch (field->type()->id()) {
     case arrow::Type::STRING:
       return MakeStringNode(field->name());
+    case arrow::Type::INT16:
+      return MakePrimitiveInt16Node(field->name());
     case arrow::Type::INT32:
       return MakePrimitiveInt32Node(field->name());
     case arrow::Type::INT64:

@@ -61,28 +61,12 @@ class PhoneGenerator : public WithArgsStringGenerator {
   UniformInt64Distribution generator_four_digits_;
 };
 
-class VStringGenerator : public TrivialStringGenerator {
+class VStringGenerator : public StringFromCharsetGenerator {
  public:
   VStringGenerator(uint64_t min_length, uint64_t max_length, RandomDevice& random_device)
-      : random_device_(random_device),
-        length_distribution_(min_length, max_length),
-        char_distribution_(0, kCharacterSet.size() - 1) {}
-
-  std::string GenerateValue() {
-    uint64_t length = length_distribution_(random_device_);
-    std::string result;
-    result.reserve(length);
-    for (size_t i = 0; i < length; ++i) {
-      result += kCharacterSet[char_distribution_(random_device_)];
-    }
-    return result;
-  }
+      : StringFromCharsetGenerator(min_length, max_length, std::string(kCharacterSet), random_device) {}
 
  private:
-  RandomDevice& random_device_;
-  UniformInt64Distribution length_distribution_;
-  UniformInt64Distribution char_distribution_;
-
   static constexpr std::string_view kCharacterSet = "0123456789abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ,";
   static_assert(kCharacterSet.size() == 2 * 26 + 10 + 2);
 };
