@@ -180,8 +180,6 @@ struct MetadataNameMaker {
 };
 
 struct SnapshotMaker {
-  using Manifest = std::vector<iceberg::ManifestEntry>;
-
   std::shared_ptr<iceberg::TableMetadataV2> table_metadata;
   std::shared_ptr<iceberg::Snapshot> parent_snap;
   MetadataNameMaker name_maker;
@@ -194,9 +192,9 @@ struct SnapshotMaker {
                          const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
                          const std::vector<std::string>& added_data_files,
                          const std::vector<std::string>& added_delete_files) {
-    std::vector<iceberg::ManifestEntry> added_data_entries =
+    Manifest added_data_entries =
         MakeEntries(local_data_location, metadata_location, added_data_files, iceberg::ContentFile::FileContent::kData);
-    std::vector<iceberg::ManifestEntry> added_delete_entries =
+    Manifest added_delete_entries =
         MakeEntries(local_data_location, metadata_location, added_delete_files,
                     iceberg::ContentFile::FileContent::kEqualityDeletes);
 
@@ -212,10 +210,10 @@ struct SnapshotMaker {
   void MakeMetadataFiles(const std::filesystem::path& local_data_location,
                          const std::filesystem::path& metadata_location,
                          const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
-                         const std::vector<iceberg::ManifestEntry>& added_data_entries,
-                         const std::vector<iceberg::ManifestEntry>& added_delete_entries);
+                         const Manifest& added_data_entries,
+                         const Manifest& added_delete_entries);
 
-  std::vector<iceberg::ManifestEntry> MakeEntries(const std::filesystem::path& local_data_location,
+  Manifest MakeEntries(const std::filesystem::path& local_data_location,
                                                   const std::filesystem::path& metadata_location,
                                                   const std::vector<std::string>& files,
                                                   iceberg::ContentFile::FileContent content) const;

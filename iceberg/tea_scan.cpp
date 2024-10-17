@@ -212,7 +212,8 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
     ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs, manifest_path));
-    std::vector<ManifestEntry> entries_input = ice_tea::ReadManifestEntries(entries_content);
+    Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
+    auto &entries_input = manifest.entries;
     for (auto&& entry : entries_input) {
       if (entry.status == ManifestEntry::Status::kDeleted) {
         continue;

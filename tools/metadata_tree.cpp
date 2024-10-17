@@ -199,7 +199,7 @@ void MetadataTree::FixLocation(const StringFix& fix_paths, std::unordered_map<st
   }
 
   for (auto& [_, man] : manifests) {
-    for (auto& file : *man) {
+    for (auto& file : man->entries) {
       FixString(file.data_file.file_path, fix_paths, renames_data);
     }
   }
@@ -241,12 +241,12 @@ void MetadataTree::Print(std::ostream& os, size_t limit_files) const {
   for (auto& [man_filename, man] : manifests) {
     size_t count = limit_files;
     os << "manifest " << man_filename << std::endl;
-    for (auto& entry : *man) {
+    for (auto& entry : man->entries) {
       os << FileType(entry.data_file.content) << " " << entry.data_file.file_path << std::endl;
       if (limit_files) {
         --count;
         if (!count) {
-          os << "... (total: " << man->size() << ")" << std::endl;
+          os << "... (total: " << man->entries.size() << ")" << std::endl;
           break;
         }
       }

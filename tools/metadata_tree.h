@@ -38,7 +38,6 @@ class ManifestEntryHelper {
 };
 
 using ManifestList = std::vector<iceberg::ManifestFile>;
-using Manifest = std::vector<iceberg::ManifestEntry>;
 
 class MetadataTree {
  public:

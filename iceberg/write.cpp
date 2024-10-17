@@ -17,7 +17,7 @@ void WriteManifestList(const std::filesystem::path& out_path, const std::vector<
   ofstream.write(serialized.data(), serialized.size());
 }
 
-void WriteManifest(const std::filesystem::path& out_path, const std::vector<ManifestEntry>& entries) {
+void WriteManifest(const std::filesystem::path& out_path, const Manifest& entries) {
   std::string serialized = iceberg::ice_tea::WriteManifestEntries(entries);
   std::ofstream ofstream(out_path);
   ofstream.write(serialized.data(), serialized.size());

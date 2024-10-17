@@ -57,11 +57,36 @@ struct ManifestEntry {
   DataFile data_file;
 };
 
+struct Manifest {
+  using Metadata = std::map<std::string, std::vector<uint8_t>>;
+
+  Metadata metadata;
+  std::vector<iceberg::ManifestEntry> entries;
+
+  void SetMetadata(const std::string& key, const std::string& value) {
+    metadata[key] = std::vector<uint8_t>(value.begin(), value.end());
+  }
+
+  void UpdateMetadataByContent(const ContentFile::FileContent& content) {
+    std::string type = "delete";
+    switch (content) {
+      case ContentFile::FileContent::kData:
+        type = "data";
+        break;
+      case iceberg::ContentFile::FileContent::kEqualityDeletes:
+      case iceberg::ContentFile::FileContent::kPositionDeletes:
+        type = "deletes";
+    }
+
+    SetMetadata("content", type);
+  }
+};
+
 namespace ice_tea {
 
-std::vector<ManifestEntry> ReadManifestEntries(std::istream& istream);
-std::vector<ManifestEntry> ReadManifestEntries(const std::string& data);
-std::string WriteManifestEntries(const std::vector<ManifestEntry>& manifest_entries);
+Manifest ReadManifestEntries(std::istream& istream);
+Manifest ReadManifestEntries(const std::string& data);
+std::string WriteManifestEntries(const Manifest& manifest_entries);
 
 }  // namespace ice_tea
 }  // namespace iceberg

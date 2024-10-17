@@ -50,19 +50,28 @@ TEST(ManifestEntryTest, Test) {
   ss << input.rdbuf();
   std::string data = ss.str();
 
-  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(data);
-  Check(entries);
+  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Check(manifest.entries);
 }
 
 TEST(ManifestEntryTest, ReadWriteRead) {
   std::ifstream input("metadata/7e6e13cb-31fd-4de7-8811-02ce7cec44a9-m0.avro");
 
-  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input);
-  Check(entries);
+  Manifest manifest = ice_tea::ReadManifestEntries(input);
+  auto metadata = manifest.metadata;
+  Check(manifest.entries);
 
-  std::string serialized = ice_tea::WriteManifestEntries(entries);
-  entries = ice_tea::ReadManifestEntries(serialized);
-  Check(entries);
+  std::string serialized = ice_tea::WriteManifestEntries(manifest);
+  manifest = ice_tea::ReadManifestEntries(serialized);
+  Check(manifest.entries);
+
+  EXPECT_EQ(metadata, manifest.metadata);
+  EXPECT_TRUE(metadata.contains("schema"));
+  EXPECT_TRUE(metadata.contains("schema-id"));
+  EXPECT_TRUE(metadata.contains("format-version"));
+  EXPECT_TRUE(metadata.contains("partition-spec-id"));
+  EXPECT_TRUE(metadata.contains("partition-spec"));
+  EXPECT_TRUE(metadata.contains("content"));
 }
 
 TEST(ManifestEntryTest, Test2) {
@@ -71,7 +80,8 @@ TEST(ManifestEntryTest, Test2) {
   ss << input.rdbuf();
   std::string data = ss.str();
 
-  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  const auto& entries = manifest.entries;
   EXPECT_EQ(entries.size(), 1);
   const auto& entry = entries[0];
   EXPECT_EQ(entry.status, ManifestEntry::Status::kAdded);

@@ -1,15 +1,13 @@
 #include "iceberg/manifest_entry.h"
-#include "iceberg/schema.h"
 
-#include <fstream>
 #include <sstream>
-
-#include "iceberg/generated/manifest_entry.hh"
-#include "iceberg/generated/manifest_entry_schema.h"
 
 #include "avro/Compiler.hh"
 #include "avro/DataFile.hh"
 #include "avro/ValidSchema.hh"
+#include "iceberg/generated/manifest_entry.hh"
+#include "iceberg/generated/manifest_entry_schema.h"
+#include "rapidjson/document.h"
 
 namespace iceberg::ice_tea {
 
@@ -222,31 +220,51 @@ avro::ValidSchema ManifestEntrySchema() {
 
 }  // namespace
 
-std::vector<ManifestEntry> ReadManifestEntries(std::istream& input) {
+Manifest ReadManifestEntries(std::istream& input) {
   auto istream = avro::istreamInputStream(input);
   avro::DataFileReader<iceberg::manifest_entry> data_file_reader(std::move(istream), ManifestEntrySchema());
-  std::vector<ManifestEntry> result;
+  Manifest result;
   iceberg::manifest_entry manifest_entry;
+
+  const auto& meta = data_file_reader.metadata();
+
+  result.metadata = data_file_reader.metadata();
+
+  result.metadata.erase("avro.schema");
+  result.metadata.erase("avro.codec");
+
+  if (!result.metadata.contains("schema-id") && result.metadata.contains("schema")) {
+    rapidjson::Document document;
+    const auto& schema = result.metadata["schema"];
+    std::string schema_str(schema.begin(), schema.end());
+    document.Parse(schema_str.c_str());
+    if (document.IsObject()) {
+      std::string schema_id_str = std::to_string(document["schema-id"].GetInt());
+      std::vector<uint8_t> schema_id_bytes(schema_id_str.begin(), schema_id_str.end());
+      result.metadata["schema-id"] = schema_id_bytes;
+    }
+  }
+
   while (data_file_reader.read(manifest_entry)) {
     ManifestEntry entry = Convert(std::move(manifest_entry));
-    result.emplace_back(std::move(entry));
+    result.entries.emplace_back(std::move(entry));
   }
   return result;
 }
 
-std::vector<ManifestEntry> ReadManifestEntries(const std::string& data) {
+Manifest ReadManifestEntries(const std::string& data) {
   std::stringstream ss(data);
   return ReadManifestEntries(ss);
 }
 
-std::string WriteManifestEntries(const std::vector<ManifestEntry>& manifest_entries) {
+std::string WriteManifestEntries(const Manifest& manifest) {
   static constexpr size_t bufferSize = 1024 * 1024;
 
   std::stringstream ss;
   auto ostream = avro::ostreamOutputStream(ss, bufferSize);
-  avro::DataFileWriter<iceberg::manifest_entry> writer(std::move(ostream), ManifestEntrySchema());
+  avro::DataFileWriter<iceberg::manifest_entry> writer(std::move(ostream), ManifestEntrySchema(), manifest.metadata);
 
-  for (auto& man_entry : manifest_entries) {
+  for (auto& man_entry : manifest.entries) {
     writer.write(Convert(man_entry));
   }
   writer.close();

@@ -12,6 +12,6 @@ namespace iceberg::ice_tea {
 
 void WriteMetadataFile(const std::filesystem::path& out_path, const std::shared_ptr<TableMetadataV2>& table_metadata);
 void WriteManifestList(const std::filesystem::path& out_path, const std::vector<ManifestFile>& manifests);
-void WriteManifest(const std::filesystem::path& out_path, const std::vector<ManifestEntry>& entries);
+void WriteManifest(const std::filesystem::path& out_path, const Manifest& entries);
 
 }  // namespace iceberg::ice_tea

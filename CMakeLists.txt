@@ -3,6 +3,8 @@ project(iceberg-cpp)
 
 set(ICEBERG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include(cmake/gtest.cmake)
 
 find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
