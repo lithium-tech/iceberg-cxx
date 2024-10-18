@@ -1,9 +1,17 @@
-add_executable(tpch-gen
+add_library(tpch-gen-lib STATIC
   list.cpp
   main.cpp
   tables.cpp
   text.cpp
+  dataset.cpp
+)
+
+target_include_directories(tpch-gen-lib PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(tpch-gen-lib PUBLIC data-gen)
+
+add_executable(tpch-gen
+  main.cpp
 )
 
 target_include_directories(tpch-gen PUBLIC ${CMAKE_SOURCE_DIR})
-target_link_libraries(tpch-gen data-gen absl::flags absl::flags_parse)
+target_link_libraries(tpch-gen tpch-gen-lib absl::flags absl::flags_parse)
