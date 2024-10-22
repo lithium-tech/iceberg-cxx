@@ -5,7 +5,6 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/csv/options.h"
 #include "arrow/record_batch.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
@@ -27,6 +26,7 @@
 
 namespace gen {
 
+#ifdef HAS_ARROW_CSV
 arrow::csv::WriteOptions TpchCsvWriteOptions() {
   arrow::csv::WriteOptions options;
   options.include_header = false;
@@ -34,6 +34,7 @@ arrow::csv::WriteOptions TpchCsvWriteOptions() {
   options.quoting_style = arrow::csv::QuotingStyle::None;
   return options;
 }
+#endif
 
 struct TableGeneratorInfo {
   Program program;
@@ -136,8 +137,6 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
   constexpr int64_t kNationRows = 25;
   constexpr int64_t kRegionRows = 5;
 
-  auto csv_writer_options = TpchCsvWriteOptions();
-
   std::vector<TableGeneratorInfo> table_generator_infos;
   table_generator_infos.emplace_back(MakeSupplierProgram(text, random_device, kScaleFactor),
                                      std::vector<std::shared_ptr<Table>>{std::make_shared<SupplierTable>()},
@@ -191,6 +190,7 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
       }
 #ifdef HAS_ARROW_CSV
       if (write_flags.write_csv) {
+        auto csv_writer_options = TpchCsvWriteOptions();
         std::vector<std::shared_ptr<IProcessor>> writers;
         for (int32_t i = 0; i < generate_flags.files_per_table; ++i) {
           auto writer =

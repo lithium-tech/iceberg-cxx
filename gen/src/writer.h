@@ -6,10 +6,6 @@
 #include <string>
 #include <utility>
 
-#if __has_include("arrow/csv/api.h")
-#define HAS_ARROW_CSV
-#endif
-
 #ifdef HAS_ARROW_CSV
 #include "arrow/csv/api.h"
 #include "arrow/csv/options.h"
