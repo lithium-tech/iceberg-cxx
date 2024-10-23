@@ -24,6 +24,9 @@ add_subdirectory(vendor)
 
 add_subdirectory(iceberg)
 
+if (ICEBERG_GEN)
+  add_subdirectory(gen)
+endif()
 add_subdirectory(tools)
 add_subdirectory(tests)
 
