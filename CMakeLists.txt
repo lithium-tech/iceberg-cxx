@@ -11,10 +11,12 @@ find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
 find_package(absl REQUIRED)
 find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
 
+# Fix up missing dependency declaration
+set_property(TARGET Arrow::arrow_bundled_dependencies
+  APPEND PROPERTY INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto;OpenSSL::SSL"
+)
+
 set(CMAKE_CXX_STANDARD 20)
-if(UNIX AND NOT APPLE)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--copy-dt-needed-entries")
-endif()
 
 include_directories(
   ${ICEBERG_SOURCE_DIR}
