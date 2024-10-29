@@ -202,7 +202,7 @@ int main(int argc, char** argv) {
     if (print_files) {
       std::vector<MetadataTree> prev_meta;
       MetadataTree meta_tree(meta_tmpdir_json);
-      FixLocation(meta_tree, meta_tmpdir_json, {}, prev_meta);
+      LoadTree(meta_tree, meta_tmpdir_json, prev_meta, false);
 
       for (auto& prev_tree : prev_meta) {
         prev_tree.Print(std::cout, 0);

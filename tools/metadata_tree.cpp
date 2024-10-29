@@ -254,10 +254,10 @@ void MetadataTree::Print(std::ostream& os, size_t limit_files) const {
   }
 }
 
-void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_paths,
-                 std::vector<MetadataTree>& prev_meta, std::unordered_map<std::string, std::string>& renames_data,
-                 std::unordered_map<std::string, std::string>& renames_meta,
-                 std::unordered_map<std::string, std::string>& rename_locations) {
+void LoadTree(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, std::vector<MetadataTree>& prev_meta,
+              std::unordered_map<std::string, std::string>& renames_data,
+              std::unordered_map<std::string, std::string>& renames_meta,
+              std::unordered_map<std::string, std::string>& rename_locations, bool ignore_missing_snapshots) {
   auto meta_log = meta_tree.MetadataLog();
   prev_meta.reserve(meta_log.size());
   for (auto& [_, meta_file_path] : meta_log) {
@@ -268,26 +268,20 @@ void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_
       MetadataTree old_meta(path);
       prev_meta.emplace_back(std::move(old_meta));
     } catch (std::exception& ex) {
-      throw std::runtime_error("Error while processing '" + path.string() + "': " + ex.what());
+      if (!ignore_missing_snapshots) {
+        throw std::runtime_error("Error while processing '" + path.string() + "': " + ex.what());
+      }
     }
   }
-
-  if (!fix_paths.NeedFix()) {
-    return;
-  }
-
-  for (auto& prev_tree : prev_meta) {
-    prev_tree.FixLocation(fix_paths, renames_data, renames_meta, rename_locations);
-  }
-  meta_tree.FixLocation(fix_paths, renames_data, renames_meta, rename_locations);
 }
 
-void FixLocation(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, const StringFix& fix_paths,
-                 std::vector<MetadataTree>& prev_meta) {
+void LoadTree(MetadataTree& meta_tree, const std::filesystem::path& metadata_path, std::vector<MetadataTree>& prev_meta,
+              bool ignore_missing_snapshots) {
   std::unordered_map<std::string, std::string> renames_data;
   std::unordered_map<std::string, std::string> renames_meta;
   std::unordered_map<std::string, std::string> renames_locations;
-  FixLocation(meta_tree, metadata_path, fix_paths, prev_meta, renames_data, renames_meta, renames_locations);
+  LoadTree(meta_tree, metadata_path, prev_meta, renames_data, renames_meta, renames_locations,
+           ignore_missing_snapshots);
 }
 
 }  // namespace iceberg::tools
