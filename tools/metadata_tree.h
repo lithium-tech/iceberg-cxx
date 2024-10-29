@@ -52,8 +52,8 @@ class MetadataTree {
 
   static MetadataFile ReadMetadataFile(const std::filesystem::path& path);
 
-  explicit MetadataTree(const std::filesystem::path& path);
-  MetadataTree(const std::filesystem::path& path, int64_t snapshot_id);
+  explicit MetadataTree(const std::filesystem::path& path, bool ignore_missing_snapshots = false);
+  explicit MetadataTree(const std::filesystem::path& path, int64_t snapshot_id);
   MetadataTree(const std::filesystem::path& path, const std::string& ref);
 
   std::map<int64_t, std::string> MetadataLog() const;
@@ -76,7 +76,8 @@ class MetadataTree {
   std::unordered_map<std::string, std::shared_ptr<ManifestList>> manifests_lists;
   std::unordered_map<std::string, std::shared_ptr<Manifest>> manifests;
 
-  void AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std::filesystem::path& files_path);
+  bool AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std::filesystem::path& files_path,
+                   bool ignore_missing_snapshots = false);
 
   friend std::ostream& operator<<(std::ostream& os, const MetadataTree& meta_tree) {
     meta_tree.Print(os);

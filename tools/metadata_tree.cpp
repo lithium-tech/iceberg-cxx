@@ -95,13 +95,20 @@ void MetadataTree::MetadataFile::RemoveOtherSnapshots(int64_t snapshot_id, bool 
   table_metadata->refs = std::move(refs);
 }
 
-MetadataTree::MetadataTree(const std::filesystem::path& path) : medatada_file_path(std::filesystem::absolute(path)) {
+MetadataTree::MetadataTree(const std::filesystem::path& path, bool ignore_missing_snapshots)
+    : medatada_file_path(std::filesystem::absolute(path)) {
   medatada_file = ReadMetadataFile(medatada_file_path);
 
   auto files_path = medatada_file_path.parent_path();  // actual local files location
+
+  std::vector<std::shared_ptr<Snapshot>> actual_snaps;
+  actual_snaps.reserve(medatada_file.Snapshots().size());
   for (auto& snap : medatada_file.Snapshots()) {
-    AddSnapshot(snap, files_path);
+    if (AddSnapshot(snap, files_path, ignore_missing_snapshots)) {
+      actual_snaps.emplace_back(snap);
+    }
   }
+  medatada_file.table_metadata->snapshots = std::move(actual_snaps);
 }
 
 MetadataTree::MetadataTree(const std::filesystem::path& path, int64_t snapshot_id)
@@ -110,7 +117,7 @@ MetadataTree::MetadataTree(const std::filesystem::path& path, int64_t snapshot_i
 
   auto files_path = medatada_file_path.parent_path();  // actual local files location
   medatada_file.RemoveOtherSnapshots(snapshot_id);
-  AddSnapshot(medatada_file.Snapshots()[0], files_path);
+  AddSnapshot(medatada_file.Snapshots()[0], files_path, false);
 }
 
 MetadataTree::MetadataTree(const std::filesystem::path& path, const std::string& ref)
@@ -127,7 +134,7 @@ MetadataTree::MetadataTree(const std::filesystem::path& path, const std::string&
 
   auto files_path = medatada_file_path.parent_path();  // actual local files location
   medatada_file.RemoveOtherSnapshots(snapshot_id);
-  AddSnapshot(medatada_file.Snapshots()[0], files_path);
+  AddSnapshot(medatada_file.Snapshots()[0], files_path, false);
 }
 
 MetadataTree::MetadataFile MetadataTree::ReadMetadataFile(const std::filesystem::path& path) {
@@ -143,11 +150,15 @@ MetadataTree::MetadataFile MetadataTree::ReadMetadataFile(const std::filesystem:
   return metadata;
 }
 
-void MetadataTree::AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std::filesystem::path& files_path) {
+bool MetadataTree::AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std::filesystem::path& files_path,
+                               bool ignore_missing_snapshots) {
   std::filesystem::path list_path = snap->manifest_list_location;
 
   auto list_file_path = files_path / list_path.filename();
   if (!std::filesystem::exists(list_file_path)) {
+    if (ignore_missing_snapshots) {
+      return false;
+    }
     throw std::runtime_error("No manifests list file '" + list_file_path.string() + "'");
   }
   std::ifstream list_input(list_file_path);
@@ -160,6 +171,9 @@ void MetadataTree::AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std:
       if (!manifests.contains(man_path.filename())) {
         auto man_file_path = files_path / man_path.filename();
         if (!std::filesystem::exists(man_file_path)) {
+          if (ignore_missing_snapshots) {
+            return false;
+          }
           throw std::runtime_error("No manifest file '" + man_file_path.string() + "'");
         }
         std::ifstream list_input(man_file_path);
@@ -169,6 +183,7 @@ void MetadataTree::AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std:
       }
     }
   }
+  return true;
 }
 
 std::map<int64_t, std::string> MetadataTree::MetadataLog() const {
