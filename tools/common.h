@@ -27,10 +27,6 @@ void EnsureSameSchema(std::shared_ptr<iceberg::Schema> src_schema, std::shared_p
 void EnsureSameSortOrder(std::shared_ptr<iceberg::SortOrder> src_order, std::shared_ptr<iceberg::SortOrder> dst_order,
                          bool require_same_id = false, bool require_same_transform = false);
 
-std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::io::RandomAccessFile> input_file);
-std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                       const std::string& file_path, uint64_t& file_size);
-std::vector<int64_t> SplitOffsets(std::shared_ptr<parquet::FileMetaData> parquet_meta);
 iceberg::ContentFile RowGroupStats(const parquet::RowGroupMetaData& rg_meta);
 
 inline void AppendStats(iceberg::ContentFile& file_stats, const iceberg::ContentFile& rg_stats) {

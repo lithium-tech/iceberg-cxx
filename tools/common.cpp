@@ -76,46 +76,6 @@ void EnsureSameSortOrder(std::shared_ptr<iceberg::SortOrder> src_order, std::sha
   }
 }
 
-std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::io::RandomAccessFile> input_file) {
-  parquet::arrow::FileReaderBuilder reader_builder;
-  auto status = reader_builder.Open(input_file, parquet::default_reader_properties());
-  if (!status.ok()) {
-    throw std::runtime_error("cannot open parquet file");
-  }
-
-  reader_builder.memory_pool(arrow::default_memory_pool());
-  auto arrow_reader = reader_builder.Build().ValueOrDie();
-  return arrow_reader->parquet_reader()->metadata();
-}
-
-std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                       const std::string& file_path, uint64_t& file_size) {
-  auto input_file = fs->OpenInputFile(file_path);
-  if (!input_file.ok()) {
-    throw std::runtime_error("Cannot open input file: " + file_path);
-  }
-  auto size_rez = (*input_file)->GetSize();
-  if (!size_rez.ok()) {
-    throw std::runtime_error("Cannot get input file size: " + file_path);
-  }
-  file_size = *size_rez;
-  return ParquetMetadata(*input_file);
-}
-
-std::vector<int64_t> SplitOffsets(std::shared_ptr<parquet::FileMetaData> parquet_meta) {
-  std::vector<int64_t> split_offsets;
-  split_offsets.reserve(parquet_meta->num_row_groups());
-  for (int i = 0; i < parquet_meta->num_row_groups(); ++i) {
-    auto rg_meta = parquet_meta->RowGroup(i);
-    if (!rg_meta) {
-      throw std::runtime_error("No row group for id " + std::to_string(i));
-    }
-    split_offsets.push_back(rg_meta->file_offset());
-  }
-  std::sort(split_offsets.begin(), split_offsets.end());
-  return split_offsets;
-}
-
 iceberg::ContentFile RowGroupStats(const parquet::RowGroupMetaData& rg_meta) {
   iceberg::ContentFile out;
 

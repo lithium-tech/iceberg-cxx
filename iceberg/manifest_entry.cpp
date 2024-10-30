@@ -9,7 +9,53 @@
 #include "iceberg/generated/manifest_entry_schema.h"
 #include "rapidjson/document.h"
 
-namespace iceberg::ice_tea {
+#include <parquet/arrow/reader.h>
+#include <parquet/metadata.h>
+#include <parquet/statistics.h>
+
+namespace iceberg {
+
+std::vector<int64_t> SplitOffsets(std::shared_ptr<parquet::FileMetaData> parquet_meta) {
+  std::vector<int64_t> split_offsets;
+  split_offsets.reserve(parquet_meta->num_row_groups());
+  for (int i = 0; i < parquet_meta->num_row_groups(); ++i) {
+    auto rg_meta = parquet_meta->RowGroup(i);
+    if (!rg_meta) {
+      throw std::runtime_error("No row group for id " + std::to_string(i));
+    }
+    split_offsets.push_back(rg_meta->file_offset());
+  }
+  std::sort(split_offsets.begin(), split_offsets.end());
+  return split_offsets;
+}
+
+std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::io::RandomAccessFile> input_file) {
+  parquet::arrow::FileReaderBuilder reader_builder;
+  auto status = reader_builder.Open(input_file, parquet::default_reader_properties());
+  if (!status.ok()) {
+    throw std::runtime_error("cannot open parquet file");
+  }
+
+  reader_builder.memory_pool(arrow::default_memory_pool());
+  auto arrow_reader = reader_builder.Build().ValueOrDie();
+  return arrow_reader->parquet_reader()->metadata();
+}
+
+std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                                       const std::string& file_path, uint64_t& file_size) {
+  auto input_file = fs->OpenInputFile(file_path);
+  if (!input_file.ok()) {
+    throw std::runtime_error("Cannot open input file: " + file_path);
+  }
+  auto size_rez = (*input_file)->GetSize();
+  if (!size_rez.ok()) {
+    throw std::runtime_error("Cannot get input file size: " + file_path);
+  }
+  file_size = *size_rez;
+  return ParquetMetadata(*input_file);
+}
+
+namespace ice_tea {
 
 namespace {
 
@@ -272,4 +318,21 @@ std::string WriteManifestEntries(const Manifest& manifest) {
   return ss.str();
 }
 
-}  // namespace iceberg::ice_tea
+void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, std::shared_ptr<arrow::fs::FileSystem> fs) {
+  for (size_t i = 0; i < data.size(); ++i) {
+    uint64_t file_size = 0;
+    auto parquet_meta = ParquetMetadata(fs, data[i].data_file.file_path, file_size);
+    data[i].data_file.split_offsets = SplitOffsets(parquet_meta);
+  }
+}
+
+void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, const std::vector<std::shared_ptr<parquet::FileMetaData>>& metadata) {
+  for (size_t i = 0; i < data.size(); ++i) {
+    uint64_t file_size = 0;
+    data[i].data_file.split_offsets = SplitOffsets(metadata[i]);
+  }
+}
+
+}  // namespace ice_tea
+
+}  // namespace iceberg

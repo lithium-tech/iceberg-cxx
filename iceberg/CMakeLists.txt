@@ -23,7 +23,7 @@ add_library(iceberg-cpp STATIC
     write.h
 )
 
-target_link_libraries(iceberg-cpp PRIVATE rapidjson _avrocpp _boost_iostreams _hivemetastore)
+target_link_libraries(iceberg-cpp PRIVATE rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static)
 target_link_libraries(iceberg-cpp PUBLIC Arrow::arrow_static)
 
 set_target_properties(iceberg-cpp PROPERTIES POSITION_INDEPENDENT_CODE ON)

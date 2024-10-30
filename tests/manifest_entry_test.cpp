@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 #include "gtest/gtest.h"
 
@@ -56,8 +57,11 @@ TEST(ManifestEntryTest, Test) {
 
 TEST(ManifestEntryTest, ReadWriteRead) {
   std::ifstream input("metadata/7e6e13cb-31fd-4de7-8811-02ce7cec44a9-m0.avro");
+  std::stringstream ss;
+  ss << input.rdbuf();
+  std::string data = ss.str();
 
-  Manifest manifest = ice_tea::ReadManifestEntries(input);
+  Manifest manifest = ice_tea::ReadManifestEntries(data);
   auto metadata = manifest.metadata;
   Check(manifest.entries);
 
@@ -101,6 +105,58 @@ TEST(ManifestEntryTest, Test2) {
   std::vector<int64_t> expected_split_offsets = {4};
   EXPECT_EQ(data_file.split_offsets, expected_split_offsets);
   EXPECT_EQ(data_file.equality_ids.size(), 0);
+}
+
+TEST(ManifestEntryTest, FillSplitOffsets) {
+  std::ifstream input("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
+
+  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input).entries;
+
+  // Clear offsets
+  for (auto& entry : entries) {
+    entry.data_file.split_offsets.clear();
+  }
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  ice_tea::FillManifestSplitOffsets(entries, fs);
+
+  std::ifstream input_copy("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
+  std::stringstream ss_copy;
+  ss_copy << input_copy.rdbuf();
+  std::string data_copy = ss_copy.str();
+
+  Manifest entries_original = ice_tea::ReadManifestEntries(data_copy);
+
+  for (size_t i = 0; i < entries.size(); ++i) {
+    EXPECT_EQ(entries[i].data_file.split_offsets, entries_original.entries[i].data_file.split_offsets);
+  }
+}
+
+TEST(ManifestEntryTest, FillSplitOffsets2) {
+  std::ifstream input("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
+  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input).entries;
+
+  // Clear offsets
+  for (auto& entry : entries) {
+    entry.data_file.split_offsets.clear();
+  }
+
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+
+  std::vector<std::shared_ptr<parquet::FileMetaData>> metadata;
+  for (auto& entry : entries) {
+    uint64_t file_size;
+    auto parquet_meta = ParquetMetadata(fs, entry.data_file.file_path, file_size);
+    metadata.push_back(std::move(parquet_meta));
+  }
+
+  ice_tea::FillManifestSplitOffsets(entries, metadata);
+
+  std::ifstream input_copy("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
+  std::vector<ManifestEntry> entries_original = ice_tea::ReadManifestEntries(input_copy).entries;
+
+  for (size_t i = 0; i < entries.size(); ++i) {
+    EXPECT_EQ(entries[i].data_file.split_offsets, entries_original[i].data_file.split_offsets);
+  }
 }
 
 }  // namespace iceberg

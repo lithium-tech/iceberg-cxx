@@ -1,11 +1,15 @@
 #pragma once
 
+#include <arrow/filesystem/localfs.h>
+#include <parquet/type_fwd.h>
+
 #include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
+#include <memory>
 
 namespace iceberg {
 
@@ -82,11 +86,20 @@ struct Manifest {
   }
 };
 
+std::vector<int64_t> SplitOffsets(std::shared_ptr<parquet::FileMetaData> parquet_meta);
+
+std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::io::RandomAccessFile> input_file);
+std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                                       const std::string& file_path, uint64_t& file_size);
+
 namespace ice_tea {
 
 Manifest ReadManifestEntries(std::istream& istream);
 Manifest ReadManifestEntries(const std::string& data);
 std::string WriteManifestEntries(const Manifest& manifest_entries);
+
+void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, std::shared_ptr<arrow::fs::FileSystem> fs);
+void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, const std::vector<std::shared_ptr<parquet::FileMetaData>>& metadata);
 
 }  // namespace ice_tea
 }  // namespace iceberg

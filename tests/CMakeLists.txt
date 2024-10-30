@@ -8,7 +8,12 @@ add_executable(iceberg_local_test
 target_link_libraries(iceberg_local_test PRIVATE gtest iceberg-cpp dl)
 target_include_directories(iceberg_local_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
-ADD_CUSTOM_TARGET(test_data_symlink ALL
+ADD_CUSTOM_TARGET(test_metadata_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/metadata" "${CMAKE_CURRENT_BINARY_DIR}/metadata"
+)
+add_dependencies(iceberg_local_test test_metadata_symlink)
+
+ADD_CUSTOM_TARGET(test_data_symlink ALL
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/data" "${CMAKE_CURRENT_BINARY_DIR}/data"
 )
 add_dependencies(iceberg_local_test test_data_symlink)
