@@ -24,6 +24,7 @@ ABSL_FLAG(int32_t, equality_deletes_columns_count, 0, "number of columns in equa
 ABSL_FLAG(double, equality_deletes_rows_scale, 0, "row count ratio in equality delete files and in original table");
 ABSL_FLAG(bool, use_positional_deletes, false, "either to generate positional delete files to all tables or not");
 ABSL_FLAG(double, positional_deletes_rows_scale, 0, "row count ratio in equality delete files and in original table");
+ABSL_FLAG(int32_t, threads_to_use, 1, "number of threads to use");
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
@@ -50,6 +51,8 @@ int main(int argc, char** argv) {
   bool use_positional_deletes = absl::GetFlag(FLAGS_use_positional_deletes);
   double positional_deletes_rows_scale = absl::GetFlag(FLAGS_positional_deletes_rows_scale);
 
+  int32_t threads_to_use = absl::GetFlag(FLAGS_threads_to_use);
+
   if (output_dir.empty()) {
     std::cerr << "output_dir must be set" << std::endl;
     return 1;
@@ -69,7 +72,8 @@ int main(int argc, char** argv) {
                                     .equality_deletes_columns_count = equality_deletes_columns_count,
                                     .equality_deletes_rows_scale = equality_deletes_rows_scale,
                                     .use_positional_deletes = use_positional_deletes,
-                                    .positional_deletes_rows_scale = positional_deletes_rows_scale};
+                                    .positional_deletes_rows_scale = positional_deletes_rows_scale,
+                                    .threads_to_use = threads_to_use};
 
   std::cerr << "write_flags: " << write_flags << std::endl;
   std::cerr << "generate_flags: " << generate_flags << std::endl;

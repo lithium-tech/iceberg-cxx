@@ -363,12 +363,12 @@ class UniqueIntegerGenerator : public TrivialGenerator<ArrowType> {
   using ValueType = typename TrivialGenerator<ArrowType>::ValueType;
 
  public:
-  UniqueIntegerGenerator() {}
+  UniqueIntegerGenerator(ValueType min_value) : last_value_(min_value) {}
 
   ValueType GenerateValue() override { return static_cast<ValueType>(last_value_++); }
 
  private:
-  int64_t last_value_ = 1;
+  int64_t last_value_;
 };
 
 template <typename ArrowType>

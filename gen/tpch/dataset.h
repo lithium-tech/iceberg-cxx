@@ -10,8 +10,8 @@ namespace gen {
 
 struct WriteFlags {
   std::string output_dir;
-  bool write_parquet;
-  bool write_csv;
+  bool write_parquet = false;
+  bool write_csv = false;
 
   friend std::ostream& operator<<(std::ostream& os, const WriteFlags& flags) {
     return os << "output_dir: " << flags.output_dir << ", write_parquet: " << flags.write_parquet
@@ -20,15 +20,16 @@ struct WriteFlags {
 };
 
 struct GenerateFlags {
-  int32_t scale_factor;
-  int32_t arrow_batch_size;
-  int64_t seed;
-  int32_t files_per_table;
-  bool use_equality_deletes;
-  int32_t equality_deletes_columns_count;
-  double equality_deletes_rows_scale;
-  bool use_positional_deletes;
-  double positional_deletes_rows_scale;
+  int32_t scale_factor = 1;
+  int32_t arrow_batch_size = 8192;
+  int64_t seed = 0;
+  int32_t files_per_table = 1;
+  bool use_equality_deletes = false;
+  int32_t equality_deletes_columns_count = 0;
+  double equality_deletes_rows_scale = 0;
+  bool use_positional_deletes = false;
+  double positional_deletes_rows_scale = 0;
+  int32_t threads_to_use = 1;
 
   friend std::ostream& operator<<(std::ostream& os, const GenerateFlags& flags) {
     return os << "scale_factor: " << flags.scale_factor << ", arrow_batch_size: " << flags.arrow_batch_size
@@ -37,7 +38,8 @@ struct GenerateFlags {
               << ", equality_deletes_columns_count: " << flags.equality_deletes_columns_count
               << ", equality_deletes_rows_scale: " << flags.equality_deletes_rows_scale
               << ", use_positional_deletes: " << flags.use_positional_deletes
-              << ", positional_deletes_rows_scale: " << flags.positional_deletes_rows_scale;
+              << ", positional_deletes_rows_scale: " << flags.positional_deletes_rows_scale
+              << ", threads_to_use: " << flags.threads_to_use;
   }
 };
 

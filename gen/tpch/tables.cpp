@@ -27,9 +27,11 @@ std::shared_ptr<arrow::Schema> SupplierTable::MakeArrowSchema() const {
   return std::make_shared<arrow::Schema>(fields);
 }
 
-Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor) {
+Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor,
+                            int64_t min_rownum) {
   Program program;
-  program.AddAssign(Assignment(SupplierTable::kSuppkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
+  program.AddAssign(
+      Assignment(SupplierTable::kSuppkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>(min_rownum)));
 
   program.AddAssign(
       Assignment("s_suppkey_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(SupplierTable::kSuppkey)));
@@ -90,10 +92,11 @@ std::shared_ptr<arrow::Schema> PartsuppTable::MakeArrowSchema() const {
 }
 
 Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& random_device,
-                                   const int32_t scale_factor) {
+                                   const int32_t scale_factor, int64_t min_rownum) {
   Program program;
 
-  program.AddAssign(Assignment(PartTable::kPartkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
+  program.AddAssign(
+      Assignment(PartTable::kPartkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>(min_rownum)));
 
   auto p_name_list = tpch::part::GetPNameList();
   auto p_name_generator = std::make_shared<tpch::part::NameGenerator>(*p_name_list, random_device);
@@ -177,10 +180,12 @@ std::shared_ptr<arrow::Schema> CustomerTable::MakeArrowSchema() const {
   return std::make_shared<arrow::Schema>(fields);
 }
 
-Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor) {
+Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor,
+                            int64_t min_rownum) {
   Program program;
 
-  program.AddAssign(Assignment(CustomerTable::kCustkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
+  program.AddAssign(
+      Assignment(CustomerTable::kCustkey, std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>(min_rownum)));
 
   program.AddAssign(
       Assignment("c_custkey_string", std::make_shared<ToStringGenerator<arrow::Int32Type>>(CustomerTable::kCustkey)));
@@ -255,10 +260,11 @@ std::shared_ptr<arrow::Schema> LineitemTable::MakeArrowSchema() const {
 }
 
 Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& random_device,
-                                    const int32_t scale_factor) {
+                                    const int32_t scale_factor, int64_t min_rownum) {
   Program program;
 
-  program.AddAssign(Assignment("orderkey_notsparse", std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>()));
+  program.AddAssign(
+      Assignment("orderkey_notsparse", std::make_shared<UniqueIntegerGenerator<arrow::Int32Type>>(min_rownum)));
   program.AddAssign(
       Assignment(OrdersTable::kOrderkey, std::make_shared<tpch::SparseKeyGenerator>("orderkey_notsparse", 3, 2)));
 

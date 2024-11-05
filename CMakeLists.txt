@@ -1,3 +1,5 @@
+option(HAS_ARROW_CSV "Arrow built with csv" ON)
+
 cmake_minimum_required(VERSION 3.20)
 project(iceberg-cpp)
 

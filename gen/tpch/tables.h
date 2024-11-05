@@ -27,7 +27,8 @@ struct SupplierTable : public Table {
   std::string Name() const override { return "supplier"; }
 };
 
-Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor);
+Program MakeSupplierProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor,
+                            int64_t min_rownum);
 
 struct PartTable : public Table {
   static constexpr std::string_view kPartkey = "p_partkey";
@@ -58,7 +59,7 @@ struct PartsuppTable : public Table {
 };
 
 Program MakePartAndPartsuppProgram(const tpch::text::Text& text, RandomDevice& random_device,
-                                   const int32_t scale_factor);
+                                   const int32_t scale_factor, int64_t min_rownum);
 
 struct CustomerTable : public Table {
   static constexpr std::string_view kCustkey = "c_custkey";
@@ -75,7 +76,8 @@ struct CustomerTable : public Table {
   std::string Name() const override { return "customer"; }
 };
 
-Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor);
+Program MakeCustomerProgram(const tpch::text::Text& text, RandomDevice& random_device, const int32_t scale_factor,
+                            int64_t min_rownum);
 
 struct OrdersTable : public Table {
   static constexpr std::string_view kOrderkey = "o_orderkey";
@@ -117,7 +119,7 @@ struct LineitemTable : public Table {
 };
 
 Program MakeOrderAndLineitemProgram(const tpch::text::Text& text, RandomDevice& random_device,
-                                    const int32_t scale_factor);
+                                    const int32_t scale_factor, int64_t min_rownum);
 
 struct NationTable : public Table {
   static constexpr std::string_view kNationKey = "n_nationkey";

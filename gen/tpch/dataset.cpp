@@ -1,6 +1,8 @@
 #include "gen/tpch/dataset.h"
 
+#include <future>
 #include <memory>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -117,10 +119,43 @@ arrow::Result<std::shared_ptr<IProcessor>> MakePositionalDeleteProcessor(std::sh
   return positional_delete_processor;
 }
 
-arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& generate_flags) {
-  RandomDevice random_device(generate_flags.seed);
+struct Fragment {
+  int64_t first_row = 0;
+  int64_t row_count = 0;
+};
 
-  tpch::text::Text text = tpch::text::GenerateText(random_device);
+static std::vector<Fragment> GenerateFragments(int64_t total_rows, int64_t parts) {
+  std::vector<Fragment> result(parts);
+  for (int64_t part = 0; part < parts; ++part) {
+    result[part].first_row = 1 + (total_rows / parts * part);
+  }
+  for (int64_t part = 0; part < parts; ++part) {
+    int64_t first_row_in_next_fragment = (part + 1 == parts ? (total_rows + 1) : result[part + 1].first_row);
+    result[part].row_count = first_row_in_next_fragment - result[part].first_row;
+  }
+  return result;
+}
+
+// each task must use their own random device for reproducibility
+class RandomDeviceStorage {
+ public:
+  RandomDeviceStorage(uint64_t seed) : seed_(seed) {}
+
+  RandomDevice& GetNewRandomDevice() {
+    devices_.emplace_back(seed_++);
+    return devices_.back();
+  }
+
+ private:
+  // using deque, because it does not invalidate references
+  std::deque<RandomDevice> devices_;
+  uint64_t seed_;
+};
+
+arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& generate_flags) {
+  RandomDeviceStorage random_device_storage(generate_flags.seed);
+
+  tpch::text::Text text = tpch::text::GenerateText(random_device_storage.GetNewRandomDevice());
 
   const int32_t kBatchSize = generate_flags.arrow_batch_size;
   const int32_t kScaleFactor = generate_flags.scale_factor;
@@ -138,84 +173,135 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
   constexpr int64_t kRegionRows = 5;
 
   std::vector<TableGeneratorInfo> table_generator_infos;
-  table_generator_infos.emplace_back(MakeSupplierProgram(text, random_device, kScaleFactor),
-                                     std::vector<std::shared_ptr<Table>>{std::make_shared<SupplierTable>()},
-                                     kSupplierRows);
-  table_generator_infos.emplace_back(
-      MakePartAndPartsuppProgram(text, random_device, kScaleFactor),
-      std::vector<std::shared_ptr<Table>>{std::make_shared<PartTable>(), std::make_shared<PartsuppTable>()}, kPartRows);
-  table_generator_infos.emplace_back(MakeCustomerProgram(text, random_device, kScaleFactor),
-                                     std::vector<std::shared_ptr<Table>>{std::make_shared<CustomerTable>()},
-                                     kCustomerRows);
-  table_generator_infos.emplace_back(
-      MakeOrderAndLineitemProgram(text, random_device, kScaleFactor),
-      std::vector<std::shared_ptr<Table>>{std::make_shared<OrdersTable>(), std::make_shared<LineitemTable>()},
-      kOrdersRows);
-  table_generator_infos.emplace_back(MakeNationProgram(text, random_device),
+  {
+    auto fragments = GenerateFragments(kSupplierRows, generate_flags.files_per_table);
+    for (auto fragment : fragments) {
+      table_generator_infos.emplace_back(
+          MakeSupplierProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor, fragment.first_row),
+          std::vector<std::shared_ptr<Table>>{std::make_shared<SupplierTable>()}, fragment.row_count);
+    }
+  }
+  {
+    auto fragments = GenerateFragments(kPartRows, generate_flags.files_per_table);
+    for (auto fragment : fragments) {
+      table_generator_infos.emplace_back(
+          MakePartAndPartsuppProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor,
+                                     fragment.first_row),
+          std::vector<std::shared_ptr<Table>>{std::make_shared<PartTable>(), std::make_shared<PartsuppTable>()},
+          fragment.row_count);
+    }
+  }
+  {
+    auto fragments = GenerateFragments(kCustomerRows, generate_flags.files_per_table);
+    for (auto fragment : fragments) {
+      table_generator_infos.emplace_back(
+          MakeCustomerProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor, fragment.first_row),
+          std::vector<std::shared_ptr<Table>>{std::make_shared<CustomerTable>()}, fragment.row_count);
+    }
+  }
+  {
+    auto fragments = GenerateFragments(kOrdersRows, generate_flags.files_per_table);
+    for (auto fragment : fragments) {
+      table_generator_infos.emplace_back(
+          MakeOrderAndLineitemProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor,
+                                      fragment.first_row),
+          std::vector<std::shared_ptr<Table>>{std::make_shared<OrdersTable>(), std::make_shared<LineitemTable>()},
+          fragment.row_count);
+    }
+  }
+  table_generator_infos.emplace_back(MakeNationProgram(text, random_device_storage.GetNewRandomDevice()),
                                      std::vector<std::shared_ptr<Table>>{std::make_shared<NationTable>()}, kNationRows);
-  table_generator_infos.emplace_back(MakeRegionProgram(text, random_device),
+  table_generator_infos.emplace_back(MakeRegionProgram(text, random_device_storage.GetNewRandomDevice()),
                                      std::vector<std::shared_ptr<Table>>{std::make_shared<RegionTable>()}, kRegionRows);
+
+  std::map<std::string, int> table_name_to_file_num;
+
+  using Task = std::function<arrow::Status()>;
+  std::vector<Task> tasks_to_do;
 
   for (auto& info : table_generator_infos) {
     Program& program = info.program;
-    const std::vector<std::shared_ptr<Table>>& tables = info.tables;
+    std::vector<std::shared_ptr<Table>> tables = info.tables;
     uint64_t rows = info.rows;
 
     std::vector<std::shared_ptr<IProcessor>> processor_roots;
     for (const auto& table : tables) {
       auto processor_root = std::make_shared<AllProcessor>();
+      int file_id = table_name_to_file_num[table->Name()]++;
+
       if (write_flags.write_parquet) {
-        std::vector<std::shared_ptr<IProcessor>> writers;
+        auto data_file_name = write_flags.output_dir + "/" + table->Name() + std::to_string(file_id) + ".parquet";
+        auto writer = std::make_shared<ParquetWriter>(data_file_name, table->MakeParquetSchema());
+        processor_root->AttachChild(std::make_shared<WriterProcessor>(writer));
 
-        for (int32_t i = 0; i < generate_flags.files_per_table; ++i) {
-          auto data_file_name = write_flags.output_dir + "/" + table->Name() + std::to_string(i) + ".parquet";
-          auto writer = std::make_shared<ParquetWriter>(data_file_name, table->MakeParquetSchema());
-          writers.emplace_back(std::make_shared<WriterProcessor>(writer));
+        if (generate_flags.use_equality_deletes && generate_flags.equality_deletes_columns_count > 0) {
+          ARROW_ASSIGN_OR_RAISE(auto equality_delete_processor,
+                                MakeEqualityDeleteProcessor(table, file_id, random_device_storage.GetNewRandomDevice(),
+                                                            write_flags, generate_flags));
 
-          if (generate_flags.use_equality_deletes && generate_flags.equality_deletes_columns_count > 0) {
-            ARROW_ASSIGN_OR_RAISE(auto equality_delete_processor,
-                                  MakeEqualityDeleteProcessor(table, i, random_device, write_flags, generate_flags));
-
-            processor_root->AttachChild(equality_delete_processor);
-          }
-
-          if (generate_flags.use_positional_deletes) {
-            ARROW_ASSIGN_OR_RAISE(
-                auto positional_delete_processor,
-                MakePositionalDeleteProcessor(table, i, data_file_name, random_device, write_flags, generate_flags));
-            processor_root->AttachChild(positional_delete_processor);
-          }
+          processor_root->AttachChild(equality_delete_processor);
         }
-        processor_root->AttachChild(std::make_shared<RoundRobinProcessor>(writers));
+
+        if (generate_flags.use_positional_deletes) {
+          ARROW_ASSIGN_OR_RAISE(
+              auto positional_delete_processor,
+              MakePositionalDeleteProcessor(table, file_id, data_file_name, random_device_storage.GetNewRandomDevice(),
+                                            write_flags, generate_flags));
+          processor_root->AttachChild(positional_delete_processor);
+        }
       }
+
 #ifdef HAS_ARROW_CSV
       if (write_flags.write_csv) {
         auto csv_writer_options = TpchCsvWriteOptions();
-        std::vector<std::shared_ptr<IProcessor>> writers;
-        for (int32_t i = 0; i < generate_flags.files_per_table; ++i) {
-          auto writer =
-              std::make_shared<CSVWriter>(write_flags.output_dir + "/" + table->Name() + std::to_string(i) + ".csv",
-                                          table->MakeArrowSchema(), TpchCsvWriteOptions());
-          writers.emplace_back(std::make_shared<WriterProcessor>(writer));
-        }
-        processor_root->AttachChild(std::make_shared<RoundRobinProcessor>(writers));
+        auto writer =
+            std::make_shared<CSVWriter>(write_flags.output_dir + "/" + table->Name() + std::to_string(file_id) + ".csv",
+                                        table->MakeArrowSchema(), TpchCsvWriteOptions());
+        processor_root->AttachChild(std::make_shared<WriterProcessor>(writer));
       }
 #endif
       processor_roots.push_back(processor_root);
     }
 
-    BatchSizeMaker batch_size_maker(kBatchSize, rows);
+    Task task = [kBatchSize, rows, program = std::move(program), tables = std::move(tables),
+                 processor_roots = std::move(processor_roots)]() mutable -> arrow::Status {
+      BatchSizeMaker batch_size_maker(kBatchSize, rows);
 
-    for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
-         rows_in_next_batch = batch_size_maker.NextBatchSize()) {
-      ARROW_ASSIGN_OR_RAISE(auto batch, program.Generate(rows_in_next_batch));
-      for (size_t table_num = 0; table_num < tables.size(); table_num++) {
-        auto table = tables[table_num];
-        auto column_names = table->MakeColumnNames();
-        ARROW_ASSIGN_OR_RAISE(auto proj, batch->GetProjection(column_names));
-        ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(column_names));
-        ARROW_RETURN_NOT_OK(processor_roots[table_num]->Process(proj));
+      for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
+           rows_in_next_batch = batch_size_maker.NextBatchSize()) {
+        ARROW_ASSIGN_OR_RAISE(auto batch, program.Generate(rows_in_next_batch));
+        for (size_t table_num = 0; table_num < tables.size(); table_num++) {
+          auto table = tables[table_num];
+          auto column_names = table->MakeColumnNames();
+          ARROW_ASSIGN_OR_RAISE(auto proj, batch->GetProjection(column_names));
+          ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(column_names));
+          ARROW_RETURN_NOT_OK(processor_roots[table_num]->Process(proj));
+        }
       }
+
+      return arrow::Status::OK();
+    };
+
+    tasks_to_do.emplace_back(std::move(task));
+  }
+
+  std::vector<std::future<arrow::Status>> sets_of_tasks;
+
+  auto do_some_tasks = [&tasks_to_do](size_t thread_num, size_t total_threads) -> arrow::Status {
+    for (size_t i = thread_num; i < tasks_to_do.size(); i += total_threads) {
+      ARROW_RETURN_NOT_OK((tasks_to_do[i])());
+    }
+    return arrow::Status::OK();
+  };
+
+  for (size_t thread_num = 0; thread_num < generate_flags.threads_to_use; ++thread_num) {
+    sets_of_tasks.emplace_back(std::async(do_some_tasks, thread_num, generate_flags.threads_to_use));
+  }
+
+  for (size_t thread_num = 0; thread_num < generate_flags.threads_to_use; ++thread_num) {
+    auto status = sets_of_tasks[thread_num].get();
+    if (!status.ok()) {
+      std::cerr << status.message() << std::endl;
     }
   }
 
