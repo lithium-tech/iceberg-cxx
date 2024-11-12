@@ -1,8 +1,11 @@
 #include "gen/tpch/dataset.h"
 
 #include <deque>
+#include <functional>
 #include <future>
+#include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -39,13 +42,11 @@ arrow::csv::WriteOptions TpchCsvWriteOptions() {
 }
 #endif
 
-struct TableGeneratorInfo {
-  Program program;
-  std::vector<std::shared_ptr<Table>> tables;
-  uint64_t rows;
+using RowCount = uint64_t;
 
-  TableGeneratorInfo(const Program& program, const std::vector<std::shared_ptr<Table>>& tables, uint64_t rows)
-      : program(program), tables(tables), rows(rows) {}
+struct TableGeneratorInfo {
+  std::vector<std::pair<Program, RowCount>> program;
+  std::vector<std::shared_ptr<Table>> tables;
 };
 
 arrow::Result<std::shared_ptr<IProcessor>> MakeEqualityDeleteProcessor(std::shared_ptr<Table> table, int file_index,
@@ -153,6 +154,39 @@ class RandomDeviceStorage {
   uint64_t seed_;
 };
 
+class ProgramMaker {
+ public:
+  ProgramMaker(std::function<Program(uint64_t)> program_maker, std::vector<std::shared_ptr<Table>> tables)
+      : program_maker_(std::move(program_maker)), tables_(std::move(tables)) {}
+
+  Program MakeProgram(uint64_t first_row) const { return program_maker_(first_row); }
+
+  std::vector<std::shared_ptr<Table>> MakeTables() const { return tables_; }
+
+ private:
+  std::function<Program(uint64_t)> program_maker_;
+  std::vector<std::shared_ptr<Table>> tables_;
+};
+
+std::vector<TableGeneratorInfo> MakeTableGeneratorInfos(uint64_t total_rows, uint64_t task_count, uint64_t files,
+                                                        const ProgramMaker& maker) {
+  std::vector<TableGeneratorInfo> result;
+
+  auto fragments = GenerateFragments(total_rows, task_count);
+  std::vector<std::vector<std::pair<Program, RowCount>>> programs_per_file(files);
+  for (size_t i = 0; i < fragments.size(); ++i) {
+    if (fragments[i].row_count == 0) {
+      continue;
+    }
+    programs_per_file[i % files].emplace_back(maker.MakeProgram(fragments[i].first_row), fragments[i].row_count);
+  }
+  for (auto& programs : programs_per_file) {
+    result.emplace_back(std::move(programs), maker.MakeTables());
+  }
+
+  return result;
+}
+
 arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& generate_flags) {
   RandomDeviceStorage random_device_storage(generate_flags.seed);
 
@@ -165,6 +199,7 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
   constexpr int64_t kPartRowsPerScaleFactor = 200'000;
   constexpr int64_t kCustomerRowsPerScaleFactor = 150'000;
   constexpr int64_t kOrdersRowsPerScaleFactor = 1'500'000;
+  constexpr int64_t kTaskCount = 200;
 
   const int64_t kSupplierRows = kScaleFactor * kSupplierRowsPerScaleFactor;
   const int64_t kPartRows = kScaleFactor * kPartRowsPerScaleFactor;
@@ -174,46 +209,54 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
   constexpr int64_t kRegionRows = 5;
 
   std::vector<TableGeneratorInfo> table_generator_infos;
-  {
-    auto fragments = GenerateFragments(kSupplierRows, generate_flags.files_per_table);
-    for (auto fragment : fragments) {
-      table_generator_infos.emplace_back(
-          MakeSupplierProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor, fragment.first_row),
-          std::vector<std::shared_ptr<Table>>{std::make_shared<SupplierTable>()}, fragment.row_count);
-    }
-  }
-  {
-    auto fragments = GenerateFragments(kPartRows, generate_flags.files_per_table);
-    for (auto fragment : fragments) {
-      table_generator_infos.emplace_back(
-          MakePartAndPartsuppProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor,
-                                     fragment.first_row),
-          std::vector<std::shared_ptr<Table>>{std::make_shared<PartTable>(), std::make_shared<PartsuppTable>()},
-          fragment.row_count);
-    }
-  }
-  {
-    auto fragments = GenerateFragments(kCustomerRows, generate_flags.files_per_table);
-    for (auto fragment : fragments) {
-      table_generator_infos.emplace_back(
-          MakeCustomerProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor, fragment.first_row),
-          std::vector<std::shared_ptr<Table>>{std::make_shared<CustomerTable>()}, fragment.row_count);
-    }
-  }
-  {
-    auto fragments = GenerateFragments(kOrdersRows, generate_flags.files_per_table);
-    for (auto fragment : fragments) {
-      table_generator_infos.emplace_back(
-          MakeOrderAndLineitemProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor,
-                                      fragment.first_row),
-          std::vector<std::shared_ptr<Table>>{std::make_shared<OrdersTable>(), std::make_shared<LineitemTable>()},
-          fragment.row_count);
-    }
-  }
-  table_generator_infos.emplace_back(MakeNationProgram(text, random_device_storage.GetNewRandomDevice()),
-                                     std::vector<std::shared_ptr<Table>>{std::make_shared<NationTable>()}, kNationRows);
-  table_generator_infos.emplace_back(MakeRegionProgram(text, random_device_storage.GetNewRandomDevice()),
-                                     std::vector<std::shared_ptr<Table>>{std::make_shared<RegionTable>()}, kRegionRows);
+  auto append_infos = [&table_generator_infos](std::vector<TableGeneratorInfo>&& new_infos) {
+    table_generator_infos.insert(table_generator_infos.end(), std::make_move_iterator(new_infos.begin()),
+                                 std::make_move_iterator(new_infos.end()));
+  };
+
+  append_infos(MakeTableGeneratorInfos(
+      kSupplierRows, kTaskCount, generate_flags.files_per_table,
+      ProgramMaker(
+          [&text, &random_device_storage, kScaleFactor](uint64_t first_row) {
+            return MakeSupplierProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor, first_row);
+          },
+          std::vector<std::shared_ptr<Table>>{std::make_shared<SupplierTable>()})));
+
+  append_infos(MakeTableGeneratorInfos(
+      kPartRows, kTaskCount, generate_flags.files_per_table,
+      ProgramMaker(
+          [&](uint64_t first_row) {
+            return MakePartAndPartsuppProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor,
+                                              first_row);
+          },
+          std::vector<std::shared_ptr<Table>>{std::make_shared<PartTable>(), std::make_shared<PartsuppTable>()})));
+
+  append_infos(MakeTableGeneratorInfos(
+      kCustomerRows, kTaskCount, generate_flags.files_per_table,
+      ProgramMaker(
+          [&](uint64_t first_row) {
+            return MakeCustomerProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor, first_row);
+          },
+          std::vector<std::shared_ptr<Table>>{std::make_shared<CustomerTable>()})));
+
+  append_infos(MakeTableGeneratorInfos(
+      kOrdersRows, kTaskCount, generate_flags.files_per_table,
+      ProgramMaker(
+          [&](uint64_t first_row) {
+            return MakeOrderAndLineitemProgram(text, random_device_storage.GetNewRandomDevice(), kScaleFactor,
+                                               first_row);
+          },
+          std::vector<std::shared_ptr<Table>>{std::make_shared<OrdersTable>(), std::make_shared<LineitemTable>()})));
+
+  table_generator_infos.emplace_back(
+      std::vector<std::pair<Program, RowCount>>{
+          {MakeNationProgram(text, random_device_storage.GetNewRandomDevice()), kNationRows}},
+      std::vector<std::shared_ptr<Table>>{std::make_shared<NationTable>()});
+
+  table_generator_infos.emplace_back(
+      std::vector<std::pair<Program, RowCount>>{
+          {MakeRegionProgram(text, random_device_storage.GetNewRandomDevice()), kRegionRows}},
+      std::vector<std::shared_ptr<Table>>{std::make_shared<RegionTable>()});
 
   std::map<std::string, int> table_name_to_file_num;
 
@@ -221,9 +264,7 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
   std::vector<Task> tasks_to_do;
 
   for (auto& info : table_generator_infos) {
-    Program& program = info.program;
     std::vector<std::shared_ptr<Table>> tables = info.tables;
-    uint64_t rows = info.rows;
 
     std::vector<std::shared_ptr<IProcessor>> processor_roots;
     for (const auto& table : tables) {
@@ -264,19 +305,23 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
       processor_roots.push_back(processor_root);
     }
 
-    Task task = [kBatchSize, rows, program = std::move(program), tables = std::move(tables),
-                 processor_roots = std::move(processor_roots)]() mutable -> arrow::Status {
-      BatchSizeMaker batch_size_maker(kBatchSize, rows);
+    std::vector<std::pair<Program, RowCount>>& programs = info.program;
 
-      for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
-           rows_in_next_batch = batch_size_maker.NextBatchSize()) {
-        ARROW_ASSIGN_OR_RAISE(auto batch, program.Generate(rows_in_next_batch));
-        for (size_t table_num = 0; table_num < tables.size(); table_num++) {
-          auto table = tables[table_num];
-          auto column_names = table->MakeColumnNames();
-          ARROW_ASSIGN_OR_RAISE(auto proj, batch->GetProjection(column_names));
-          ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(column_names));
-          ARROW_RETURN_NOT_OK(processor_roots[table_num]->Process(proj));
+    Task task = [kBatchSize, programs = std::move(programs), tables = std::move(tables),
+                 processor_roots = std::move(processor_roots)]() mutable -> arrow::Status {
+      for (auto& [program, row_count] : programs) {
+        BatchSizeMaker batch_size_maker(kBatchSize, row_count);
+
+        for (int64_t rows_in_next_batch = batch_size_maker.NextBatchSize(); rows_in_next_batch != 0;
+             rows_in_next_batch = batch_size_maker.NextBatchSize()) {
+          ARROW_ASSIGN_OR_RAISE(auto batch, program.Generate(rows_in_next_batch));
+          for (size_t table_num = 0; table_num < tables.size(); table_num++) {
+            auto table = tables[table_num];
+            auto column_names = table->MakeColumnNames();
+            ARROW_ASSIGN_OR_RAISE(auto proj, batch->GetProjection(column_names));
+            ARROW_ASSIGN_OR_RAISE(auto arrow_batch, batch->GetArrowBatch(column_names));
+            ARROW_RETURN_NOT_OK(processor_roots[table_num]->Process(proj));
+          }
         }
       }
 
