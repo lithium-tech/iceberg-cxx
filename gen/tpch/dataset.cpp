@@ -1,5 +1,6 @@
 #include "gen/tpch/dataset.h"
 
+#include <deque>
 #include <future>
 #include <memory>
 #include <thread>
