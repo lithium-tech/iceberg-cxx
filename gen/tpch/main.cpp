@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <stdexcept>
 #include <unordered_set>
@@ -9,8 +10,10 @@
 #include "absl/flags/flag.h"
 #include "absl/flags/internal/flag.h"
 #include "absl/flags/parse.h"
+#include "gen/src/compression.h"
 #include "gen/src/writer.h"
 #include "gen/tpch/dataset.h"
+#include "parquet/platform.h"
 
 ABSL_FLAG(std::string, output_dir, "", "output directory");
 ABSL_FLAG(int64_t, seed, 0, "seed for random device");
@@ -25,6 +28,8 @@ ABSL_FLAG(double, equality_deletes_rows_scale, 0, "row count ratio in equality d
 ABSL_FLAG(bool, use_positional_deletes, false, "either to generate positional delete files to all tables or not");
 ABSL_FLAG(double, positional_deletes_rows_scale, 0, "row count ratio in equality delete files and in original table");
 ABSL_FLAG(int32_t, threads_to_use, 1, "number of threads to use");
+ABSL_FLAG(std::string, parquet_compression, std::string(gen::compression::kUncompressedStr), "compression to use");
+ABSL_FLAG(std::optional<int>, parquet_compression_level, std::nullopt, "compression level to use");
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
@@ -36,12 +41,30 @@ int main(int argc, char** argv) {
   int32_t files_per_table = absl::GetFlag(FLAGS_files_per_table);
   bool write_parquet = absl::GetFlag(FLAGS_write_parquet);
   bool write_csv = absl::GetFlag(FLAGS_write_csv);
+  std::string parquet_compression_str = absl::GetFlag(FLAGS_parquet_compression);
+  auto maybe_compression = gen::CompressionFromString(parquet_compression_str);
+  if (!maybe_compression.has_value()) {
+    std::cerr << "Unknown parquet compression: " << parquet_compression_str << std::endl;
+    return 1;
+  }
+  auto parquet_compression = maybe_compression.value();
+  auto parquet_compression_level = absl::GetFlag(FLAGS_parquet_compression_level);
+
+  if (parquet_compression_level.has_value() && parquet_compression == parquet::Compression::UNCOMPRESSED) {
+    std::cerr << "parquet_compression is UNCOMPRESSED, but compression level is set" << std::endl;
+    return 1;
+  }
 
   if (write_csv) {
 #ifndef HAS_ARROW_CSV
-    std::cout << "arrow built without csv" << std::endl;
+    std::cerr << "arrow built without csv" << std::endl;
     return 1;
 #endif
+  }
+
+  if (!write_parquet && !parquet_compression_str.empty()) {
+    std::cerr << "parquet_compression is set, but write_parquet option is off" << std::endl;
+    return 1;
   }
 
   bool use_equality_deletes = absl::GetFlag(FLAGS_use_equality_deletes);
@@ -63,7 +86,11 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  gen::WriteFlags write_flags{.output_dir = output_dir, .write_parquet = write_parquet, .write_csv = write_csv};
+  gen::WriteFlags write_flags{.output_dir = output_dir,
+                              .write_parquet = write_parquet,
+                              .write_csv = write_csv,
+                              .parquet_compression = parquet_compression,
+                              .compression_level = parquet_compression_level};
   gen::GenerateFlags generate_flags{.scale_factor = scale_factor,
                                     .arrow_batch_size = arrow_batch_size,
                                     .seed = seed,

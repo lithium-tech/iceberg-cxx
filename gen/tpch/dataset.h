@@ -5,6 +5,8 @@
 #include <string>
 
 #include "arrow/status.h"
+#include "gen/src/compression.h"
+#include "parquet/platform.h"
 
 namespace gen {
 
@@ -12,10 +14,17 @@ struct WriteFlags {
   std::string output_dir;
   bool write_parquet = false;
   bool write_csv = false;
+  parquet::Compression::type parquet_compression = parquet::Compression::UNCOMPRESSED;
+  std::optional<int> compression_level = std::nullopt;
 
   friend std::ostream& operator<<(std::ostream& os, const WriteFlags& flags) {
-    return os << "output_dir: " << flags.output_dir << ", write_parquet: " << flags.write_parquet
-              << ", write_csv: " << flags.write_csv;
+    auto compression_str = ToString(flags.parquet_compression);
+    os << "output_dir: " << flags.output_dir << ", write_parquet: " << flags.write_parquet
+       << ", write_csv: " << flags.write_csv << ", parquet_compression: " << compression_str.value_or("unknown");
+    if (flags.compression_level.has_value()) {
+      os << ", compression_level: " << flags.compression_level.value();
+    }
+    return os;
   }
 };
 

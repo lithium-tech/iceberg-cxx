@@ -20,6 +20,7 @@
 #include "gen/src/processor.h"
 #include "parquet/arrow/writer.h"
 #include "parquet/file_writer.h"
+#include "parquet/platform.h"
 #include "parquet/properties.h"
 #include "parquet/schema.h"
 #include "parquet/types.h"
@@ -35,7 +36,9 @@ class Writer {
 
 class ParquetWriter : public Writer {
  public:
-  ParquetWriter(const std::string& filename, const std::shared_ptr<parquet::schema::GroupNode>& schema)
+  ParquetWriter(const std::string& filename, const std::shared_ptr<parquet::schema::GroupNode>& schema,
+                const parquet::Compression::type compression = parquet::Compression::UNCOMPRESSED,
+                std::optional<int> compression_level = std::nullopt)
       : outfile_([&filename]() {
           auto maybe_outfile = arrow::io::FileOutputStream::Open(filename);
           if (!maybe_outfile.ok()) {
@@ -43,7 +46,14 @@ class ParquetWriter : public Writer {
           }
           return maybe_outfile.ValueUnsafe();
         }()),
-        parquet_writer_(parquet::ParquetFileWriter::Open(outfile_, schema)) {}
+        parquet_writer_([&]() {
+          parquet::WriterProperties::Builder builder;
+          builder.compression(compression);
+          if (compression_level.has_value()) {
+            builder.compression_level(compression_level.value());
+          }
+          return parquet::ParquetFileWriter::Open(outfile_, schema, builder.build());
+        }()) {}
 
   arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) override {
     if (arrow_writer_ == nullptr) {
