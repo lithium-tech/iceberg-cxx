@@ -2,12 +2,14 @@
 
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include "arrow/filesystem/s3fs.h"
 #include "iceberg/catalog.h"
 #include "iceberg/table.h"
 #include "iceberg/table_metadata.h"
+#include "iceberg/transaction.h"
 
 namespace iceberg::ice_tea {
 
@@ -15,10 +17,12 @@ class HiveClientImpl;
 
 class HiveTable : public Table {
  public:
-  HiveTable(const catalog::TableIdentifier& ident, const std::string& location) : ident_(ident), location_(location) {}
   HiveTable(const catalog::TableIdentifier& ident, const std::string& location,
-            std::shared_ptr<TableMetadataV2> table_metadata)
-      : ident_(ident), location_(location), table_metadata_(table_metadata) {}
+            std::shared_ptr<arrow::fs::S3FileSystem> s3fs)
+      : ident_(ident), location_(location), s3fs_(s3fs) {}
+  HiveTable(const catalog::TableIdentifier& ident, const std::string& location,
+            std::shared_ptr<TableMetadataV2> table_metadata, std::shared_ptr<arrow::fs::S3FileSystem> s3fs)
+      : ident_(ident), location_(location), table_metadata_(table_metadata), s3fs_(s3fs) {}
 
   const std::string& Location() const override { return location_; }
   const std::string& Name() const override { return ident_.name; }
@@ -30,11 +34,27 @@ class HiveTable : public Table {
     return schema_;
   }
 
+  std::vector<std::string> GetFilePathes() const override { return file_pathes_; }
+
+  void AppendTable(std::shared_ptr<arrow::Table> table) override {
+    auto transaction = Transaction(this, table_metadata_, s3fs_);
+    transaction.AppendTable(table);
+    transaction.Commit();
+  }
+
  private:
+  void DoCommit(const std::vector<DataFile>& file_updates) override {
+    for (const auto& elem : file_updates) {
+      file_pathes_.push_back(elem.file_path);
+    }
+  }
+
+  std::vector<std::string> file_pathes_;
   catalog::TableIdentifier ident_;
   std::string location_;
   std::shared_ptr<TableMetadataV2> table_metadata_;
   mutable std::shared_ptr<Schema> schema_;
+  std::shared_ptr<arrow::fs::S3FileSystem> s3fs_;
 };
 
 class HiveCatalog : public catalog::Catalog {
@@ -58,6 +78,9 @@ class HiveCatalog : public catalog::Catalog {
 
   std::shared_ptr<Table> LoadTable(const catalog::TableIdentifier& identifier) override;
   bool TableExists(const catalog::TableIdentifier& identifier) override;
+
+  std::shared_ptr<Table> CreateTable(const catalog::TableIdentifier& identifier, const Schema& schema,
+                                     std::shared_ptr<TableMetadataV2> table_metadata) override;
 
  private:
   std::string name_ = "ice_tea";

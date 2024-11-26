@@ -1,0 +1,146 @@
+#include <arrow/filesystem/localfs.h>
+#include <arrow/io/file.h>
+#include <parquet/api/reader.h>
+#include <parquet/arrow/reader.h>
+
+#include <limits>
+#include <memory>
+#include <stdexcept>
+
+#include "gtest/gtest.h"
+#include "iceberg/schema.h"
+#include "iceberg/sql_catalog.h"
+#include "iceberg/table_metadata.h"
+#include "iceberg/transforms.h"
+
+namespace iceberg {
+
+namespace {
+
+std::shared_ptr<arrow::Table> ReadTableFromParquet(const std::string& file_path) {
+  auto fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  auto input_file = fs->OpenInputFile(file_path).ValueOrDie();
+
+  parquet::arrow::FileReaderBuilder reader_builder;
+  if (auto status = reader_builder.Open(input_file); !status.ok()) {
+    throw status;
+  }
+  reader_builder.memory_pool(arrow::default_memory_pool());
+  reader_builder.properties(parquet::default_arrow_reader_properties());
+
+  std::unique_ptr<parquet::arrow::FileReader> arrow_reader = reader_builder.Build().ValueOrDie();
+
+  std::shared_ptr<arrow::Table> table;
+  if (auto status = arrow_reader->ReadTable(&table); !status.ok()) {
+    throw status;
+  }
+
+  return table;
+}
+
+Schema MakeIcebergSchemaFromArrow(int schema_id, const std::shared_ptr<arrow::Schema>& arrow_schema) {
+  std::vector<types::NestedField> fields;
+  for (size_t i = 0; i < arrow_schema->fields().size(); ++i) {
+    const auto& field = arrow_schema->field(i);
+    fields.push_back(types::NestedField{.name = field->name(),
+                                        .field_id = static_cast<int>(i),
+                                        .is_required = true,
+                                        .type = types::ConvertArrowTypeToIceberg(field->type(), i)});
+  }
+  return Schema(schema_id, std::move(fields));
+}
+
+}  // namespace
+
+TEST(CompatPartitions, NoPartitioning) {
+  auto parquet_table = ReadTableFromParquet("data/00000-7-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00002.parquet");
+
+  SqlCatalog catalog("//tmp/cppcatalog", std::make_shared<arrow::fs::LocalFileSystem>());
+  auto table = catalog.CreateTable(catalog::TableIdentifier{.db = "db", .name = "test_table1"},
+                                   MakeIcebergSchemaFromArrow(0, parquet_table->schema()));
+
+  table->AppendTable(parquet_table);
+  EXPECT_EQ(table->GetFilePathes().size(), 1);
+}
+
+TEST(CompatPartitions, IdentityPartitioning) {
+  auto parquet_table = ReadTableFromParquet("data/00000-7-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00002.parquet");
+
+  std::shared_ptr<TableMetadataV2> table_metadata = std::make_shared<TableMetadataV2>(
+      std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<Schema>>{}, 0,
+      std::vector<std::shared_ptr<PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
+      std::vector<std::shared_ptr<Snapshot>>{}, std::vector<SnapshotLog>{}, std::vector<MetadataLog>{},
+      std::vector<std::shared_ptr<SortOrder>>{}, 0, std::map<std::string, SnapshotRef>{});
+  PartitionSpec partition_spec{.spec_id = 0,
+                               .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
+                                                         .field_id = static_cast<int32_t>(0),
+                                                         .name = "r_regionkey",
+                                                         .transform = std::make_shared<IdentityTransform>()}}};
+
+  table_metadata->partition_specs = {std::make_shared<PartitionSpec>(partition_spec)};
+
+  SqlCatalog catalog("//tmp/cppcatalog", std::make_shared<arrow::fs::LocalFileSystem>());
+  auto table = catalog.CreateTable(catalog::TableIdentifier{.db = "db", .name = "test_table2"},
+                                   MakeIcebergSchemaFromArrow(0, parquet_table->schema()), table_metadata);
+
+  table->AppendTable(parquet_table);
+  EXPECT_EQ(table->GetFilePathes().size(), 5);
+}
+
+TEST(CompatPartitions, BucketPartitioning) {
+  auto parquet_table = ReadTableFromParquet("data/00000-7-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00002.parquet");
+
+  std::shared_ptr<TableMetadataV2> table_metadata = std::make_shared<TableMetadataV2>(
+      std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<Schema>>{}, 0,
+      std::vector<std::shared_ptr<PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
+      std::vector<std::shared_ptr<Snapshot>>{}, std::vector<SnapshotLog>{}, std::vector<MetadataLog>{},
+      std::vector<std::shared_ptr<SortOrder>>{}, 0, std::map<std::string, SnapshotRef>{});
+  PartitionSpec partition_spec{.spec_id = 0,
+                               .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
+                                                         .field_id = static_cast<int32_t>(0),
+                                                         .name = "n_regionkey",
+                                                         .transform = std::make_shared<BucketTransform>(3)}}};
+
+  table_metadata->partition_specs = {std::make_shared<PartitionSpec>(partition_spec)};
+
+  SqlCatalog catalog("//tmp/cppcatalog", std::make_shared<arrow::fs::LocalFileSystem>());
+  auto table = catalog.CreateTable(catalog::TableIdentifier{.db = "db", .name = "test_table3"},
+                                   MakeIcebergSchemaFromArrow(0, parquet_table->schema()), table_metadata);
+
+  table->AppendTable(parquet_table);
+#ifdef USE_SMHASHER
+  EXPECT_EQ(table->GetFilePathes().size(), 2);
+#else
+  EXPECT_EQ(table->GetFilePathes().size(), 3);
+#endif
+}
+
+TEST(CompatPartitions, TruncateTransform) {
+  auto parquet_table = ReadTableFromParquet("data/00000-7-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00002.parquet");
+
+  std::shared_ptr<TableMetadataV2> table_metadata = std::make_shared<TableMetadataV2>(
+      std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<Schema>>{}, 0,
+      std::vector<std::shared_ptr<PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
+      std::vector<std::shared_ptr<Snapshot>>{}, std::vector<SnapshotLog>{}, std::vector<MetadataLog>{},
+      std::vector<std::shared_ptr<SortOrder>>{}, 0, std::map<std::string, SnapshotRef>{});
+  PartitionSpec partition_spec{.spec_id = 0,
+                               .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
+                                                         .field_id = static_cast<int32_t>(0),
+                                                         .name = "n_regionkey",
+                                                         .transform = std::make_shared<TruncateTransform>(3)}}};
+
+  table_metadata->partition_specs = {std::make_shared<PartitionSpec>(partition_spec)};
+
+  SqlCatalog catalog("//tmp/cppcatalog", std::make_shared<arrow::fs::LocalFileSystem>());
+  auto table = catalog.CreateTable(catalog::TableIdentifier{.db = "db", .name = "test_table4"},
+                                   MakeIcebergSchemaFromArrow(0, parquet_table->schema()), table_metadata);
+
+  table->AppendTable(parquet_table);
+#ifdef USE_SMHASHER
+  EXPECT_EQ(table->GetFilePathes().size(), 5);
+#else
+  EXPECT_EQ(table->GetFilePathes().size(), 3);
+#endif
+}
+
+}  // namespace iceberg

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <arrow/type.h>
+
 #include <cassert>
 #include <memory>
 #include <optional>
@@ -59,6 +61,7 @@ class Type {
   TypeID id_;
 };
 
+// TODO: delete constructor with TypeId::Decimal
 class PrimitiveType : public Type {
  public:
   explicit PrimitiveType(TypeID id) : Type(id) {}
@@ -122,6 +125,9 @@ class ListType final : public Type {
   bool element_required_;
   std::shared_ptr<const Type> element_type_;
 };
+
+// NOTE: use this function carefully
+std::shared_ptr<Type> ConvertArrowTypeToIceberg(const std::shared_ptr<arrow::DataType>& type, int field_id);
 
 }  // namespace types
 }  // namespace iceberg

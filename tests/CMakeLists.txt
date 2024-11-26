@@ -4,9 +4,15 @@ add_executable(iceberg_local_test
     table_metadata_test.cpp
     snapshot_test.cpp
     run_tests.cpp
+    compat/transforms_test.cpp
+    compat/partitions_test.cpp
 )
-target_link_libraries(iceberg_local_test PRIVATE gtest iceberg-cpp dl)
-target_include_directories(iceberg_local_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp dl)
+target_include_directories(iceberg_local_test PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+
+if (USE_SMHASHER)
+    target_link_libraries(iceberg_local_test PUBLIC SMHasherSupport)
+endif()
 
 ADD_CUSTOM_TARGET(test_metadata_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/metadata" "${CMAKE_CURRENT_BINARY_DIR}/metadata"

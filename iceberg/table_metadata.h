@@ -9,6 +9,7 @@
 
 #include "iceberg/schema.h"
 #include "iceberg/snapshot.h"
+#include "iceberg/transforms.h"
 
 namespace iceberg {
 
@@ -74,7 +75,7 @@ struct PartitionField {
   int32_t source_id;
   int32_t field_id;
   std::string name;
-  std::string transform;  // TODO(chertus): Transform type
+  std::shared_ptr<ITransform> transform;
 
   bool operator==(const PartitionField& other) const {
     return source_id == other.source_id && field_id == other.field_id && name == other.name &&

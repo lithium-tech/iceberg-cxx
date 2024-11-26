@@ -62,7 +62,7 @@ bool HiveCatalog::TableExists(const catalog::TableIdentifier& identifier) {
 std::shared_ptr<Table> HiveCatalog::LoadTable(const catalog::TableIdentifier& identifier) {
   auto location = impl_->GetMetadataLocation(identifier.db, identifier.name);
   if (properties_.empty()) {
-    return std::make_shared<HiveTable>(identifier, location);
+    return std::make_shared<HiveTable>(identifier, location, s3fs_);
   }
 
   if (!s3fs_) {
@@ -86,7 +86,7 @@ std::shared_ptr<Table> HiveCatalog::LoadTable(const catalog::TableIdentifier& id
   if (!metadata) {
     return {};
   }
-  return std::make_shared<HiveTable>(identifier, location, metadata);
+  return std::make_shared<HiveTable>(identifier, location, metadata, s3fs_);
 }
 
 static inline std::string GetOpt(const std::map<std::string, std::string>& properties, const std::string& key) {
@@ -105,6 +105,16 @@ arrow::fs::S3Options HiveCatalog::MakeS3Opts(const std::map<std::string, std::st
   options.endpoint_override = GetOpt(properties, OPT_ENDPOINT);
   options.scheme = GetOpt(properties, OPT_SCHEME);
   return options;
+}
+
+std::shared_ptr<Table> HiveCatalog::CreateTable(const catalog::TableIdentifier& identifier, const Schema& schema,
+                                                std::shared_ptr<TableMetadataV2> table_metadata) {
+  auto dir_path = "/" + identifier.db + "/" + identifier.name;
+  auto status = s3fs_->CreateDir(dir_path);
+  if (!status.ok()) {
+    throw std::runtime_error("Could not create dir " + dir_path);
+  }
+  return std::make_shared<HiveTable>(identifier, dir_path, table_metadata, s3fs_);
 }
 
 }  // namespace iceberg::ice_tea

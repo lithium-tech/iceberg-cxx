@@ -21,9 +21,21 @@ add_library(iceberg-cpp STATIC
     uuid.h
     write.cpp
     write.h
+    transforms.cpp
+    transforms.h
+    hash_utils.h
+    sql_catalog.cpp
+    sql_catalog.h
+    transaction.cpp
+    transaction.h
 )
 
-target_link_libraries(iceberg-cpp PRIVATE rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static)
+add_subdirectory(parquet)
+
+target_link_libraries(iceberg-cpp PUBLIC rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static ice_parquet)
 target_link_libraries(iceberg-cpp PUBLIC Arrow::arrow_static)
+if (USE_SMHASHER)
+    target_link_libraries(iceberg-cpp PUBLIC SMHasherSupport)
+endif()
 
 set_target_properties(iceberg-cpp PROPERTIES POSITION_INDEPENDENT_CODE ON)

@@ -17,6 +17,10 @@ find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
 set_property(TARGET Arrow::arrow_bundled_dependencies
   APPEND PROPERTY INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto;OpenSSL::SSL"
 )
+option(USE_SMHASHER "Enable SMHasher" OFF)
+if(USE_SMHASHER)
+    add_definitions(-DUSE_SMHASHER)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 

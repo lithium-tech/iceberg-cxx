@@ -11,6 +11,8 @@
 #include <vector>
 #include <memory>
 
+#include "iceberg/transforms.h"
+
 namespace iceberg {
 
 struct ContentFile {
@@ -24,7 +26,7 @@ struct ContentFile {
   std::string file_path;
   std::string file_format;
 
-  // TOOD(g.perov): partition
+  std::optional<PartitionKey> partition_key;
 
   int64_t record_count;
   int64_t file_size_in_bytes;
