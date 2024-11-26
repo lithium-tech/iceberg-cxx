@@ -62,11 +62,6 @@ int main(int argc, char** argv) {
 #endif
   }
 
-  if (!write_parquet && !parquet_compression_str.empty()) {
-    std::cerr << "parquet_compression is set, but write_parquet option is off" << std::endl;
-    return 1;
-  }
-
   bool use_equality_deletes = absl::GetFlag(FLAGS_use_equality_deletes);
   int32_t equality_deletes_columns_count = absl::GetFlag(FLAGS_equality_deletes_columns_count);
   double equality_deletes_rows_scale = absl::GetFlag(FLAGS_equality_deletes_rows_scale);
