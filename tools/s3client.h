@@ -105,26 +105,32 @@ class S3Client {
 
   S3Client(bool force, arrow::fs::S3LogLevel log_level = arrow::fs::S3LogLevel::Error, int64_t chunk_size = CHUNK_SIZE,
            const std::string& src_env_prefix = "AWS_", const std::string& dst_env_prefix = "DST_",
-           const arrow::io::IOContext& io_context = arrow::io::default_io_context())
+           const arrow::io::IOContext& io_context = arrow::io::default_io_context(), bool use_local_fs = false)
       : s3init_(log_level), io_context_(io_context), copy_chunk_size_(chunk_size) {
-    src_access_.LoadEnvOptions(src_env_prefix);
-    S3Access::ClearEnvOptions("AWS_");
+    if (!use_local_fs) {
+      src_access_.LoadEnvOptions(src_env_prefix);
+      S3Access::ClearEnvOptions("AWS_");
 
-    fs_ = std::make_shared<arrow::fs::LocalFileSystem>();
+      fs_ = std::make_shared<arrow::fs::LocalFileSystem>();
 
-    auto s3fs_res = arrow::fs::S3FileSystem::Make(src_access_.options);
-    if (!s3fs_res.ok()) {
-      throw std::runtime_error(s3fs_res.status().ToString());
-    }
-    src_s3fs_ = *s3fs_res;
-
-    if (!dst_env_prefix.empty()) {
-      dst_access_.LoadEnvOptions(dst_env_prefix);
-      s3fs_res = arrow::fs::S3FileSystem::Make(dst_access_.options);
+      auto s3fs_res = arrow::fs::S3FileSystem::Make(src_access_.options);
       if (!s3fs_res.ok()) {
         throw std::runtime_error(s3fs_res.status().ToString());
       }
-      dst_s3fs_ = *s3fs_res;
+      src_s3fs_ = *s3fs_res;
+
+      if (!dst_env_prefix.empty()) {
+        dst_access_.LoadEnvOptions(dst_env_prefix);
+        s3fs_res = arrow::fs::S3FileSystem::Make(dst_access_.options);
+        if (!s3fs_res.ok()) {
+          throw std::runtime_error(s3fs_res.status().ToString());
+        }
+        dst_s3fs_ = *s3fs_res;
+      }
+    } else {
+      fs_ = std::make_shared<arrow::fs::LocalFileSystem>();
+      src_s3fs_ = fs_;
+      dst_s3fs_ = fs_;
     }
   }
 
