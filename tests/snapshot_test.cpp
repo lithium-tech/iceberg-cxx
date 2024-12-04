@@ -1,8 +1,13 @@
+#include <arrow/filesystem/localfs.h>
+
 #include <cctype>
+#include <filesystem>
 #include <unordered_set>
 
 #include "gtest/gtest.h"
 #include "iceberg/uuid.h"
+#include "tools/common.h"
+#include "tools/metadata_tree.h"
 
 namespace iceberg {
 namespace {
@@ -29,6 +34,24 @@ bool ValidateUUID(const std::string& uuid) {
   }
 
   return true;
+}
+
+bool HasFileWithPrefix(const std::filesystem::path& directory, const std::string& prefix) {
+  try {
+    if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+      return false;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+      if (entry.is_regular_file() && entry.path().filename().string().rfind(prefix, 0) == 0) {
+        return true;
+      }
+    }
+  } catch (const std::filesystem::filesystem_error& e) {
+    return false;
+  }
+
+  return false;
 }
 
 }  // namespace
@@ -69,6 +92,24 @@ TEST(UUIDGenerator, Test) {
     EXPECT_FALSE(seen_uuids.contains(uuid_str));
     seen_uuids.insert(uuid_str);
   }
+}
+
+TEST(SnapshotTest, Test) {
+  auto metadata_tree = tools::MetadataTree("metadata/00006-8caf3988-3dcc-4ca2-a472-0d96a273eaeb.metadata.json");
+  auto snapshot_maker = tools::SnapshotMaker(std::make_shared<arrow::fs::LocalFileSystem>(), metadata_tree, 0);
+  std::shared_ptr<iceberg::TableMetadataV2> table_metadata = std::make_shared<iceberg::TableMetadataV2>(
+      std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<iceberg::Schema>>{}, 0,
+      std::vector<std::shared_ptr<iceberg::PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
+      std::vector<std::shared_ptr<iceberg::Snapshot>>{}, std::vector<iceberg::SnapshotLog>{},
+      std::vector<iceberg::MetadataLog>{}, std::vector<std::shared_ptr<iceberg::SortOrder>>{}, 0,
+      std::map<std::string, iceberg::SnapshotRef>{});
+  snapshot_maker.table_metadata = table_metadata;
+
+  snapshot_maker.MakeMetadataFiles(
+      "snapshots", "metadata", {},
+      std::vector<std::string>{"data/00000-6-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet"}, {});
+
+  EXPECT_TRUE(HasFileWithPrefix("snapshots", "snap"));
 }
 
 }  // namespace iceberg

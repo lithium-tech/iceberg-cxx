@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arrow/filesystem/filesystem.h>
 #include <arrow/filesystem/localfs.h>
 #include <arrow/io/api.h>
 #include <parquet/type_fwd.h>
@@ -16,9 +17,8 @@
 #include "iceberg/manifest_file.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"
-#include "tools/metadata_tree.h"
-
 #include "iceberg/uuid.h"
+#include "tools/metadata_tree.h"
 
 namespace iceberg::tools {
 
@@ -180,8 +180,10 @@ struct SnapshotMaker {
   std::shared_ptr<iceberg::Snapshot> parent_snap;
   MetadataNameMaker name_maker;
   mutable UuidGenerator uuid_generator;
+  std::shared_ptr<arrow::fs::FileSystem> fs;
 
-  SnapshotMaker(const MetadataTree& dst_meta_tree, int64_t current_time_ms, int meta_seqno = 0);
+  SnapshotMaker(std::shared_ptr<arrow::fs::FileSystem> fs_, const MetadataTree& dst_meta_tree, int64_t current_time_ms,
+                int meta_seqno = 0);
 
   void MakeMetadataFiles(const std::filesystem::path& local_data_location,
                          const std::filesystem::path& metadata_location,
@@ -190,9 +192,8 @@ struct SnapshotMaker {
                          const std::vector<std::string>& added_delete_files) {
     Manifest added_data_entries =
         MakeEntries(local_data_location, metadata_location, added_data_files, iceberg::ContentFile::FileContent::kData);
-    Manifest added_delete_entries =
-        MakeEntries(local_data_location, metadata_location, added_delete_files,
-                    iceberg::ContentFile::FileContent::kEqualityDeletes);
+    Manifest added_delete_entries = MakeEntries(local_data_location, metadata_location, added_delete_files,
+                                                iceberg::ContentFile::FileContent::kEqualityDeletes);
 
     MakeMetadataFiles(local_data_location, metadata_location, existing, added_data_entries, added_delete_entries);
   }
@@ -206,13 +207,10 @@ struct SnapshotMaker {
   void MakeMetadataFiles(const std::filesystem::path& local_data_location,
                          const std::filesystem::path& metadata_location,
                          const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
-                         const Manifest& added_data_entries,
-                         const Manifest& added_delete_entries);
+                         const Manifest& added_data_entries, const Manifest& added_delete_entries);
 
-  Manifest MakeEntries(const std::filesystem::path& local_data_location,
-                                                  const std::filesystem::path& metadata_location,
-                                                  const std::vector<std::string>& files,
-                                                  iceberg::ContentFile::FileContent content) const;
+  Manifest MakeEntries(const std::filesystem::path& local_data_location, const std::filesystem::path& metadata_location,
+                       const std::vector<std::string>& files, iceberg::ContentFile::FileContent content) const;
 
   static iceberg::ManifestFile MakeManifest(const std::string& path, int64_t snapshot_id, int seqno,
                                             const std::vector<iceberg::ManifestEntry>& added_entries,

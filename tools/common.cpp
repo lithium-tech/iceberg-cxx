@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "iceberg/write.h"
+#include "tools/metadata_tree.h"
 
 namespace iceberg::tools {
 
@@ -106,11 +107,9 @@ iceberg::ContentFile RowGroupStats(const parquet::RowGroupMetaData& rg_meta) {
 }
 
 Manifest SnapshotMaker::MakeEntries(const std::filesystem::path& local_data_location,
-                                                               const std::filesystem::path& metadata_location,
-                                                               const std::vector<std::string>& files,
-                                                               iceberg::ContentFile::FileContent content) const {
-  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
-
+                                    const std::filesystem::path& metadata_location,
+                                    const std::vector<std::string>& files,
+                                    iceberg::ContentFile::FileContent content) const {
   Manifest out;
   out.entries.reserve(files.size());
 
@@ -219,7 +218,9 @@ std::shared_ptr<iceberg::Snapshot> SnapshotMaker::MakeSnapshot(const std::string
   return snap;
 }
 
-SnapshotMaker::SnapshotMaker(const MetadataTree& dst_meta_tree, int64_t current_time_ms, int meta_seqno) {
+SnapshotMaker::SnapshotMaker(std::shared_ptr<arrow::fs::FileSystem> fs_, const MetadataTree& dst_meta_tree,
+                             int64_t current_time_ms, int meta_seqno)
+    : fs(fs_) {
   auto table_metadata = std::make_shared<iceberg::TableMetadataV2>(*dst_meta_tree.GetMetadataFile().table_metadata);
   if (!meta_seqno) {
     table_metadata->last_sequence_number += 1;
@@ -244,8 +245,7 @@ SnapshotMaker::SnapshotMaker(const MetadataTree& dst_meta_tree, int64_t current_
 void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& local_data_location,
                                       const std::filesystem::path& remote_location,
                                       const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
-                                      const Manifest& added_data_entries,
-                                      const Manifest& added_delete_entries) {
+                                      const Manifest& added_data_entries, const Manifest& added_delete_entries) {
   std::vector<iceberg::ManifestEntry> existing_data_entries;
   std::vector<iceberg::ManifestEntry> existing_delete_entries;
   for (auto& [name, man] : existing) {
@@ -278,9 +278,10 @@ void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& local_data_lo
   std::string delete_manifest_name = name_maker.ManifestName(name_maker.uuid_added_delete_manifest, 1);
 
   std::vector<iceberg::ManifestFile> manifest_list = {
-      MakeDataManifest(remote_location / data_manifest_name, added_data_entries.entries, {}, existing_data_entries, data_stats),
-      MakeEqDeleteManifest(remote_location / delete_manifest_name, added_delete_entries.entries, {}, existing_delete_entries,
-                           delete_stats)};
+      MakeDataManifest(remote_location / data_manifest_name, added_data_entries.entries, {}, existing_data_entries,
+                       data_stats),
+      MakeEqDeleteManifest(remote_location / delete_manifest_name, added_delete_entries.entries, {},
+                           existing_delete_entries, delete_stats)};
 
   FileStats total_stats = parent_stats + data_stats + delete_stats;
 

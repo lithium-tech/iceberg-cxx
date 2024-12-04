@@ -7,7 +7,7 @@ add_executable(iceberg_local_test
     compat/transforms_test.cpp
     compat/partitions_test.cpp
 )
-target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp dl)
+target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp dl iceberg-tools)
 target_include_directories(iceberg_local_test PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (USE_SMHASHER)
@@ -23,3 +23,8 @@ ADD_CUSTOM_TARGET(test_data_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/data" "${CMAKE_CURRENT_BINARY_DIR}/data"
 )
 add_dependencies(iceberg_local_test test_data_symlink)
+
+ADD_CUSTOM_TARGET(test_snapshots_symlink ALL
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/snapshots" "${CMAKE_CURRENT_BINARY_DIR}/snapshots"
+)
+add_dependencies(iceberg_local_test test_snapshots_symlink)

@@ -17,12 +17,12 @@ set(SOURCES
   metastore_client.h
   metadata_tree.cpp
   metadata_tree.h
+  common.cpp
+  common.h
 )
 
 if(USE_ARROW)
   list(APPEND SOURCES
-    common.cpp
-    common.h
     s3client.h
   )
 endif()
