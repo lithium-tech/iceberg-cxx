@@ -107,7 +107,7 @@ iceberg::ContentFile RowGroupStats(const parquet::RowGroupMetaData& rg_meta) {
 }
 
 Manifest SnapshotMaker::MakeEntries(const std::filesystem::path& local_data_location,
-                                    const std::filesystem::path& metadata_location,
+                                    const std::filesystem::path& data_location,
                                     const std::vector<std::string>& files,
                                     iceberg::ContentFile::FileContent content) const {
   Manifest out;
@@ -127,7 +127,7 @@ Manifest SnapshotMaker::MakeEntries(const std::filesystem::path& local_data_loca
     entry.status = iceberg::ManifestEntry::Status::kAdded;
     {
       entry.data_file.content = content;
-      entry.data_file.file_path = (metadata_location / file_name).string();
+      entry.data_file.file_path = (data_location / file_name).string();
       entry.data_file.file_size_in_bytes = file_size;
       entry.data_file.file_format = "PARQUET";
       entry.data_file.record_count = parquet_meta->num_rows();
