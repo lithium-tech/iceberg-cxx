@@ -20,13 +20,19 @@
 namespace hive = Apache::Hadoop::Hive;
 namespace thrift = apache::thrift;
 
-using iceberg::tools::CopyDir;
 using iceberg::tools::MetadataTree;
 using iceberg::tools::S3Client;
 using iceberg::tools::S3Init;
 using iceberg::tools::StringFix;
 
 namespace {
+
+bool CopyDir(std::shared_ptr<S3Client> s3client, const std::string& src, const std::string& dst, bool use_threads) {
+  if (!s3client) {
+    throw std::runtime_error(std::string("cannot copy dir ") + src + " to " + dst);
+  }
+  return s3client->CopyDir(src, dst, use_threads);
+}
 
 std::string GpTypeStr(const iceberg::types::Type* type) {
   using iceberg::TypeID;
@@ -102,7 +108,6 @@ ABSL_FLAG(uint16_t, port, HMS_PORT, "src HMS port");
 ABSL_FLAG(std::string, db, "", "src database name");
 ABSL_FLAG(std::string, table, "", "src table name");
 ABSL_FLAG(std::string, tmpdir, "/tmp/ice_ls", "path to tmp directory");
-ABSL_FLAG(bool, rclone, false, "use rclone for sync");
 ABSL_FLAG(bool, print_location, true, "print metadata location");
 ABSL_FLAG(bool, print_files, false, "print file paths and types");
 ABSL_FLAG(bool, print_schema, true, "print schema");
@@ -118,7 +123,6 @@ int main(int argc, char** argv) {
     const std::string src_db = absl::GetFlag(FLAGS_db);
     const std::string src_tablename = absl::GetFlag(FLAGS_table);
     const std::filesystem::path tmpdir = absl::GetFlag(FLAGS_tmpdir);
-    const bool use_rclone = absl::GetFlag(FLAGS_rclone);
     const bool print_location = absl::GetFlag(FLAGS_print_location);
     const bool print_files = absl::GetFlag(FLAGS_print_files);
     const bool print_schema = absl::GetFlag(FLAGS_print_schema);
@@ -169,11 +173,8 @@ int main(int argc, char** argv) {
     std::filesystem::remove_all(meta_tmpdir);
     std::filesystem::create_directories(meta_tmpdir);
 
-    std::shared_ptr<S3Client> s3client;
-    if (!use_rclone) {
-      s3client = std::make_shared<S3Client>(false, S3Init::LogLevel(loglevel), S3Client::CHUNK_SIZE,
-                                            std::string("AWS_"), std::string());
-    }
+    auto s3client = std::make_shared<S3Client>(false, S3Init::LogLevel(loglevel), S3Client::CHUNK_SIZE,
+                                               std::string("AWS_"), std::string());
 
     std::cerr << "copying table '" << src_tablename << "' meta form " << src_metadata_path << " to " << meta_tmpdir
               << std::endl;

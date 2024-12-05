@@ -195,29 +195,16 @@ class S3Client {
   }
 
   bool CopyDir(const std::string& src, const std::string& dst, bool use_threads) {
+    auto src_locator = SrcFileLocator(src);
+    auto dst_locator = DstFileLocator(dst);
+
     arrow::fs::FileSelector selector;
     selector.allow_not_found = false;
     selector.recursive = true;
-    selector.base_dir = CropPrefix(src);
+    selector.base_dir = src_locator.path;
 
-    auto src_fs = src_s3fs_;
-    if (selector.base_dir == src) {
-      src_fs = fs_;
-    }
-    if (!src_fs) {
-      throw std::runtime_error("src fs is not set");
-    }
-
-    auto dst_fs = dst_s3fs_;
-    auto dst_path = CropPrefix(dst);
-    if (dst_path == dst) {
-      dst_fs = fs_;
-    }
-    if (!dst_fs) {
-      throw std::runtime_error("dst fs is not set");
-    }
-
-    auto status = arrow::fs::CopyFiles(src_fs, selector, dst_fs, dst_path, io_context_, copy_chunk_size_, use_threads);
+    auto status = arrow::fs::CopyFiles(src_locator.filesystem, selector, dst_locator.filesystem, dst_locator.path,
+                                       io_context_, copy_chunk_size_, use_threads);
     if (!status.ok()) {
       throw std::runtime_error(status.ToString());
     }
@@ -267,25 +254,6 @@ inline bool Rclone(const std::string& cmd, const std::string& arg1, const std::s
     return false;
   }
   return true;
-}
-
-inline bool CopyDir(std::shared_ptr<S3Client> s3client, const std::string& src, const std::string& dst,
-                    bool use_threads) {
-  if (s3client) {
-    if (!s3client->CopyDir(src, dst, use_threads)) {
-      return false;
-    }
-  } else if (!Rclone("copy", src, dst)) {
-    return false;
-  }
-  return true;
-}
-
-inline void CopyDirOrThrow(std::shared_ptr<S3Client> s3client, const std::string& src, const std::string& dst,
-                           bool use_threads) {
-  if (!CopyDir(s3client, src, dst, use_threads)) {
-    throw std::runtime_error(std::string("cannot copy dir ") + src + " to " + dst);
-  }
 }
 
 inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_map<std::string, std::string>& renames,

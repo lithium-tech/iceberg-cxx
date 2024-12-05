@@ -51,6 +51,8 @@ class MetadataTree {
   };
 
   static MetadataFile ReadMetadataFile(const std::filesystem::path& path);
+  static MetadataFile MakeEmptyMetadataFile(const std::string& table_uuid, const std::string& location,
+                                            std::shared_ptr<iceberg::Schema> schema);
 
   explicit MetadataTree(const std::filesystem::path& path, bool ignore_missing_snapshots = false);
   explicit MetadataTree(const std::filesystem::path& path, int64_t snapshot_id);

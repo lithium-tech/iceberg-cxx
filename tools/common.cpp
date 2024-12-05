@@ -115,8 +115,9 @@ Manifest SnapshotMaker::MakeEntries(const std::filesystem::path& local_data_loca
 
   out.UpdateMetadataByContent(content);
 
-  for (auto& file_name : files) {
+  for (auto& file_path : files) {
     uint64_t file_size = 0;
+    auto file_name = std::filesystem::path(file_path).filename();
     auto parquet_meta = ParquetMetadata(fs, (local_data_location / file_name).string(), file_size);
 
     iceberg::ManifestEntry entry;
@@ -218,18 +219,23 @@ std::shared_ptr<iceberg::Snapshot> SnapshotMaker::MakeSnapshot(const std::string
   return snap;
 }
 
-SnapshotMaker::SnapshotMaker(std::shared_ptr<arrow::fs::FileSystem> fs_, const MetadataTree& dst_meta_tree,
-                             int64_t current_time_ms, int meta_seqno)
+SnapshotMaker::SnapshotMaker(std::shared_ptr<arrow::fs::FileSystem> fs_,
+                             const std::shared_ptr<iceberg::TableMetadataV2>& prev_table_metadata, int64_t current_time_ms,
+                             int meta_seqno)
     : fs(fs_) {
-  auto table_metadata = std::make_shared<iceberg::TableMetadataV2>(*dst_meta_tree.GetMetadataFile().table_metadata);
-  if (!meta_seqno) {
-    table_metadata->last_sequence_number += 1;
-  } else {
+  table_metadata = std::make_shared<iceberg::TableMetadataV2>(*prev_table_metadata);
+  table_metadata->last_sequence_number += 1;
+  if (meta_seqno) {
     table_metadata->last_sequence_number = meta_seqno;
   }
-  int64_t parent_snapshot_id = table_metadata->current_snapshot_id ? *table_metadata->current_snapshot_id : 0;
-  table_metadata->current_snapshot_id = parent_snapshot_id + 1;
   table_metadata->last_updated_ms = current_time_ms;
+  std::optional<int64_t> parent_snapshot_id = table_metadata->current_snapshot_id;
+  if (parent_snapshot_id) {
+    table_metadata->current_snapshot_id = *parent_snapshot_id + 1;
+  } else {
+    table_metadata->current_snapshot_id = 0;
+    parent_snap = std::make_shared<iceberg::Snapshot>();
+  }
 
   for (auto& snap : table_metadata->snapshots) {
     if (snap->snapshot_id == parent_snapshot_id) {
@@ -237,12 +243,12 @@ SnapshotMaker::SnapshotMaker(std::shared_ptr<arrow::fs::FileSystem> fs_, const M
       break;
     }
   }
-  if (!parent_snap) {
-    throw std::runtime_error("no snapshot for snapshot_id " + std::to_string(parent_snapshot_id));
+  if (parent_snapshot_id && !parent_snap) {
+    throw std::runtime_error("no snapshot for snapshot_id " + std::to_string(*parent_snapshot_id));
   }
 }
 
-void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& local_data_location,
+void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& out_metadata_location,
                                       const std::filesystem::path& remote_location,
                                       const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
                                       const Manifest& added_data_entries, const Manifest& added_delete_entries) {
@@ -298,10 +304,10 @@ void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& local_data_lo
   table_metadata->metadata_log.push_back(
       iceberg::MetadataLog{.timestamp_ms = CurrentTimeMs(), .metadata_file = (remote_location / metadata_filename)});
 
-  iceberg::ice_tea::WriteManifest(local_data_location / data_manifest_name, added_data_entries);
-  iceberg::ice_tea::WriteManifest(local_data_location / delete_manifest_name, added_delete_entries);
-  iceberg::ice_tea::WriteManifestList(local_data_location / snapshot_name, manifest_list);
-  iceberg::ice_tea::WriteMetadataFile(local_data_location / metadata_filename, table_metadata);
+  iceberg::ice_tea::WriteManifest(out_metadata_location / data_manifest_name, added_data_entries);
+  iceberg::ice_tea::WriteManifest(out_metadata_location / delete_manifest_name, added_delete_entries);
+  iceberg::ice_tea::WriteManifestList(out_metadata_location / snapshot_name, manifest_list);
+  iceberg::ice_tea::WriteMetadataFile(out_metadata_location / metadata_filename, table_metadata);
 }
 
 }  // namespace iceberg::tools

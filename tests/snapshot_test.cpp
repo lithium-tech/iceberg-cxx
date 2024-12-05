@@ -96,7 +96,9 @@ TEST(UUIDGenerator, Test) {
 
 TEST(SnapshotTest, Test) {
   auto metadata_tree = tools::MetadataTree("metadata/00006-8caf3988-3dcc-4ca2-a472-0d96a273eaeb.metadata.json");
-  auto snapshot_maker = tools::SnapshotMaker(std::make_shared<arrow::fs::LocalFileSystem>(), metadata_tree, 0);
+
+  auto snapshot_maker = tools::SnapshotMaker(std::make_shared<arrow::fs::LocalFileSystem>(),
+                                             metadata_tree.GetMetadataFile().table_metadata, 0);
   std::shared_ptr<iceberg::TableMetadataV2> table_metadata = std::make_shared<iceberg::TableMetadataV2>(
       std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<iceberg::Schema>>{}, 0,
       std::vector<std::shared_ptr<iceberg::PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
@@ -106,7 +108,7 @@ TEST(SnapshotTest, Test) {
   snapshot_maker.table_metadata = table_metadata;
 
   snapshot_maker.MakeMetadataFiles(
-      "snapshots", "metadata", {},
+      "snapshots", "data", "metadata", {},
       std::vector<std::string>{"data/00000-6-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet"}, {});
 
   EXPECT_TRUE(HasFileWithPrefix("snapshots", "snap"));

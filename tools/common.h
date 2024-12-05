@@ -182,10 +182,12 @@ struct SnapshotMaker {
   mutable UuidGenerator uuid_generator;
   std::shared_ptr<arrow::fs::FileSystem> fs;
 
-  SnapshotMaker(std::shared_ptr<arrow::fs::FileSystem> fs_, const MetadataTree& dst_meta_tree, int64_t current_time_ms,
+  SnapshotMaker(std::shared_ptr<arrow::fs::FileSystem> fs_,
+                const std::shared_ptr<iceberg::TableMetadataV2>& prev_table_metadata, int64_t current_time_ms,
                 int meta_seqno = 0);
 
-  void MakeMetadataFiles(const std::filesystem::path& local_data_location,
+  void MakeMetadataFiles(const std::filesystem::path& out_metadata_location,
+                         const std::filesystem::path& local_data_location,
                          const std::filesystem::path& metadata_location,
                          const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
                          const std::vector<std::string>& added_data_files,
@@ -195,7 +197,7 @@ struct SnapshotMaker {
     Manifest added_delete_entries = MakeEntries(local_data_location, metadata_location, added_delete_files,
                                                 iceberg::ContentFile::FileContent::kEqualityDeletes);
 
-    MakeMetadataFiles(local_data_location, metadata_location, existing, added_data_entries, added_delete_entries);
+    MakeMetadataFiles(out_metadata_location, metadata_location, existing, added_data_entries, added_delete_entries);
   }
 
  private:
@@ -204,7 +206,7 @@ struct SnapshotMaker {
   int64_t CurrentTimeMs() const { return table_metadata->last_updated_ms; }
   std::shared_ptr<iceberg::SortOrder> SortOrder() const { return table_metadata->GetSortOrder(); }
 
-  void MakeMetadataFiles(const std::filesystem::path& local_data_location,
+  void MakeMetadataFiles(const std::filesystem::path& out_metadata_location,
                          const std::filesystem::path& metadata_location,
                          const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
                          const Manifest& added_data_entries, const Manifest& added_delete_entries);

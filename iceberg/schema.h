@@ -27,8 +27,18 @@ class Schema {
   std::optional<int32_t> FindColumnIgnoreCase(const std::string& column_name) const;
   void FilterColumns(const std::unordered_set<int>& ids_to_remove);
 
+  int32_t MaxColumnId() const {
+    int32_t id = -1;
+    for (auto& field : fields_) {
+      if (field.field_id > id) {
+        id = field.field_id;
+      }
+    }
+    return id;
+  }
+
   template <typename T>
-  std::unordered_set<int> FindColumnIds(const T& filter) {
+  std::unordered_set<int> FindColumnIds(const T& filter) const {
     if (filter.empty()) {
       return {};
     }
