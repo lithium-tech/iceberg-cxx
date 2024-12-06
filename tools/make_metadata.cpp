@@ -216,7 +216,7 @@ int main(int argc, char** argv) {
 
     auto snapshot_maker = SnapshotMaker(local_fs, empty_tree.table_metadata, 0);
 
-    snapshot_maker.MakeMetadataFiles(meta_dir, src_data, metadata_location, data_location, {}, dst_data_files, {});
+    snapshot_maker.MakeMetadataFiles(meta_dir, src_data, metadata_location, data_location, {}, dst_data_files, {}, 0);
   } catch (std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

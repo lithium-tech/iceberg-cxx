@@ -109,7 +109,7 @@ TEST(SnapshotTest, Test) {
 
   snapshot_maker.MakeMetadataFiles(
       "snapshots", "data", "metadata", "data", {},
-      std::vector<std::string>{"data/00000-6-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet"}, {});
+      std::vector<std::string>{"data/00000-6-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet"}, {}, 0);
 
   EXPECT_TRUE(HasFileWithPrefix("snapshots", "snap"));
 }
