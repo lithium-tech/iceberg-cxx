@@ -46,7 +46,7 @@ UrlComponents SplitUrl(const std::string& url) {
   return result;
 }
 
-bool IsKnownPrefix(const std::string& prefix) { return prefix == "s3a" || prefix == "s3"; }
+bool IsKnownPrefix(const std::string& prefix) { return prefix == "s3a" || prefix == "s3" || prefix == "file"; }
 
 std::string UrlToPath(const std::string& url) {
   auto components = SplitUrl(url);
