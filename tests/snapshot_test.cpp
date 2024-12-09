@@ -100,12 +100,16 @@ TEST(SnapshotTest, Test) {
   auto snapshot_maker = tools::SnapshotMaker(std::make_shared<arrow::fs::LocalFileSystem>(),
                                              metadata_tree.GetMetadataFile().table_metadata, 0);
   std::shared_ptr<iceberg::TableMetadataV2> table_metadata = std::make_shared<iceberg::TableMetadataV2>(
-      std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<iceberg::Schema>>{}, 0,
-      std::vector<std::shared_ptr<iceberg::PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
-      std::vector<std::shared_ptr<iceberg::Snapshot>>{}, std::vector<iceberg::SnapshotLog>{},
-      std::vector<iceberg::MetadataLog>{}, std::vector<std::shared_ptr<iceberg::SortOrder>>{}, 0,
-      std::map<std::string, iceberg::SnapshotRef>{});
+      std::string{}, std::string{"some_location_that_seems_unexpected.json"}, 0, 0, 0,
+      std::vector<std::shared_ptr<iceberg::Schema>>{}, 0, std::vector<std::shared_ptr<iceberg::PartitionSpec>>{}, 0, 0,
+      std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+      std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+      std::vector<std::shared_ptr<iceberg::SortOrder>>{}, 0, std::map<std::string, iceberg::SnapshotRef>{});
   snapshot_maker.table_metadata = table_metadata;
+
+  std::filesystem::create_directory("snapshots");
+  std::filesystem::create_directory("data");
+  std::filesystem::create_directory("metadata");
 
   snapshot_maker.MakeMetadataFiles(
       "snapshots", "data", "metadata", "data", {},
