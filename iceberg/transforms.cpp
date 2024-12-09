@@ -55,28 +55,28 @@ class TransformParser {
   void BuildParser(const std::string& current_transform) { current_transform_ = current_transform; }
 
   TransformType GetTransformType() const {
-    if (current_transform_.substr(std::strlen(identity_transform_prefix)) == identity_transform_prefix) {
+    if (current_transform_.substr(0, std::strlen(identity_transform_prefix)) == identity_transform_prefix) {
       return TransformType::kIdentityTransform;
     }
-    if (current_transform_.substr(std::strlen(void_transform_prefix)) == void_transform_prefix) {
+    if (current_transform_.substr(0, std::strlen(void_transform_prefix)) == void_transform_prefix) {
       return TransformType::kVoidTransform;
     }
-    if (current_transform_.substr(std::strlen(bucket_transform_prefix)) == bucket_transform_prefix) {
+    if (current_transform_.substr(0, std::strlen(bucket_transform_prefix)) == bucket_transform_prefix) {
       return TransformType::kBucketTransform;
     }
-    if (current_transform_.substr(std::strlen(truncate_transform_prefix)) == truncate_transform_prefix) {
+    if (current_transform_.substr(0, std::strlen(truncate_transform_prefix)) == truncate_transform_prefix) {
       return TransformType::kTruncateTransform;
     }
-    if (current_transform_.substr(std::strlen(year_transform_prefix)) == year_transform_prefix) {
+    if (current_transform_.substr(0, std::strlen(year_transform_prefix)) == year_transform_prefix) {
       return TransformType::kYearTransform;
     }
-    if (current_transform_.substr(std::strlen(day_transform_prefix)) == day_transform_prefix) {
+    if (current_transform_.substr(0, std::strlen(day_transform_prefix)) == day_transform_prefix) {
       return TransformType::kDayTransform;
     }
-    if (current_transform_.substr(std::strlen(month_transform_prefix)) == month_transform_prefix) {
+    if (current_transform_.substr(0, std::strlen(month_transform_prefix)) == month_transform_prefix) {
       return TransformType::kMonthTransform;
     }
-    if (current_transform_.substr(std::strlen(hour_transform_prefix)) == hour_transform_prefix) {
+    if (current_transform_.substr(0, std::strlen(hour_transform_prefix)) == hour_transform_prefix) {
       return TransformType::kHourTransform;
     }
     throw std::runtime_error("Unknown transform type " + current_transform_);
