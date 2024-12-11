@@ -115,8 +115,13 @@ std::shared_ptr<const iceberg::types::Type> ConvertType(const parquet::ColumnDes
       return std::make_shared<const PrimitiveType>(iceberg::TypeID::kDate);
     case ParquetLogicalType::TIME:
       return std::make_shared<const PrimitiveType>(iceberg::TypeID::kTime);
-    case ParquetLogicalType::TIMESTAMP:
-      std::make_shared<const PrimitiveType>(iceberg::TypeID::kTimestamp);
+    case ParquetLogicalType::TIMESTAMP: {
+      auto& timestamp_type = dynamic_cast<const parquet::TimestampLogicalType&>(*parquet_logical_type);
+      if (timestamp_type.is_adjusted_to_utc())
+        return std::make_shared<const PrimitiveType>(iceberg::TypeID::kTimestamptz);
+      else
+        return std::make_shared<const PrimitiveType>(iceberg::TypeID::kTimestamp);
+    }
     case ParquetLogicalType::INT:
       return std::make_shared<const PrimitiveType>(iceberg::TypeID::kInt);
     case ParquetLogicalType::UNDEFINED:
