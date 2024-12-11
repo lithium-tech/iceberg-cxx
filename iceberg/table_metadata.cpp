@@ -105,23 +105,34 @@ class WriterContext {
     doc.AddMember(rapidjson::StringRef(field_name.data(), field_name.size()), value, GetAllocator());
   }
 
-  void WriteDataType(rapidjson::Value& doc, const types::Type& type) {
+  void WriteDataType(rapidjson::Value& doc, const types::Type& type, const std::string& field_name) {
     if (type.IsPrimitiveType()) {
-      // TODO(chertus): decimal
-      WriteStringField(doc, Names::type, type.ToString());
+      WriteStringField(doc, field_name, type.ToString());
     } else if (type.IsListType()) {
+      // Example of correct list representatation:
+      // {
+      //   "id" : 1,
+      //   "name" : "a",
+      //   "required" : false,
+      //   "type" : {
+      //     "type" : "list",
+      //     "element-id" : 2,
+      //     "element" : "float",
+      //     "element-required" : false
+      //   }
+      // }
       rapidjson::Value element(rapidjson::kObjectType);
 
-      WriteStringField(element, Names::type, Names::list);
+      WriteStringField(element, field_name, Names::list);
       auto* list_type = static_cast<const types::ListType*>(&type);
       WriteIntField(element, Names::element_id, list_type->ElementId());
       WriteIntField(element, Names::element_required, list_type->ElementRequired());
       if (!list_type->ElementType()) {
         throw std::runtime_error(std::string(__FUNCTION__) + ": no type");
       }
-      WriteDataType(element, *list_type->ElementType());
+      WriteDataType(element, *list_type->ElementType(), Names::element);
 
-      doc.AddMember(Ref(Names::element), element.Move(), GetAllocator());
+      doc.AddMember(Ref(Names::type), element.Move(), GetAllocator());
     }
   }
 
@@ -132,7 +143,7 @@ class WriterContext {
     if (!field.type) {
       throw std::runtime_error(std::string(__FUNCTION__) + ": no type");
     }
-    WriteDataType(doc, *field.type);
+    WriteDataType(doc, *field.type, Names::type);
   }
 
   void WriteSchemas(rapidjson::Value& doc, const std::vector<std::shared_ptr<Schema>>& array) {
