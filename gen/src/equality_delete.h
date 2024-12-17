@@ -41,7 +41,7 @@ class EqualityDeleteProcessor : public IProcessor {
 
   arrow::Status Process(BatchPtr batch) override {
     auto projection = batch->GetProjection(selected_columns_);
-    auto mask = generator_->Generate(batch).ValueOrDie();
+    ARROW_ASSIGN_OR_RAISE(auto mask, generator_->Generate(batch));
     auto bool_mask = std::static_pointer_cast<arrow::BooleanArray>(mask);
 
     if (!bool_mask || !bool_mask->type()->Equals(arrow::boolean())) {

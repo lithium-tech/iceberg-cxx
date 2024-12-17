@@ -108,7 +108,7 @@ TEST(Metadata, ReadSanityCheck) {
   std::string data = ss.str();
 
   auto metadata = ice_tea::ReadTableMetadataV2(data);
-  EXPECT_TRUE(!!metadata);
+  ASSERT_TRUE(!!metadata);
   Check(*metadata);
 }
 
@@ -116,12 +116,12 @@ TEST(Metadata, ReadWriteRead) {
   std::ifstream input("metadata/00003-ca406d8e-6c7b-4672-87ff-bfd76f84f949.metadata.json");
 
   auto metadata = ice_tea::ReadTableMetadataV2(input);
-  EXPECT_TRUE(!!metadata);
+  ASSERT_TRUE(!!metadata);
   Check(*metadata);
 
   std::string serialized = ice_tea::WriteTableMetadataV2(*metadata, true);
   metadata = ice_tea::ReadTableMetadataV2(serialized);
-  EXPECT_TRUE(!!metadata);
+  ASSERT_TRUE(!!metadata);
   Check(*metadata);
 }
 

@@ -117,6 +117,10 @@ avro::ValidSchema ManifestListSchema() {
 }  // namespace
 
 std::vector<ManifestFile> ReadManifestList(std::istream& input) {
+  if (!input) {
+    throw std::runtime_error(std::string(__FUNCTION__) + ": input is invalid");
+  }
+
   auto istream = avro::istreamInputStream(input);
   avro::DataFileReader<iceberg::manifest_file> data_file_reader(std::move(istream), ManifestListSchema());
   std::vector<ManifestFile> result;

@@ -1,6 +1,11 @@
 #include "iceberg/manifest_entry.h"
 
+#include <parquet/arrow/reader.h>
+#include <parquet/metadata.h>
+#include <parquet/statistics.h>
+
 #include <sstream>
+#include <stdexcept>
 
 #include "avro/Compiler.hh"
 #include "avro/DataFile.hh"
@@ -8,10 +13,6 @@
 #include "iceberg/generated/manifest_entry.hh"
 #include "iceberg/generated/manifest_entry_schema.h"
 #include "rapidjson/document.h"
-
-#include <parquet/arrow/reader.h>
-#include <parquet/metadata.h>
-#include <parquet/statistics.h>
 
 namespace iceberg {
 
@@ -37,7 +38,11 @@ std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::io
   }
 
   reader_builder.memory_pool(arrow::default_memory_pool());
-  auto arrow_reader = reader_builder.Build().ValueOrDie();
+  auto maybe_arrow_reader = reader_builder.Build();
+  if (!maybe_arrow_reader.ok()) {
+    throw maybe_arrow_reader.status();
+  }
+  auto arrow_reader = maybe_arrow_reader.MoveValueUnsafe();
   return arrow_reader->parquet_reader()->metadata();
 }
 
@@ -267,6 +272,10 @@ avro::ValidSchema ManifestEntrySchema() {
 }  // namespace
 
 Manifest ReadManifestEntries(std::istream& input) {
+  if (!input) {
+    throw std::runtime_error(std::string(__FUNCTION__) + ": input is invalid");
+  }
+
   auto istream = avro::istreamInputStream(input);
   avro::DataFileReader<iceberg::manifest_entry> data_file_reader(std::move(istream), ManifestEntrySchema());
   Manifest result;
@@ -326,7 +335,8 @@ void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, std::shared_ptr<
   }
 }
 
-void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, const std::vector<std::shared_ptr<parquet::FileMetaData>>& metadata) {
+void FillManifestSplitOffsets(std::vector<ManifestEntry>& data,
+                              const std::vector<std::shared_ptr<parquet::FileMetaData>>& metadata) {
   for (size_t i = 0; i < data.size(); ++i) {
     uint64_t file_size = 0;
     data[i].data_file.split_offsets = SplitOffsets(metadata[i]);

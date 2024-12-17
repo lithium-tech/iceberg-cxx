@@ -19,7 +19,11 @@ namespace {
 
 std::shared_ptr<arrow::Table> ReadTableFromParquet(const std::string& file_path) {
   auto fs = std::make_shared<arrow::fs::LocalFileSystem>();
-  auto input_file = fs->OpenInputFile(file_path).ValueOrDie();
+  auto maybe_input_file = fs->OpenInputFile(file_path);
+  if (!maybe_input_file.ok()) {
+    throw maybe_input_file.status();
+  }
+  auto input_file = maybe_input_file.MoveValueUnsafe();
 
   parquet::arrow::FileReaderBuilder reader_builder;
   if (auto status = reader_builder.Open(input_file); !status.ok()) {
@@ -28,7 +32,11 @@ std::shared_ptr<arrow::Table> ReadTableFromParquet(const std::string& file_path)
   reader_builder.memory_pool(arrow::default_memory_pool());
   reader_builder.properties(parquet::default_arrow_reader_properties());
 
-  std::unique_ptr<parquet::arrow::FileReader> arrow_reader = reader_builder.Build().ValueOrDie();
+  auto maybe_arrow_reader = reader_builder.Build();
+  if (!maybe_arrow_reader.ok()) {
+    throw maybe_arrow_reader.status();
+  }
+  auto arrow_reader = maybe_arrow_reader.MoveValueUnsafe();
 
   std::shared_ptr<arrow::Table> table;
   if (auto status = arrow_reader->ReadTable(&table); !status.ok()) {
