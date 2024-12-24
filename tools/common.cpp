@@ -306,10 +306,10 @@ void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& out_metadata_
       iceberg::MetadataLog{.timestamp_ms = CurrentTimeMs(), .metadata_file = table_metadata->location});
 
   auto metadata_filename = std::filesystem::path(table_metadata->location).filename();
-  iceberg::ice_tea::WriteManifest(out_metadata_location / data_manifest_name, added_data_entries);
-  iceberg::ice_tea::WriteManifest(out_metadata_location / delete_manifest_name, added_delete_entries);
-  iceberg::ice_tea::WriteManifestList(out_metadata_location / snapshot_name, manifest_list);
-  iceberg::ice_tea::WriteMetadataFile(out_metadata_location / metadata_filename, table_metadata);
+  iceberg::ice_tea::WriteManifestRemote(fs, out_metadata_location / data_manifest_name, added_data_entries);
+  iceberg::ice_tea::WriteManifestRemote(fs, out_metadata_location / delete_manifest_name, added_delete_entries);
+  iceberg::ice_tea::WriteManifestListRemote(fs, out_metadata_location / snapshot_name, manifest_list);
+  iceberg::ice_tea::WriteMetadataFileRemote(fs, out_metadata_location / metadata_filename, table_metadata);
 }
 
 }  // namespace iceberg::tools
