@@ -45,8 +45,12 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> FilterTable(const std::shared_p
     std::shared_ptr<arrow::RecordBatch> batch;
     arrow::TableBatchReader reader(*table);
 
-    if (reader.ReadNext(&batch).ok() && batch != nullptr) {
-      selected_batches.push_back(batch->Slice(index, 1));
+    if (reader.ReadNext(&batch).ok()) {
+      if (batch) {
+        selected_batches.push_back(batch->Slice(index, 1));
+      }
+    } else {
+      throw std::runtime_error(std::string(__FUNCTION__) + ": can not read batch in parquet file");
     }
   }
   return batches;
@@ -58,8 +62,16 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> GetRecordBatchesFromTable(const
   arrow::TableBatchReader reader(*table);
 
   std::shared_ptr<arrow::RecordBatch> batch;
-  while (reader.ReadNext(&batch).ok() && batch != nullptr) {
-    batches.push_back(batch);
+  while (true) {
+    if (reader.ReadNext(&batch).ok()) {
+      if (batch) {
+        batches.push_back(batch);
+      } else {
+        break;
+      }
+    } else {
+      throw std::runtime_error(std::string(__FUNCTION__) + ": can not read batch in parquet file");
+    }
   }
 
   return batches;
