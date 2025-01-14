@@ -163,6 +163,7 @@ MetadataTree::MetadataFile MetadataTree::MakeEmptyMetadataFile(const std::string
   const std::optional<int64_t> current_snapshot_id;  // -1?
   std::map<std::string, std::string> properties = {{"write.format.default", "PARQUET"}};
   std::vector<std::shared_ptr<iceberg::SortOrder>> sort_orders = {std::make_shared<iceberg::SortOrder>()};
+  std::vector<std::shared_ptr<iceberg::PartitionSpec>> partition_specs = {std::make_shared<iceberg::PartitionSpec>()};
 
   if (last_column_id < 0) {
     throw std::runtime_error("No columns in schema");
@@ -170,8 +171,8 @@ MetadataTree::MetadataFile MetadataTree::MakeEmptyMetadataFile(const std::string
 
   MetadataFile metadata;
   metadata.table_metadata = std::make_shared<iceberg::TableMetadataV2>(iceberg::TableMetadataV2(
-      table_uuid, location, 0, last_updated_ms, last_column_id, {schema}, 0, {}, 0, last_partition_id,
-      std::move(properties), current_snapshot_id, {}, {}, {}, std::move(sort_orders), 0, {}));
+      table_uuid, location, 0, last_updated_ms, last_column_id, {schema}, 0, std::move(partition_specs), 0,
+      last_partition_id, std::move(properties), current_snapshot_id, {}, {}, {}, std::move(sort_orders), 0, {}));
   return metadata;
 }
 
