@@ -191,14 +191,14 @@ struct SnapshotMaker {
                          const std::filesystem::path& metadata_location, const std::filesystem::path& data_location,
                          const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
                          const std::vector<std::string>& added_data_files,
-                         const std::vector<std::string>& added_delete_files, int64_t schema_id) {
+                         const std::vector<std::string>& added_delete_files, int64_t schema_id, const std::optional<std::string>& result_metadata_path = std::nullopt) {
     Manifest added_data_entries =
         MakeEntries(local_data_location, data_location, added_data_files, iceberg::ContentFile::FileContent::kData);
     Manifest added_delete_entries = MakeEntries(local_data_location, data_location, added_delete_files,
                                                 iceberg::ContentFile::FileContent::kEqualityDeletes);
 
     MakeMetadataFiles(out_metadata_location, metadata_location, existing, added_data_entries, added_delete_entries,
-                      schema_id);
+                      schema_id, result_metadata_path);
   }
 
  private:
@@ -210,7 +210,7 @@ struct SnapshotMaker {
   void MakeMetadataFiles(const std::filesystem::path& out_metadata_location,
                          const std::filesystem::path& metadata_location,
                          const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
-                         const Manifest& added_data_entries, const Manifest& added_delete_entries, int64_t schema_id);
+                         const Manifest& added_data_entries, const Manifest& added_delete_entries, int64_t schema_id, const std::optional<std::string>& result_metadata_path);
 
   Manifest MakeEntries(const std::filesystem::path& local_data_location, const std::filesystem::path& data_location,
                        const std::vector<std::string>& files, iceberg::ContentFile::FileContent content) const;

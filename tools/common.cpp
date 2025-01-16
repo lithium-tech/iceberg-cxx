@@ -251,7 +251,7 @@ void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& out_metadata_
                                       const std::filesystem::path& remote_location,
                                       const std::unordered_map<std::string, std::shared_ptr<Manifest>>& existing,
                                       const Manifest& added_data_entries, const Manifest& added_delete_entries,
-                                      int64_t schema_id) {
+                                      int64_t schema_id, const std::optional<std::string>& result_metadata_path) {
   std::vector<iceberg::ManifestEntry> existing_data_entries;
   std::vector<iceberg::ManifestEntry> existing_delete_entries;
   for (auto& [name, man] : existing) {
@@ -305,7 +305,7 @@ void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& out_metadata_
   table_metadata->metadata_log.push_back(
       iceberg::MetadataLog{.timestamp_ms = CurrentTimeMs(), .metadata_file = table_metadata->location});
 
-  auto metadata_filename = std::filesystem::path(table_metadata->location).filename();
+  auto metadata_filename = result_metadata_path.has_value() ? result_metadata_path.value() : static_cast<std::string>(std::filesystem::path(table_metadata->location).filename());
   iceberg::ice_tea::WriteManifestRemote(fs, out_metadata_location / data_manifest_name, added_data_entries);
   iceberg::ice_tea::WriteManifestRemote(fs, out_metadata_location / delete_manifest_name, added_delete_entries);
   iceberg::ice_tea::WriteManifestListRemote(fs, out_metadata_location / snapshot_name, manifest_list);
