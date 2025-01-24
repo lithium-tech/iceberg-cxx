@@ -229,9 +229,20 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
       }
       entry.sequence_number = sequence_number;
       switch (entry.data_file.content) {
-        case ContentFile::FileContent::kData:
-          layers[sequence_number].data_entries_.emplace_back(DataEntry{.entry = std::move(entry)});
+        case ContentFile::FileContent::kData: {
+          std::vector<DataEntry::Segment> segments;
+          const auto& split_offsets = entry.data_file.split_offsets;
+          if (split_offsets.empty()) {
+            segments.emplace_back(4, 0);
+          } else {
+            for (size_t i = 0; i + 1 < split_offsets.size(); ++i) {
+              segments.emplace_back(split_offsets[i], split_offsets[i + 1] - split_offsets[i]);
+            }
+            segments.emplace_back(split_offsets.back(), 0);
+          }
+          layers[sequence_number].data_entries_.emplace_back(DataEntry(std::move(entry), std::move(segments)));
           break;
+        }
         case ContentFile::FileContent::kPositionDeletes:
           /*
           A position delete file must be applied to a data file when all of the following are true:

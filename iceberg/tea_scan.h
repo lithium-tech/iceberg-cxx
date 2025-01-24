@@ -16,6 +16,7 @@ namespace iceberg::ice_tea {
 
 struct DataEntry {
   struct Segment {
+    Segment() = delete;
     Segment(int64_t off, int64_t len) : offset(off), length(len) {}
 
     int64_t offset;
@@ -26,14 +27,16 @@ struct DataEntry {
   std::optional<int64_t> GetValueCounts(int32_t field_id) const;
   std::optional<int64_t> GetColumnSize(int32_t field_id) const;
 
+  DataEntry() = delete;
+  DataEntry(ManifestEntry e) : entry(std::move(e)) {}
+  DataEntry(ManifestEntry e, std::vector<Segment> p) : entry(std::move(e)), parts(std::move(p)) {}
+
   ManifestEntry entry;
-  std::vector<Segment> parts;  // empty <=> full file
+  std::vector<Segment> parts;
 
   inline void SortParts() {
     std::sort(parts.begin(), parts.end(), [&](const auto& lhs, const auto& rhs) { return lhs.offset < rhs.offset; });
   }
-
-  inline bool IsWholeFile() const { return parts.empty(); }
 };
 
 struct ScanMetadata {
