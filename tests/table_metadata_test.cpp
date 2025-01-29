@@ -125,4 +125,18 @@ TEST(Metadata, ReadWriteRead) {
   Check(*metadata);
 }
 
+TEST(Metadata, ReadBrokenFiles) {
+  std::ifstream input_empty("metadata/empty.metadata.json");
+  EXPECT_FALSE(ice_tea::ReadTableMetadataV2(input_empty));
+
+  std::ifstream input_broken1("metadata/broken1.metadata.json");
+  EXPECT_FALSE(ice_tea::ReadTableMetadataV2(input_broken1));
+
+  std::ifstream input_broken2("metadata/broken2.metadata.json");
+  EXPECT_FALSE(ice_tea::ReadTableMetadataV2(input_broken2));
+
+  std::ifstream input_ok("metadata/00003-ca406d8e-6c7b-4672-87ff-bfd76f84f949.metadata.json");
+  EXPECT_TRUE(ice_tea::ReadTableMetadataV2(input_ok));
+}
+
 }  // namespace iceberg

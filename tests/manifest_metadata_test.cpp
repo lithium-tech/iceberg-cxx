@@ -1,6 +1,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <filesystem>
 
 #include "gtest/gtest.h"
 #include "iceberg/manifest_file.h"
@@ -112,5 +113,20 @@ TEST(Manifest, ReadFileUuidGenerator) {
   CheckEqual(manifest_list[0], expected_list_uuid_generated[0]);
   CheckEqual(manifest_list[1], expected_list_uuid_generated[1]);
 }
+
+TEST(Manifest, ReadBrokenFiles) {
+  std::ifstream input_empty("metadata/empty.avro");
+  EXPECT_THROW(ice_tea::ReadManifestList(input_empty), std::runtime_error);
+
+  std::ifstream input_broken1("metadata/broken1.avro");
+  EXPECT_THROW(ice_tea::ReadManifestList(input_broken1), std::runtime_error);
+
+  std::ifstream input_broken2("metadata/broken2.avro");
+  EXPECT_THROW(ice_tea::ReadManifestList(input_broken2), std::runtime_error);
+
+  std::ifstream input_ok("metadata/snap-2dfe8bdb-200b-1006-9bb5-0242ac110002.avro");
+  EXPECT_NO_THROW(ice_tea::ReadManifestList(input_ok));
+}
+
 
 }  // namespace iceberg
