@@ -28,6 +28,7 @@
 #include "gen/tpch/list.h"
 #include "gen/tpch/tables.h"
 #include "gen/tpch/text.h"
+#include "parquet/properties.h"
 #include "parquet/schema.h"
 
 namespace gen {
@@ -49,10 +50,9 @@ struct TableGeneratorInfo {
   std::vector<std::shared_ptr<Table>> tables;
 };
 
-arrow::Result<std::shared_ptr<IProcessor>> MakeEqualityDeleteProcessor(std::shared_ptr<Table> table, int file_index,
-                                                                       RandomDevice& random_device,
-                                                                       const WriteFlags& write_flags,
-                                                                       const GenerateFlags& generate_flags) {
+arrow::Result<std::shared_ptr<IProcessor>> MakeEqualityDeleteProcessor(
+    std::shared_ptr<Table> table, int file_index, RandomDevice& random_device, const std::string& output_dir,
+    std::shared_ptr<parquet::WriterProperties> writer_properties, const GenerateFlags& generate_flags) {
   std::vector<std::string> equality_delete_columns;
   std::ranges::sample(table->MakeColumnNames(), std::back_inserter(equality_delete_columns),
                       generate_flags.equality_deletes_columns_count, random_device);
@@ -79,13 +79,12 @@ arrow::Result<std::shared_ptr<IProcessor>> MakeEqualityDeleteProcessor(std::shar
   }
 
   auto equality_delete_writer = std::make_shared<ParquetWriter>(
-      write_flags.output_dir + "/" + table->Name() + "_equality_delete_" + std::to_string(file_index) + ".parquet",
-      ParquetSchemaFromArrowSchema(filtered_parquet_schema), write_flags.parquet_compression,
-      write_flags.compression_level);
+      output_dir + "/" + table->Name() + "_equality_delete_" + std::to_string(file_index) + ".parquet",
+      ParquetSchemaFromArrowSchema(filtered_parquet_schema), writer_properties);
 
   auto diff_equality_delete_writer = std::make_shared<ParquetWriter>(
-      write_flags.output_dir + "/" + table->Name() + "_diff_equality_delete_" + std::to_string(file_index) + ".parquet",
-      table->MakeParquetSchema(), write_flags.parquet_compression, write_flags.compression_level);
+      output_dir + "/" + table->Name() + "_diff_equality_delete_" + std::to_string(file_index) + ".parquet",
+      table->MakeParquetSchema(), writer_properties);
 
   equality_delete_processor->SetDeleteProcessor(std::make_shared<WriterProcessor>(equality_delete_writer));
   equality_delete_processor->SetResultDataProcessor(std::make_shared<WriterProcessor>(diff_equality_delete_writer));
@@ -93,11 +92,10 @@ arrow::Result<std::shared_ptr<IProcessor>> MakeEqualityDeleteProcessor(std::shar
   return equality_delete_processor;
 }
 
-arrow::Result<std::shared_ptr<IProcessor>> MakePositionalDeleteProcessor(std::shared_ptr<Table> table, int file_index,
-                                                                         const std::string& data_file_name,
-                                                                         RandomDevice& random_device,
-                                                                         const WriteFlags& write_flags,
-                                                                         const GenerateFlags& generate_flags) {
+arrow::Result<std::shared_ptr<IProcessor>> MakePositionalDeleteProcessor(
+    std::shared_ptr<Table> table, int file_index, const std::string& data_file_name, RandomDevice& random_device,
+    const std::string& output_dir, std::shared_ptr<parquet::WriterProperties> writer_properties,
+    const GenerateFlags& generate_flags) {
   BernouliDistribution positional_delete_gen(generate_flags.positional_deletes_rows_scale);
   auto positional_delete_processor = std::make_shared<PositionalDeleteProcessor<BernouliDistribution>>(
       data_file_name, std::move(positional_delete_gen), random_device);
@@ -108,14 +106,12 @@ arrow::Result<std::shared_ptr<IProcessor>> MakePositionalDeleteProcessor(std::sh
   auto positional_delete_schema = std::make_shared<arrow::Schema>(positional_delete_fields);
 
   auto positional_delete_writer = std::make_shared<ParquetWriter>(
-      write_flags.output_dir + "/" + table->Name() + "_positional_delete_" + std::to_string(file_index) + ".parquet",
-      ParquetSchemaFromArrowSchema(positional_delete_schema), write_flags.parquet_compression,
-      write_flags.compression_level);
+      output_dir + "/" + table->Name() + "_positional_delete_" + std::to_string(file_index) + ".parquet",
+      ParquetSchemaFromArrowSchema(positional_delete_schema), writer_properties);
 
   auto diff_positional_delete_writer = std::make_shared<ParquetWriter>(
-      write_flags.output_dir + "/" + table->Name() + "_diff_positional_delete_" + std::to_string(file_index) +
-          ".parquet",
-      table->MakeParquetSchema(), write_flags.parquet_compression, write_flags.compression_level);
+      output_dir + "/" + table->Name() + "_diff_positional_delete_" + std::to_string(file_index) + ".parquet",
+      table->MakeParquetSchema(), writer_properties);
 
   positional_delete_processor->SetDeleteProcessor(std::make_shared<WriterProcessor>(positional_delete_writer));
   positional_delete_processor->SetResultDataProcessor(std::make_shared<WriterProcessor>(diff_positional_delete_writer));
@@ -265,6 +261,16 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
   using Task = std::function<arrow::Status()>;
   std::vector<Task> tasks_to_do;
 
+  auto parquet_writer_properties = [&]() {
+    parquet::WriterProperties::Builder properties_builder;
+    parquet::WriterProperties::Builder builder;
+    builder.compression(write_flags.parquet_compression);
+    if (write_flags.compression_level.has_value()) {
+      builder.compression_level(write_flags.compression_level.value());
+    }
+    return builder.build();
+  }();
+
   for (auto& info : table_generator_infos) {
     std::vector<std::shared_ptr<Table>> tables = info.tables;
 
@@ -275,14 +281,15 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
 
       if (write_flags.write_parquet) {
         auto data_file_name = write_flags.output_dir + "/" + table->Name() + std::to_string(file_id) + ".parquet";
-        auto writer = std::make_shared<ParquetWriter>(data_file_name, table->MakeParquetSchema(),
-                                                      write_flags.parquet_compression, write_flags.compression_level);
+        auto writer =
+            std::make_shared<ParquetWriter>(data_file_name, table->MakeParquetSchema(), parquet_writer_properties);
         processor_root->AttachChild(std::make_shared<WriterProcessor>(writer));
 
         if (generate_flags.use_equality_deletes && generate_flags.equality_deletes_columns_count > 0) {
-          ARROW_ASSIGN_OR_RAISE(auto equality_delete_processor,
-                                MakeEqualityDeleteProcessor(table, file_id, random_device_storage.GetNewRandomDevice(),
-                                                            write_flags, generate_flags));
+          ARROW_ASSIGN_OR_RAISE(
+              auto equality_delete_processor,
+              MakeEqualityDeleteProcessor(table, file_id, random_device_storage.GetNewRandomDevice(),
+                                          write_flags.output_dir, parquet_writer_properties, generate_flags));
 
           processor_root->AttachChild(equality_delete_processor);
         }
@@ -291,7 +298,7 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
           ARROW_ASSIGN_OR_RAISE(
               auto positional_delete_processor,
               MakePositionalDeleteProcessor(table, file_id, data_file_name, random_device_storage.GetNewRandomDevice(),
-                                            write_flags, generate_flags));
+                                            write_flags.output_dir, parquet_writer_properties, generate_flags));
           processor_root->AttachChild(positional_delete_processor);
         }
       }

@@ -52,17 +52,21 @@ class PositionalDeleteProcessor : public IProcessor {
     ARROW_RETURN_NOT_OK(file_names_builder.Finish(&file_names));
     ARROW_RETURN_NOT_OK(indices_builder.Finish(&indices));
 
-    std::vector<std::shared_ptr<arrow::Array>> filtered_batch;
-    for (int i = 0; i < batch->NumColumns(); ++i) {
-      filtered_batch.push_back(arrow::compute::Filter(batch->Column(i), mask)->make_array());
-    }
-
     auto positional_delete_batch = std::make_shared<Batch>(
         num_rows, std::vector<std::string>{"1", "2"}, std::vector<std::shared_ptr<arrow::Array>>{file_names, indices});
-    auto result_positional_delete = std::make_shared<Batch>(num_rows, batch->Schema()->field_names(), filtered_batch);
 
     ARROW_RETURN_NOT_OK(delete_processor_->Process(positional_delete_batch));
-    ARROW_RETURN_NOT_OK(result_data_processor_->Process(result_positional_delete));
+
+    if (result_data_processor_) {
+      std::vector<std::shared_ptr<arrow::Array>> filtered_batch;
+      for (int i = 0; i < batch->NumColumns(); ++i) {
+        filtered_batch.push_back(arrow::compute::Filter(batch->Column(i), mask)->make_array());
+      }
+
+      auto result_positional_delete = std::make_shared<Batch>(num_rows, batch->Schema()->field_names(), filtered_batch);
+
+      ARROW_RETURN_NOT_OK(result_data_processor_->Process(result_positional_delete));
+    }
 
     shift_ += num_rows;
     return arrow::Status::OK();
