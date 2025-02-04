@@ -35,8 +35,8 @@ class PositionalDeleteProcessor : public IProcessor {
     arrow::StringBuilder file_names_builder;
     std::shared_ptr<arrow::StringArray> file_names;
 
-    arrow::Int32Builder indices_builder;
-    std::shared_ptr<arrow::Int32Array> indices;
+    arrow::Int64Builder indices_builder;
+    std::shared_ptr<arrow::Int64Array> indices;
 
     for (int i = 0; i < num_rows; ++i) {
       if (gen_(random_device_) > 0) {
