@@ -37,8 +37,7 @@ Uuid::Uuid() : time_low_(0), time_mid_(0), time_hi_and_version_(0), clock_seq_(0
   std::fill(node_, node_ + sizeof(node_), 0);
 }
 
-Uuid::Uuid(uint32_t time_low) : time_low_(time_low) {
-}
+Uuid::Uuid(uint32_t time_low) : time_low_(time_low) {}
 
 Uuid::Uuid(const std::string& uuid) { Parse(uuid); }
 
@@ -158,6 +157,12 @@ Uuid::Uuid(uint32_t time_low, uint32_t time_mid, uint32_t time_hi_and_version, u
 }
 
 UuidGenerator::UuidGenerator(Uuid::Version version) : version_(version) {
+  if (version == Uuid::Version::kMacless) {
+    for (int i = 0; i < 6; ++i) {
+      node_[i] = 0;
+    }
+    return;
+  }
   if (!SetMacAddress()) {
     throw std::runtime_error("Error while getting mac address of node");
   }

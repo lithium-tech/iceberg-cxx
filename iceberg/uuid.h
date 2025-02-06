@@ -23,7 +23,8 @@ class Uuid {
     kUuidDceUid = 2,
     kUuidNameBased = 3,
     kUuidRandom = 4,
-    kUuidNameBasedSha1 = 5
+    kUuidNameBasedSha1 = 5,
+    kMacless = 6,
   };
 
   // Create null uuid
@@ -70,7 +71,7 @@ static_assert(8 * sizeof(Uuid) == 128);
 
 class UuidGenerator {
  public:
-  explicit UuidGenerator(Uuid::Version version = Uuid::Version::kUuidTimeBased);
+  explicit UuidGenerator(Uuid::Version version = Uuid::Version::kMacless);
 
   ~UuidGenerator() = default;
 
