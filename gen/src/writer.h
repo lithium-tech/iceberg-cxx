@@ -6,6 +6,8 @@
 #include <string>
 #include <utility>
 
+#include "arrow/io/interfaces.h"
+
 #ifdef HAS_ARROW_CSV
 #include "arrow/csv/api.h"
 #include "arrow/csv/options.h"
@@ -34,17 +36,20 @@ class Writer {
   virtual ~Writer() = default;
 };
 
+static std::shared_ptr<arrow::io::FileOutputStream> OpenLocalOutputStream(const std::string& filename) {
+  auto maybe_outfile = arrow::io::FileOutputStream::Open(filename);
+  if (!maybe_outfile.ok()) {
+    throw maybe_outfile.status();
+  }
+  return maybe_outfile.ValueUnsafe();
+}
+
 class ParquetWriter : public Writer {
  public:
-  ParquetWriter(const std::string& filename, const std::shared_ptr<parquet::schema::GroupNode>& schema,
+  ParquetWriter(std::shared_ptr<arrow::io::OutputStream> outfile,
+                const std::shared_ptr<parquet::schema::GroupNode>& schema,
                 std::shared_ptr<parquet::WriterProperties> properties = parquet::default_writer_properties())
-      : outfile_([&filename]() {
-          auto maybe_outfile = arrow::io::FileOutputStream::Open(filename);
-          if (!maybe_outfile.ok()) {
-            throw maybe_outfile.status();
-          }
-          return maybe_outfile.ValueUnsafe();
-        }()),
+      : outfile_(outfile),
         parquet_writer_([&]() { return parquet::ParquetFileWriter::Open(outfile_, schema, properties); }()) {}
 
   arrow::Status WriteRecordBatch(std::shared_ptr<arrow::RecordBatch> record_batch) override {
@@ -76,7 +81,7 @@ class ParquetWriter : public Writer {
     return arrow::Status::OK();
   }
 
-  std::shared_ptr<arrow::io::FileOutputStream> outfile_;
+  std::shared_ptr<arrow::io::OutputStream> outfile_;
   std::unique_ptr<parquet::ParquetFileWriter> parquet_writer_;
   std::unique_ptr<parquet::arrow::FileWriter> arrow_writer_;
 };
@@ -84,15 +89,9 @@ class ParquetWriter : public Writer {
 #ifdef HAS_ARROW_CSV
 class CSVWriter : public Writer {
  public:
-  CSVWriter(const std::string& filename, const std::shared_ptr<arrow::Schema> schema,
+  CSVWriter(std::shared_ptr<arrow::io::OutputStream> outfile, const std::shared_ptr<arrow::Schema> schema,
             const arrow::csv::WriteOptions& options = arrow::csv::WriteOptions::Defaults())
-      : schema_(schema), outfile_([&filename]() {
-          auto maybe_outfile = arrow::io::FileOutputStream::Open(filename);
-          if (!maybe_outfile.ok()) {
-            throw maybe_outfile.status();
-          }
-          return maybe_outfile.ValueUnsafe();
-        }()) {
+      : schema_(schema), outfile_(outfile) {
     auto maybe_writer = arrow::csv::MakeCSVWriter(outfile_, schema, options);
     if (!maybe_writer.ok()) {
       throw maybe_writer;
@@ -124,7 +123,7 @@ class CSVWriter : public Writer {
   }
 
   const std::shared_ptr<arrow::Schema> schema_;
-  std::shared_ptr<arrow::io::FileOutputStream> outfile_;
+  std::shared_ptr<arrow::io::OutputStream> outfile_;
   std::shared_ptr<arrow::ipc::RecordBatchWriter> arrow_writer_;
 };
 #endif

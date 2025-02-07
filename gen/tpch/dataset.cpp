@@ -78,12 +78,14 @@ arrow::Result<std::shared_ptr<IProcessor>> MakeEqualityDeleteProcessor(
     ARROW_ASSIGN_OR_RAISE(filtered_parquet_schema, filtered_parquet_schema->RemoveField(index_to_delete));
   }
 
-  auto equality_delete_writer = std::make_shared<ParquetWriter>(
-      output_dir + "/" + table->Name() + "_equality_delete_" + std::to_string(file_index) + ".parquet",
-      ParquetSchemaFromArrowSchema(filtered_parquet_schema), writer_properties);
+  auto equality_delete_writer =
+      std::make_shared<ParquetWriter>(OpenLocalOutputStream(output_dir + "/" + table->Name() + "_equality_delete_" +
+                                                            std::to_string(file_index) + ".parquet"),
+                                      ParquetSchemaFromArrowSchema(filtered_parquet_schema), writer_properties);
 
   auto diff_equality_delete_writer = std::make_shared<ParquetWriter>(
-      output_dir + "/" + table->Name() + "_diff_equality_delete_" + std::to_string(file_index) + ".parquet",
+      OpenLocalOutputStream(output_dir + "/" + table->Name() + "_diff_equality_delete_" + std::to_string(file_index) +
+                            ".parquet"),
       table->MakeParquetSchema(), writer_properties);
 
   equality_delete_processor->SetDeleteProcessor(std::make_shared<WriterProcessor>(equality_delete_writer));
@@ -105,12 +107,14 @@ arrow::Result<std::shared_ptr<IProcessor>> MakePositionalDeleteProcessor(
   positional_delete_fields.emplace_back(arrow::field("row", arrow::int32()));
   auto positional_delete_schema = std::make_shared<arrow::Schema>(positional_delete_fields);
 
-  auto positional_delete_writer = std::make_shared<ParquetWriter>(
-      output_dir + "/" + table->Name() + "_positional_delete_" + std::to_string(file_index) + ".parquet",
-      ParquetSchemaFromArrowSchema(positional_delete_schema), writer_properties);
+  auto positional_delete_writer =
+      std::make_shared<ParquetWriter>(OpenLocalOutputStream(output_dir + "/" + table->Name() + "_positional_delete_" +
+                                                            std::to_string(file_index) + ".parquet"),
+                                      ParquetSchemaFromArrowSchema(positional_delete_schema), writer_properties);
 
   auto diff_positional_delete_writer = std::make_shared<ParquetWriter>(
-      output_dir + "/" + table->Name() + "_diff_positional_delete_" + std::to_string(file_index) + ".parquet",
+      OpenLocalOutputStream(output_dir + "/" + table->Name() + "_diff_positional_delete_" + std::to_string(file_index) +
+                            ".parquet"),
       table->MakeParquetSchema(), writer_properties);
 
   positional_delete_processor->SetDeleteProcessor(std::make_shared<WriterProcessor>(positional_delete_writer));
@@ -281,8 +285,8 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
 
       if (write_flags.write_parquet) {
         auto data_file_name = write_flags.output_dir + "/" + table->Name() + std::to_string(file_id) + ".parquet";
-        auto writer =
-            std::make_shared<ParquetWriter>(data_file_name, table->MakeParquetSchema(), parquet_writer_properties);
+        auto writer = std::make_shared<ParquetWriter>(OpenLocalOutputStream(data_file_name), table->MakeParquetSchema(),
+                                                      parquet_writer_properties);
         processor_root->AttachChild(std::make_shared<WriterProcessor>(writer));
 
         if (generate_flags.use_equality_deletes && generate_flags.equality_deletes_columns_count > 0) {
@@ -306,9 +310,9 @@ arrow::Status GenerateTPCH(const WriteFlags& write_flags, const GenerateFlags& g
 #ifdef HAS_ARROW_CSV
       if (write_flags.write_csv) {
         auto csv_writer_options = TpchCsvWriteOptions();
-        auto writer =
-            std::make_shared<CSVWriter>(write_flags.output_dir + "/" + table->Name() + std::to_string(file_id) + ".csv",
-                                        table->MakeArrowSchema(), TpchCsvWriteOptions());
+        auto writer = std::make_shared<CSVWriter>(
+            OpenLocalOutputStream(write_flags.output_dir + "/" + table->Name() + std::to_string(file_id) + ".csv"),
+            table->MakeArrowSchema(), TpchCsvWriteOptions());
         processor_root->AttachChild(std::make_shared<WriterProcessor>(writer));
       }
 #endif

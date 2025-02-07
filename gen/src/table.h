@@ -21,7 +21,8 @@ struct Table {
 #ifdef HAS_ARROW_CSV
   std::shared_ptr<CSVWriter> GetCSVWriter(const std::string& output_dir,
                                           const arrow::csv::WriteOptions& options) const {
-    return std::make_shared<CSVWriter>(output_dir + "/" + Name() + ".csv", MakeArrowSchema(), options);
+    return std::make_shared<CSVWriter>(OpenLocalOutputStream(output_dir + "/" + Name() + ".csv"), MakeArrowSchema(),
+                                       options);
   }
 #endif
 
