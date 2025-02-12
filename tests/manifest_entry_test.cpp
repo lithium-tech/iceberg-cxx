@@ -168,7 +168,7 @@ TEST(ManifestEntryTest, ReadBrokenFiles) {
 
   std::ifstream input_broken2("metadata/broken2.avro");
   EXPECT_THROW(ice_tea::ReadManifestEntries(input_broken2), std::runtime_error);
-  
+
   std::ifstream input_ok("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
   EXPECT_NO_THROW(ice_tea::ReadManifestEntries(input_ok));
 }

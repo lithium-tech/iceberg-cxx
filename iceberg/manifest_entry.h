@@ -5,11 +5,11 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
-#include <memory>
 
 #include "iceberg/transforms.h"
 
@@ -101,7 +101,8 @@ Manifest ReadManifestEntries(const std::string& data);
 std::string WriteManifestEntries(const Manifest& manifest_entries);
 
 void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, std::shared_ptr<arrow::fs::FileSystem> fs);
-void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, const std::vector<std::shared_ptr<parquet::FileMetaData>>& metadata);
+void FillManifestSplitOffsets(std::vector<ManifestEntry>& data,
+                              const std::vector<std::shared_ptr<parquet::FileMetaData>>& metadata);
 
 }  // namespace ice_tea
 }  // namespace iceberg

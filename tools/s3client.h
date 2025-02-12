@@ -211,13 +211,9 @@ class S3Client {
     return true;
   }
 
-  std::shared_ptr<arrow::fs::FileSystem> GetSrcFileSystem() const {
-    return src_s3fs_;
-  }
+  std::shared_ptr<arrow::fs::FileSystem> GetSrcFileSystem() const { return src_s3fs_; }
 
-  std::shared_ptr<arrow::fs::FileSystem> GetDstFileSystem() const {
-    return dst_s3fs_;
-  }
+  std::shared_ptr<arrow::fs::FileSystem> GetDstFileSystem() const { return dst_s3fs_; }
 
  private:
   S3Init s3init_;

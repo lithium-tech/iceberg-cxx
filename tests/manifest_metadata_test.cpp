@@ -1,7 +1,7 @@
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <filesystem>
 
 #include "gtest/gtest.h"
 #include "iceberg/manifest_file.h"
@@ -127,6 +127,5 @@ TEST(Manifest, ReadBrokenFiles) {
   std::ifstream input_ok("metadata/snap-2dfe8bdb-200b-1006-9bb5-0242ac110002.avro");
   EXPECT_NO_THROW(ice_tea::ReadManifestList(input_ok));
 }
-
 
 }  // namespace iceberg
