@@ -1,6 +1,7 @@
 add_executable(iceberg_local_test
     manifest_entry_test.cpp
     manifest_metadata_test.cpp
+    validation_test.cpp
     table_metadata_test.cpp
     snapshot_test.cpp
     run_tests.cpp
@@ -28,3 +29,8 @@ ADD_CUSTOM_TARGET(test_snapshots_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/snapshots" "${CMAKE_CURRENT_BINARY_DIR}/snapshots"
 )
 add_dependencies(iceberg_local_test test_snapshots_symlink)
+
+ADD_CUSTOM_TARGET(test_warehouse_symlink ALL
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/warehouse" "${CMAKE_CURRENT_BINARY_DIR}/warehouse"
+)
+add_dependencies(iceberg_local_test test_warehouse_symlink)

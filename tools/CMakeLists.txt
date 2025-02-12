@@ -4,6 +4,8 @@ set(LIB_SOURCES
   metadata_tree.h
   common.cpp
   common.h
+  validation.cpp
+  validation.h
 )
 
 if(USE_ARROW)
