@@ -14,6 +14,17 @@ using Namespace = std::string;
 struct TableIdentifier {
   Namespace db;
   std::string name;
+
+  bool operator==(const TableIdentifier& other) const = default;
+};
+
+struct HasherTableIdentifier {
+  size_t operator()(const TableIdentifier& table_ident) const {
+    static const std::hash<std::string> hasher;
+    auto hash1 = hasher(table_ident.db);
+    auto hash2 = hasher(table_ident.name);
+    return hash1 & (hash1 ^ hash2);
+  }
 };
 
 class Catalog {
