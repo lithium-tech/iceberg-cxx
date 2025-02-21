@@ -15,32 +15,25 @@ Manifest ReadManifest(const std::string &path) {
   return ice_tea::ReadManifestEntries(data);
 }
 
-tools::Restrictions DefaultRestictions() {
-  return {1000,
-          1000,
-          1000,
-          1000,
-          1000,
-          1,
-          90,
-          10,
-          100000,
-          1,
-          10000000,
+tools::RestrictionsTableMetadata DefaultRestrictionsTableMetadata() {
+  return {1,
           {"4412d001-c6df-4adb-8854-d3b9e762440c"},
           {"4412d001-c6df-4adb-8854-d3b9e762440c"},
           {"main"},
-          {"min", "max"},
           {{"owner", "root"}, {"created-at", std::nullopt}, {"write.parquet.compression-codec", "zstd"}},
           {TypeID::kBinary}};
 }
 
-std::vector<std::shared_ptr<Manifest>> DefaultManifests() {
-  return {std::make_shared<Manifest>(ReadManifest("metadata/7e6e13cb-31fd-4de7-8811-02ce7cec44a9-m0.avro")),
-          std::make_shared<Manifest>(ReadManifest("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro")),
-          std::make_shared<Manifest>(ReadManifest("metadata/3ccdc97b-a744-4930-98c7-4abc66c26625-m0.avro")),
-          std::make_shared<Manifest>(ReadManifest("metadata/41f34bc8-eedf-4573-96b0-10c04e7c84c4-m0.avro")),
-          std::make_shared<Manifest>(ReadManifest("metadata/66ee5e5e-f6c6-47a5-a609-1a439232d1ea-m0.avro"))};
+tools::RestrictionsManifests DefaultRestrictionsManifests() {
+  return {1000, 1000, 1000, 1000, 1000, 90, 10, 100000, 1, 10000000};
+}
+
+std::vector<Manifest> DefaultManifests() {
+  return {ReadManifest("metadata/7e6e13cb-31fd-4de7-8811-02ce7cec44a9-m0.avro"),
+          ReadManifest("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro"),
+          ReadManifest("metadata/3ccdc97b-a744-4930-98c7-4abc66c26625-m0.avro"),
+          ReadManifest("metadata/41f34bc8-eedf-4573-96b0-10c04e7c84c4-m0.avro"),
+          ReadManifest("metadata/66ee5e5e-f6c6-47a5-a609-1a439232d1ea-m0.avro")};
 }
 
 std::shared_ptr<TableMetadataV2> DefaultTableMetadata() {
@@ -48,50 +41,69 @@ std::shared_ptr<TableMetadataV2> DefaultTableMetadata() {
   return ice_tea::ReadTableMetadataV2(input);
 }
 
-tools::Validator DefaultValidator() { return tools::Validator(DefaultRestictions()); }
+tools::Validator DefaultValidator() {
+  tools::Validator validator;
+  validator.AssignRestrictionsTableMetadata(DefaultRestrictionsTableMetadata());
+  validator.AssignRestrictionsManifests(DefaultRestrictionsManifests());
+  return validator;
+}
 
 }  // namespace
 
-TEST(Restrictions, ReadRestrictions) {
-  EXPECT_EQ(tools::ReadRestrictions("warehouse/restrictions.json"), DefaultRestictions());
+TEST(Restrictions, ReadRestrictionsTableMetadata) {
+  EXPECT_EQ(tools::ReadRestrictionsTableMetadata("warehouse/restrictions.json"), DefaultRestrictionsTableMetadata());
+}
+
+TEST(Restrictions, ReadRestrictionsManifests) {
+  EXPECT_EQ(tools::ReadRestrictionsManifests("warehouse/restrictions.json"), DefaultRestrictionsManifests());
 }
 
 TEST(ManifestValidation, OKManifests) { EXPECT_NO_THROW(DefaultValidator().ValidateManifests(DefaultManifests())); }
 
+TEST(ManifestValidation, NoRestrictions) {
+  tools::Validator validator;
+  EXPECT_THROW(validator.ValidateManifests(DefaultManifests()), std::runtime_error);
+}
+
 TEST(ManifestValidation, MaxDataFilesCount) {
-  auto restrictions = DefaultRestictions();
+  auto restrictions = DefaultRestrictionsManifests();
   restrictions.max_data_files_count = 0;
-  auto validator = tools::Validator(restrictions);
+  tools::Validator validator;
+  validator.AssignRestrictionsManifests(restrictions);
   EXPECT_THROW(validator.ValidateManifests(DefaultManifests()), std::runtime_error);
 }
 
 TEST(ManifestValidation, MaxDeleteFilesCount) {
-  auto restrictions = DefaultRestictions();
+  auto restrictions = DefaultRestrictionsManifests();
   restrictions.max_delete_files_count = 0;
-  auto validator = tools::Validator(restrictions);
+  tools::Validator validator;
+  validator.AssignRestrictionsManifests(restrictions);
   EXPECT_THROW(validator.ValidateManifests(DefaultManifests()), std::runtime_error);
 }
 
 TEST(ManifestValidation, MaxPositionDeletesCount) {
-  auto restrictions = DefaultRestictions();
+  auto restrictions = DefaultRestrictionsManifests();
   restrictions.max_position_deletes_count = 0;
-  auto validator = tools::Validator(restrictions);
+  tools::Validator validator;
+  validator.AssignRestrictionsManifests(restrictions);
   EXPECT_THROW(validator.ValidateManifests(DefaultManifests()), std::runtime_error);
 }
 
 TEST(ManifestValidation, MaxEqualityDeletesCount) {
-  auto restrictions = DefaultRestictions();
+  auto restrictions = DefaultRestrictionsManifests();
   restrictions.max_equality_deletes_count = 0;
-  tools::Validator validator(restrictions);
+  tools::Validator validator;
+  validator.AssignRestrictionsManifests(restrictions);
   auto manifests = DefaultManifests();
-  manifests.back()->entries.back().data_file.content = ContentFile::FileContent::kEqualityDeletes;
+  manifests.back().entries.back().data_file.content = ContentFile::FileContent::kEqualityDeletes;
   EXPECT_THROW(validator.ValidateManifests(manifests), std::runtime_error);
 }
 
 TEST(ManifestValidation, MaxRowGroupsPerFile) {
-  auto restrictions = DefaultRestictions();
+  auto restrictions = DefaultRestrictionsManifests();
   restrictions.max_row_groups_per_file = 0;
-  auto validator = tools::Validator(restrictions);
+  tools::Validator validator;
+  validator.AssignRestrictionsManifests(restrictions);
   EXPECT_THROW(validator.ValidateManifests(DefaultManifests()), std::runtime_error);
 }
 
@@ -99,23 +111,28 @@ TEST(ManifestValidation, RowGroupsSizes) {
   const size_t split_offsets_size = 11;
 
   auto manifests = DefaultManifests();
-  manifests.back()->entries.back().data_file.split_offsets.assign(split_offsets_size, 0);
+  manifests.back().entries.back().data_file.split_offsets.assign(split_offsets_size, 0);
   EXPECT_THROW(DefaultValidator().ValidateManifests(manifests), std::runtime_error);
   for (size_t i = 0; i < split_offsets_size; i++) {
-    manifests.back()->entries.back().data_file.split_offsets[i] = 1000000 * i;
+    manifests.back().entries.back().data_file.split_offsets[i] = 1000000 * i;
   }
-  manifests.back()->entries.back().data_file.file_size_in_bytes = split_offsets_size * 1000000;
+  manifests.back().entries.back().data_file.file_size_in_bytes = split_offsets_size * 1000000;
   EXPECT_THROW(DefaultValidator().ValidateManifests(manifests), std::runtime_error);
 }
 
 TEST(ManifestValidation, FileFormat) {
   auto manifests = DefaultManifests();
-  manifests.back()->entries.back().data_file.file_format = "AVRO";
+  manifests.back().entries.back().data_file.file_format = "AVRO";
   EXPECT_THROW(DefaultValidator().ValidateManifests(manifests), std::runtime_error);
 }
 
 TEST(TableMetadataValidation, OKTableMetadata) {
   EXPECT_NO_THROW(DefaultValidator().ValidateTableMetadata(DefaultTableMetadata()));
+}
+
+TEST(TableMetadataValidation, NoRestrictions) {
+  tools::Validator validator;
+  EXPECT_THROW(validator.ValidateTableMetadata(DefaultTableMetadata()), std::runtime_error);
 }
 
 TEST(TableMetadataValidation, Properties) {
@@ -133,8 +150,9 @@ TEST(TableMetadataValidation, Partitioned) {
   auto table_metadata = DefaultTableMetadata();
   table_metadata->partition_specs.clear();
   auto validator = DefaultValidator();
-  EXPECT_THROW(DefaultValidator().ValidateTableMetadata(table_metadata), std::runtime_error);
-  validator.GetRestrictions().partitioned.clear();
+  EXPECT_THROW(validator.ValidateTableMetadata(table_metadata), std::runtime_error);
+  EXPECT_TRUE(validator.IsRestrictionsTableMetadataAssigned());
+  validator.GetRestrictionsTableMetadata().partitioned.clear();
   EXPECT_NO_THROW(validator.ValidateTableMetadata(table_metadata));
 }
 
@@ -143,20 +161,25 @@ TEST(TableMetadataValidation, Sorted) {
   table_metadata->sort_orders.clear();
   auto validator = DefaultValidator();
   EXPECT_THROW(validator.ValidateTableMetadata(table_metadata), std::runtime_error);
-  validator.GetRestrictions().sorted.clear();
+  EXPECT_TRUE(validator.IsRestrictionsTableMetadataAssigned());
+  validator.GetRestrictionsTableMetadata().sorted.clear();
   EXPECT_NO_THROW(validator.ValidateTableMetadata(table_metadata));
 }
 
 TEST(TableMetadataValidation, ForbiddenTypes) {
-  auto restrictions = DefaultRestictions();
+  auto restrictions = DefaultRestrictionsTableMetadata();
   restrictions.forbidden_types.insert(iceberg::TypeID::kLong);
-  EXPECT_THROW(tools::Validator(restrictions).ValidateTableMetadata(DefaultTableMetadata()), std::runtime_error);
+  tools::Validator validator;
+  validator.AssignRestrictionsTableMetadata(restrictions);
+  EXPECT_THROW(validator.ValidateTableMetadata(DefaultTableMetadata()), std::runtime_error);
 }
 
 TEST(TableMetadataValidation, RequiredTags) {
-  auto restrictions = DefaultRestictions();
+  auto restrictions = DefaultRestrictionsTableMetadata();
   restrictions.required_tags.push_back("chill");
-  EXPECT_THROW(tools::Validator(restrictions).ValidateTableMetadata(DefaultTableMetadata()), std::runtime_error);
+  tools::Validator validator;
+  validator.AssignRestrictionsTableMetadata(restrictions);
+  EXPECT_THROW(validator.ValidateTableMetadata(DefaultTableMetadata()), std::runtime_error);
 }
 
 #if 0
