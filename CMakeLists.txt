@@ -32,6 +32,10 @@ add_subdirectory(vendor)
 
 add_subdirectory(iceberg)
 
+if (ICEBERG_STATISTICS)
+  add_subdirectory(stats)
+endif()
+
 if (ICEBERG_GEN)
   add_subdirectory(gen)
 endif()
