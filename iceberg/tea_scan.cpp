@@ -215,6 +215,11 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
     Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
     auto& entries_input = manifest.entries;
     for (auto&& entry : entries_input) {
+      entry.data_file.null_value_counts.clear();
+      entry.data_file.nan_value_counts.clear();
+      entry.data_file.distinct_counts.clear();
+      entry.data_file.key_metadata.clear();
+
       if (entry.status == ManifestEntry::Status::kDeleted) {
         continue;
       }
