@@ -20,8 +20,8 @@ sleep 1
 
 echo $AWS_ENDPOINT_URL $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY
 $MC alias set 'myminio' $AWS_ENDPOINT_URL $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY
-$MC mb warehouse
-$MC mirror $TEST_DATA_DIR warehouse
-$MC ls warehouse
+$MC mb myminio/warehouse
+$MC mirror $TEST_DATA_DIR myminio/warehouse
+$MC ls myminio/warehouse
 
-$MC ls -r warehouse
+$MC ls -r myminio/warehouse

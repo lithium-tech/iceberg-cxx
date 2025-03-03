@@ -1,0 +1,25 @@
+{
+    "max_equality_deletes_count" : 1000,
+    "max_position_deletes_count" : 0,
+    "max_data_files_count" : 1000,
+    "max_delete_files_count" : 1000,
+
+    "max_row_groups_per_file" : 0,
+    "max_array_dimensionality" : 1,
+
+    "max_row_group_size_percentile" : 90,
+    "min_row_group_size_percentile" : 10,
+    "max_row_group_size_bytes" : 100000,
+    "min_row_group_size_bytes" : 1,
+    
+    "partitioned" : ["4412d001-c6df-4adb-8854-d3b9e762440c"],
+    "sorted" : ["4412d001-c6df-4adb-8854-d3b9e762440c"],
+    "required_tags" : ["main, chill"],
+    "properties" : {
+        "owner" : "root",
+        "created-at" : "",
+        "write.parquet.compression-codec" : "zstd",
+        "random_name" : "random_arg"
+    },
+    "forbidden_types" : ["binary, long"]
+}

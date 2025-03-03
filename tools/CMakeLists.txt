@@ -30,6 +30,11 @@ target_link_libraries(fix_location iceberg-tools)
 set_target_properties(fix_location PROPERTIES LINK_FLAGS_RELEASE -s)
 set_target_properties(fix_location PROPERTIES LINK_FLAGS_RELWITHDEBINFO -s)
 
+add_executable(ice_validator validator_tool.cpp)
+target_include_directories(ice_validator PUBLIC "${PROJECT_SOURCE_DIR}")
+target_link_libraries(ice_validator iceberg-tools)
+set_target_properties(ice_validator PROPERTIES LINK_FLAGS_RELEASE -s)
+set_target_properties(ice_validator PROPERTIES LINK_FLAGS_RELWITHDEBINFO -s)
 
 if(USE_ARROW)
   add_executable(ice_ls ls.cpp)
