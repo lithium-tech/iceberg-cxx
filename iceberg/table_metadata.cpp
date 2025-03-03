@@ -171,7 +171,7 @@ class WriterContext {
     WriteIntField(doc, Names::source_id, field.source_id);
     WriteIntField(doc, Names::field_id, field.field_id);
     WriteStringField(doc, Names::name, field.name);
-    WriteStringField(doc, Names::transform, field.transform->ToString());
+    WriteStringField(doc, Names::transform, field.transform);
   }
 
   void WritePartitionSpec(rapidjson::Value& doc, const std::vector<std::shared_ptr<PartitionSpec>>& array) {
@@ -499,15 +499,11 @@ std::vector<std::shared_ptr<Schema>> ExtractSchemas(const rapidjson::Value& docu
   return result;
 }
 
-std::shared_ptr<ITransform> ExtractTransform(const rapidjson::Value& document, const std::string& field_name) {
-  return GetTransform(ExtractStringField(document, field_name));
-}
-
 PartitionField JsonToPartitionField(const rapidjson::Value& document) {
   return PartitionField{.source_id = ExtractInt32Field(document, Names::source_id),
                         .field_id = ExtractInt32Field(document, Names::field_id),
                         .name = ExtractStringField(document, Names::name),
-                        .transform = ExtractTransform(document, Names::transform)};
+                        .transform = ExtractStringField(document, Names::transform)};
 }
 
 std::vector<PartitionField> ExtractPartitionFields(const rapidjson::Value& document) {

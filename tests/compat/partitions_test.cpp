@@ -83,7 +83,7 @@ TEST(CompatPartitions, IdentityPartitioning) {
                                .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
                                                          .field_id = static_cast<int32_t>(0),
                                                          .name = "r_regionkey",
-                                                         .transform = std::make_shared<IdentityTransform>()}}};
+                                                         .transform = "identity"}}};
 
   table_metadata->partition_specs = {std::make_shared<PartitionSpec>(partition_spec)};
 
@@ -107,7 +107,7 @@ TEST(CompatPartitions, BucketPartitioning) {
                                .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
                                                          .field_id = static_cast<int32_t>(0),
                                                          .name = "n_regionkey",
-                                                         .transform = std::make_shared<BucketTransform>(3)}}};
+                                                         .transform = "bucket[3]"}}};
 
   table_metadata->partition_specs = {std::make_shared<PartitionSpec>(partition_spec)};
 
@@ -135,7 +135,7 @@ TEST(CompatPartitions, TruncateTransform) {
                                .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
                                                          .field_id = static_cast<int32_t>(0),
                                                          .name = "n_regionkey",
-                                                         .transform = std::make_shared<TruncateTransform>(3)}}};
+                                                         .transform = "truncate[3]"}}};
 
   table_metadata->partition_specs = {std::make_shared<PartitionSpec>(partition_spec)};
 

@@ -15,6 +15,7 @@ if (USE_SMHASHER)
     target_link_libraries(iceberg_local_test PUBLIC SMHasherSupport)
 endif()
 
+# TODO(gmusya): get rid of following commands
 ADD_CUSTOM_TARGET(test_metadata_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/metadata" "${CMAKE_CURRENT_BINARY_DIR}/metadata"
 )
@@ -34,3 +35,8 @@ ADD_CUSTOM_TARGET(test_warehouse_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/warehouse" "${CMAKE_CURRENT_BINARY_DIR}/warehouse"
 )
 add_dependencies(iceberg_local_test test_warehouse_symlink)
+
+ADD_CUSTOM_TARGET(test_tables_symlink ALL
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/tables" "${CMAKE_CURRENT_BINARY_DIR}/tables"
+)
+add_dependencies(iceberg_local_test test_tables_symlink)

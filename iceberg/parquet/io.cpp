@@ -162,7 +162,8 @@ std::vector<PartitionKey> DeterminePartitions(const PartitionSpec& partition_spe
     for (size_t j = 0; j < partition_spec.fields.size(); ++j) {
       if (auto maybe_scalar_value = table->column(partition_spec.fields[j].source_id)->GetScalar(i);
           maybe_scalar_value.ok()) {
-        auto result_value = partition_spec.fields[j].transform->Transform(maybe_scalar_value.ValueUnsafe());
+        auto transform = GetTransform(partition_spec.fields[j].transform);
+        auto result_value = transform->Transform(maybe_scalar_value.ValueUnsafe());
         identifier.partition_values_[partition_spec.fields[j].field_id] = std::move(result_value);
       } else {
         throw std::runtime_error("Incorrect value after transform");

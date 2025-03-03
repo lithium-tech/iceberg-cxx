@@ -139,4 +139,30 @@ TEST(Metadata, ReadBrokenFiles) {
   EXPECT_TRUE(ice_tea::ReadTableMetadataV2(input_ok));
 }
 
+TEST(Metadata, WithPartitionSpecs) {
+  std::ifstream input("tables/partitioned_table/metadata/00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json");
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(metadata);
+  ASSERT_EQ(metadata->partition_specs.size(), 1);
+  const auto& partition_spec = metadata->partition_specs[0];
+
+  EXPECT_EQ(partition_spec->spec_id, 0);
+
+  const auto& fields = partition_spec->fields;
+  ASSERT_EQ(fields.size(), 2);
+
+  const auto& field_0 = fields[0];
+  EXPECT_EQ(field_0.field_id, 1000);
+  EXPECT_EQ(field_0.name, "c1");
+  EXPECT_EQ(field_0.source_id, 1);
+  EXPECT_EQ(field_0.transform, "identity");
+
+  const auto& field_1 = fields[1];
+  EXPECT_EQ(field_1.field_id, 1001);
+  EXPECT_EQ(field_1.name, "c2");
+  EXPECT_EQ(field_1.source_id, 2);
+  EXPECT_EQ(field_1.transform, "identity");
+}
+
 }  // namespace iceberg
