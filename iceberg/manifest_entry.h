@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "iceberg/table_metadata.h"
+
 namespace iceberg {
 
 struct ContentFile {
@@ -20,10 +22,24 @@ struct ContentFile {
     kEqualityDeletes = 2,
   };
 
+  struct PartitionInfoField {
+    std::string name;
+    int32_t value;
+
+    auto operator<=>(const PartitionInfoField& other) const = default;
+  };
+
+  struct PartitionInfo {
+    std::vector<PartitionInfoField> fields;
+
+    auto operator<=>(const PartitionInfo& other) const = default;
+  };
+
   FileContent content;
   std::string file_path;
   std::string file_format;
 
+  PartitionInfo partition_info;
   // TODO(gmusya): read partition info from file
 
   int64_t record_count;
@@ -94,9 +110,10 @@ std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::fs
 
 namespace ice_tea {
 
-Manifest ReadManifestEntries(std::istream& istream);
-Manifest ReadManifestEntries(const std::string& data);
-std::string WriteManifestEntries(const Manifest& manifest_entries);
+Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionField>& partition_spec = {});
+Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionField>& partition_spec = {});
+std::string WriteManifestEntries(const Manifest& manifest_entries,
+                                 const std::vector<PartitionField>& partition_spec = {});
 
 void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, std::shared_ptr<arrow::fs::FileSystem> fs);
 void FillManifestSplitOffsets(std::vector<ManifestEntry>& data,

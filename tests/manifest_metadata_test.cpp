@@ -85,7 +85,7 @@ TEST(Manifest, ReadSanityCheck) {
   std::ifstream input("metadata/snap-7558608030923099867-1-41f34bc8-eedf-4573-96b0-10c04e7c84c4.avro");
 
   std::vector<ManifestFile> manifest_list = ice_tea::ReadManifestList(input);
-  EXPECT_EQ(manifest_list.size(), 2);
+  ASSERT_EQ(manifest_list.size(), 2);
   CheckEqual(manifest_list[0], expected_list[0]);
   CheckEqual(manifest_list[1], expected_list[1]);
 }
@@ -100,7 +100,7 @@ TEST(Manifest, ReadWriteRead) {
   std::stringstream ss(manifest_data);
   manifest_list = ice_tea::ReadManifestList(ss);
 
-  EXPECT_EQ(manifest_list.size(), 2);
+  ASSERT_EQ(manifest_list.size(), 2);
   CheckEqual(manifest_list[0], expected_list[0]);
   CheckEqual(manifest_list[1], expected_list[1]);
 }
@@ -109,7 +109,7 @@ TEST(Manifest, ReadFileUuidGenerator) {
   std::ifstream input("metadata/snap-2dfe8bdb-200b-1006-9bb5-0242ac110002.avro");
 
   std::vector<ManifestFile> manifest_list = ice_tea::ReadManifestList(input);
-  EXPECT_EQ(manifest_list.size(), 2);
+  ASSERT_EQ(manifest_list.size(), 2);
   CheckEqual(manifest_list[0], expected_list_uuid_generated[0]);
   CheckEqual(manifest_list[1], expected_list_uuid_generated[1]);
 }

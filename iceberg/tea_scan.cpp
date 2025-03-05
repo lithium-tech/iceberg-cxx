@@ -9,7 +9,6 @@
 #include "arrow/io/file.h"
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
-#include "iceberg/generated/manifest_file.hh"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
 #include "iceberg/table_metadata.h"

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "iceberg/table_metadata.h"
 
 namespace iceberg {
 
@@ -171,6 +172,49 @@ TEST(ManifestEntryTest, ReadBrokenFiles) {
 
   std::ifstream input_ok("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
   EXPECT_NO_THROW(ice_tea::ReadManifestEntries(input_ok));
+}
+
+TEST(ManifestEntryTest, TestPartitioned) {
+  std::ifstream input("tables/partitioned_table/metadata/8968fbb0-57cf-40b0-a725-7d147f07b4b8-m0.avro");
+  std::stringstream ss;
+  ss << input.rdbuf();
+  std::string data = ss.str();
+
+  std::vector<PartitionField> fields = {
+      PartitionField{.source_id = 1, .field_id = 1000, .name = "c1", .transform = "identity"},
+      PartitionField{.source_id = 2, .field_id = 1001, .name = "c2", .transform = "identity"}};
+
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
+  ASSERT_EQ(manifest.entries.size(), 6);
+  std::vector<DataFile::PartitionInfo> infos;
+  for (size_t i = 0; i < 6; ++i) {
+    infos.emplace_back(manifest.entries[i].data_file.partition_info);
+  }
+
+  using PI = DataFile::PartitionInfo;
+  using PF = DataFile::PartitionInfoField;
+
+  std::vector<PI> expected_infos;
+  expected_infos.push_back(PI{.fields = {PF{.name = "c1", .value = 1}, PF{.name = "c2", .value = 20149}}});
+  expected_infos.push_back(PI{.fields = {PF{.name = "c1", .value = 1}, PF{.name = "c2", .value = 20150}}});
+  expected_infos.push_back(PI{.fields = {PF{.name = "c1", .value = 1}, PF{.name = "c2", .value = 20151}}});
+  expected_infos.push_back(PI{.fields = {PF{.name = "c1", .value = 1}, PF{.name = "c2", .value = 20152}}});
+  expected_infos.push_back(PI{.fields = {PF{.name = "c1", .value = 2}, PF{.name = "c2", .value = 20150}}});
+  expected_infos.push_back(PI{.fields = {PF{.name = "c1", .value = 2}, PF{.name = "c2", .value = 20151}}});
+
+  std::sort(infos.begin(), infos.end());
+  std::sort(expected_infos.begin(), expected_infos.end());
+  EXPECT_EQ(infos, expected_infos);
+
+  data = ice_tea::WriteManifestEntries(manifest, fields);
+  std::vector<DataFile::PartitionInfo> new_infos;
+  manifest = ice_tea::ReadManifestEntries(data, fields);
+  for (size_t i = 0; i < 6; ++i) {
+    new_infos.emplace_back(manifest.entries[i].data_file.partition_info);
+  }
+
+  std::sort(new_infos.begin(), new_infos.end());
+  EXPECT_EQ(new_infos, expected_infos);
 }
 
 }  // namespace iceberg
