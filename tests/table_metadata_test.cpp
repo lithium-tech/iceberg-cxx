@@ -165,4 +165,37 @@ TEST(Metadata, WithPartitionSpecs) {
   EXPECT_EQ(field_1.transform, "identity");
 }
 
+class MetadataYearPartitioningTest : public ::testing::Test {
+ public:
+  void Run(const std::string& metadata_path) {
+    std::ifstream input(metadata_path);
+
+    auto metadata = ice_tea::ReadTableMetadataV2(input);
+    ASSERT_TRUE(metadata);
+    ASSERT_EQ(metadata->partition_specs.size(), 1);
+    const auto& partition_spec = metadata->partition_specs[0];
+
+    EXPECT_EQ(partition_spec->spec_id, 0);
+
+    const auto& fields = partition_spec->fields;
+    ASSERT_EQ(fields.size(), 1);
+
+    const auto& field = fields[0];
+    EXPECT_EQ(field.name, "c2_year");
+    EXPECT_EQ(field.transform, "year");
+  }
+};
+
+TEST_F(MetadataYearPartitioningTest, Date) {
+  Run("tables/year_date_partitioning/metadata/00002-b30c996e-fb0e-4ebc-a987-3536ceb792ea.metadata.json");
+}
+
+TEST_F(MetadataYearPartitioningTest, Timestamp) {
+  Run("tables/year_timestamp_partitioning/metadata/00002-ac56aa65-6214-44b3-bb0f-86728eb58d8b.metadata.json");
+}
+
+TEST_F(MetadataYearPartitioningTest, Timestamptz) {
+  Run("tables/year_timestamptz_partitioning/metadata/00002-d52e2c04-065b-4d14-98bb-ec47abcd1597.metadata.json");
+}
+
 }  // namespace iceberg

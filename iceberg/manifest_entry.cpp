@@ -519,11 +519,11 @@ Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionFie
     throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": input is invalid");
   }
 
+  auto schema = MakeSchemaManifestEntry(partition_spec);
   auto istream = avro::istreamInputStream(input);
-  avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream),
-                                                            MakeSchemaManifestEntry(partition_spec));
+  avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream), schema);
   Manifest result;
-  avro::GenericDatum manifest_entry(MakeSchemaManifestEntry(partition_spec));
+  avro::GenericDatum manifest_entry(schema);
 
   const auto& meta = data_file_reader.metadata();
 

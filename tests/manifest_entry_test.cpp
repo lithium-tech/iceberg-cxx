@@ -217,4 +217,53 @@ TEST(ManifestEntryTest, TestPartitioned) {
   EXPECT_EQ(new_infos, expected_infos);
 }
 
+class ManifestYearPartitioningTest : public ::testing::Test {
+ public:
+  void Run(const std::string& metadata_path) {
+    std::ifstream input(metadata_path);
+    std::stringstream ss;
+    ss << input.rdbuf();
+    std::string data = ss.str();
+
+    std::vector<PartitionField> fields{
+        PartitionField{.source_id = 1, .field_id = 1000, .name = "c2_year", .transform = "year"}};
+
+    Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
+    std::sort(manifest.entries.begin(), manifest.entries.end(), [&](const auto& lhs, const auto& rhs) {
+      return lhs.data_file.record_count < rhs.data_file.record_count;
+    });
+
+    ASSERT_EQ(manifest.entries.size(), 2);
+
+    ASSERT_EQ(manifest.entries[1].data_file.partition_info.fields.size(), 1);
+    auto field = manifest.entries[0].data_file.partition_info.fields[0];
+
+    EXPECT_EQ(field.name, "c2_year");
+    EXPECT_EQ(field.value, 54);
+
+    data = ice_tea::WriteManifestEntries(manifest, fields);
+
+    std::vector<DataFile::PartitionInfo> new_infos;
+    manifest = ice_tea::ReadManifestEntries(data, fields);
+    std::sort(manifest.entries.begin(), manifest.entries.end(), [&](const auto& lhs, const auto& rhs) {
+      return lhs.data_file.record_count < rhs.data_file.record_count;
+    });
+    field = manifest.entries[0].data_file.partition_info.fields[0];
+    EXPECT_EQ(field.name, "c2_year");
+    EXPECT_EQ(field.value, 54);
+  }
+};
+
+TEST_F(ManifestYearPartitioningTest, Date) {
+  Run("tables/year_date_partitioning/metadata/48510c7c-7855-4273-9170-5de3130502f6-m0.avro");
+}
+
+TEST_F(ManifestYearPartitioningTest, Timestamp) {
+  Run("tables/year_timestamp_partitioning/metadata/f6bc700c-2909-411e-b32c-6c3c74a447ae-m0.avro");
+}
+
+TEST_F(ManifestYearPartitioningTest, Timestamptz) {
+  Run("tables/year_timestamptz_partitioning/metadata/26969caf-f1a0-41ee-8ec9-8b442ed19ecc-m0.avro");
+}
+
 }  // namespace iceberg
