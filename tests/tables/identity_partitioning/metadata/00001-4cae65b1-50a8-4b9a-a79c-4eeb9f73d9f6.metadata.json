@@ -1,0 +1,227 @@
+{
+  "format-version" : 2,
+  "table-uuid" : "55a7e764-9269-4417-8ff0-7a89d0f484a3",
+  "location" : "s3a://warehouse/identity_partitioning",
+  "last-sequence-number" : 2,
+  "last-updated-ms" : 1741360473103,
+  "last-column-id" : 13,
+  "current-schema-id" : 0,
+  "schemas" : [ {
+    "type" : "struct",
+    "schema-id" : 0,
+    "fields" : [ {
+      "id" : 1,
+      "name" : "col_bool",
+      "required" : false,
+      "type" : "boolean"
+    }, {
+      "id" : 2,
+      "name" : "col_int",
+      "required" : false,
+      "type" : "int"
+    }, {
+      "id" : 3,
+      "name" : "col_long",
+      "required" : false,
+      "type" : "long"
+    }, {
+      "id" : 4,
+      "name" : "col_float",
+      "required" : false,
+      "type" : "float"
+    }, {
+      "id" : 5,
+      "name" : "col_double",
+      "required" : false,
+      "type" : "double"
+    }, {
+      "id" : 6,
+      "name" : "col_decimal",
+      "required" : false,
+      "type" : "decimal(9, 2)"
+    }, {
+      "id" : 7,
+      "name" : "col_date",
+      "required" : false,
+      "type" : "date"
+    }, {
+      "id" : 8,
+      "name" : "col_time",
+      "required" : false,
+      "type" : "time"
+    }, {
+      "id" : 9,
+      "name" : "col_timestamp",
+      "required" : false,
+      "type" : "timestamp"
+    }, {
+      "id" : 10,
+      "name" : "col_timestamptz",
+      "required" : false,
+      "type" : "timestamptz"
+    }, {
+      "id" : 11,
+      "name" : "col_string",
+      "required" : false,
+      "type" : "string"
+    }, {
+      "id" : 12,
+      "name" : "col_uuid",
+      "required" : false,
+      "type" : "uuid"
+    }, {
+      "id" : 13,
+      "name" : "col_varbinary",
+      "required" : false,
+      "type" : "binary"
+    } ]
+  } ],
+  "default-spec-id" : 0,
+  "partition-specs" : [ {
+    "spec-id" : 0,
+    "fields" : [ {
+      "name" : "col_bool",
+      "transform" : "identity",
+      "source-id" : 1,
+      "field-id" : 1000
+    }, {
+      "name" : "col_int",
+      "transform" : "identity",
+      "source-id" : 2,
+      "field-id" : 1001
+    }, {
+      "name" : "col_long",
+      "transform" : "identity",
+      "source-id" : 3,
+      "field-id" : 1002
+    }, {
+      "name" : "col_float",
+      "transform" : "identity",
+      "source-id" : 4,
+      "field-id" : 1003
+    }, {
+      "name" : "col_double",
+      "transform" : "identity",
+      "source-id" : 5,
+      "field-id" : 1004
+    }, {
+      "name" : "col_decimal",
+      "transform" : "identity",
+      "source-id" : 6,
+      "field-id" : 1005
+    }, {
+      "name" : "col_date",
+      "transform" : "identity",
+      "source-id" : 7,
+      "field-id" : 1006
+    }, {
+      "name" : "col_time",
+      "transform" : "identity",
+      "source-id" : 8,
+      "field-id" : 1007
+    }, {
+      "name" : "col_timestamp",
+      "transform" : "identity",
+      "source-id" : 9,
+      "field-id" : 1008
+    }, {
+      "name" : "col_timestamptz",
+      "transform" : "identity",
+      "source-id" : 10,
+      "field-id" : 1009
+    }, {
+      "name" : "col_string",
+      "transform" : "identity",
+      "source-id" : 11,
+      "field-id" : 1010
+    }, {
+      "name" : "col_uuid",
+      "transform" : "identity",
+      "source-id" : 12,
+      "field-id" : 1011
+    }, {
+      "name" : "col_varbinary",
+      "transform" : "identity",
+      "source-id" : 13,
+      "field-id" : 1012
+    } ]
+  } ],
+  "last-partition-id" : 1012,
+  "default-sort-order-id" : 0,
+  "sort-orders" : [ {
+    "order-id" : 0,
+    "fields" : [ ]
+  } ],
+  "properties" : {
+    "write.format.default" : "PARQUET",
+    "write.parquet.compression-codec" : "zstd",
+    "commit.retry.num-retries" : "4"
+  },
+  "current-snapshot-id" : 1348041121627674336,
+  "refs" : {
+    "main" : {
+      "snapshot-id" : 1348041121627674336,
+      "type" : "branch"
+    }
+  },
+  "snapshots" : [ {
+    "sequence-number" : 1,
+    "snapshot-id" : 2926447781240171674,
+    "timestamp-ms" : 1741360466576,
+    "summary" : {
+      "operation" : "append",
+      "trino_query_id" : "20250307_151426_00003_sdejt",
+      "trino_user" : "trino",
+      "changed-partition-count" : "0",
+      "total-records" : "0",
+      "total-files-size" : "0",
+      "total-data-files" : "0",
+      "total-delete-files" : "0",
+      "total-position-deletes" : "0",
+      "total-equality-deletes" : "0",
+      "engine-version" : "471",
+      "engine-name" : "trino",
+      "iceberg-version" : "Apache Iceberg 1.7.1 (commit 4a432839233f2343a9eae8255532f911f06358ef)"
+    },
+    "manifest-list" : "s3a://warehouse/identity_partitioning/metadata/snap-2926447781240171674-1-f2c698f3-c7ae-4819-8e4e-ab332b315de1.avro",
+    "schema-id" : 0
+  }, {
+    "sequence-number" : 2,
+    "snapshot-id" : 1348041121627674336,
+    "parent-snapshot-id" : 2926447781240171674,
+    "timestamp-ms" : 1741360473103,
+    "summary" : {
+      "operation" : "append",
+      "trino_query_id" : "20250307_151431_00004_sdejt",
+      "trino_user" : "trino",
+      "added-data-files" : "1",
+      "added-records" : "1",
+      "added-files-size" : "2073",
+      "changed-partition-count" : "1",
+      "total-records" : "1",
+      "total-files-size" : "2073",
+      "total-data-files" : "1",
+      "total-delete-files" : "0",
+      "total-position-deletes" : "0",
+      "total-equality-deletes" : "0",
+      "engine-version" : "471",
+      "engine-name" : "trino",
+      "iceberg-version" : "Apache Iceberg 1.7.1 (commit 4a432839233f2343a9eae8255532f911f06358ef)"
+    },
+    "manifest-list" : "s3a://warehouse/identity_partitioning/metadata/snap-1348041121627674336-1-bfd02a62-ed9d-4ab0-83a0-992b76310fe4.avro",
+    "schema-id" : 0
+  } ],
+  "statistics" : [ ],
+  "partition-statistics" : [ ],
+  "snapshot-log" : [ {
+    "timestamp-ms" : 1741360466576,
+    "snapshot-id" : 2926447781240171674
+  }, {
+    "timestamp-ms" : 1741360473103,
+    "snapshot-id" : 1348041121627674336
+  } ],
+  "metadata-log" : [ {
+    "timestamp-ms" : 1741360466576,
+    "metadata-file" : "s3a://warehouse/identity_partitioning/metadata/00000-26043d34-b24c-4441-84dd-22ef817b8e18.metadata.json"
+  } ]
+}

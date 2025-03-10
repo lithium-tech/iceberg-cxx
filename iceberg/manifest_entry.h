@@ -7,11 +7,13 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
-#include "iceberg/table_metadata.h"
+#include "iceberg/type.h"
 
 namespace iceberg {
 
@@ -22,24 +24,84 @@ struct ContentFile {
     kEqualityDeletes = 2,
   };
 
-  struct PartitionInfoField {
-    std::string name;
-    int32_t value;
+  class PartitionKey {
+   public:
+    struct Fixed {
+      std::vector<uint8_t> bytes;
 
-    auto operator<=>(const PartitionInfoField& other) const = default;
+      auto operator<=>(const Fixed& other) const = default;
+    };
+
+    using AvroValueHolder =
+        std::variant<std::monostate, bool, int, int64_t, float, double, std::string, std::vector<uint8_t>, Fixed>;
+
+    std::string name;
+    AvroValueHolder value;
+    std::shared_ptr<iceberg::types::Type> type;
+
+    void Validate() {
+      const TypeID type_id = type->TypeId();
+      const auto error_message = std::string(__FUNCTION__) + ": internal error. Iceberg type " + type->ToString() +
+                                 " is not expected with data type " + std::to_string(value.index());
+      if (std::holds_alternative<bool>(value)) {
+        Ensure(type_id == TypeID::kBoolean, error_message);
+      } else if (std::holds_alternative<int>(value)) {
+        Ensure(type_id == TypeID::kInt || type_id == TypeID::kDate, error_message);
+      } else if (std::holds_alternative<int64_t>(value)) {
+        Ensure(type_id == TypeID::kLong || type_id == TypeID::kTime || type_id == TypeID::kTimestamp ||
+                   type_id == TypeID::kTimestamptz,
+               error_message);
+      } else if (std::holds_alternative<float>(value)) {
+        Ensure(type_id == TypeID::kFloat, error_message);
+      } else if (std::holds_alternative<double>(value)) {
+        Ensure(type_id == TypeID::kDouble, error_message);
+      } else if (std::holds_alternative<std::string>(value)) {
+        Ensure(type_id == TypeID::kString, error_message);
+      } else if (std::holds_alternative<std::vector<uint8_t>>(value)) {
+        Ensure(type_id == TypeID::kBinary, error_message);
+      } else if (std::holds_alternative<Fixed>(value)) {
+        Ensure(type_id == TypeID::kFixed || type_id == TypeID::kUuid || type_id == TypeID::kDecimal, error_message);
+      } else {
+        throw std::runtime_error(std::string(__PRETTY_FUNCTION__) +
+                                 ": internal error. Unexpected data type with iceberg type " + type->ToString());
+      }
+    }
+
+    template <typename Type>
+    PartitionKey(std::string n, Type v, std::shared_ptr<iceberg::types::Type> t)
+        : name(std::move(n)), value(std::move(v)), type(t) {
+      if (!type) {
+        throw std::runtime_error("PartitionInfoField: type must be set");
+      }
+      Validate();
+    }
+
+    PartitionKey(std::string n) : name(std::move(n)) {}
+
+    bool operator==(const PartitionKey& other) const {
+      return name == other.name && value == other.value &&
+             (type ? type->ToString() : "null") == (other.type ? other.type->ToString() : "null");
+    }
+
+   private:
+    static void Ensure(bool condition, const std::string& message) {
+      if (!condition) {
+        throw std::runtime_error(message);
+      }
+    }
   };
 
-  struct PartitionInfo {
-    std::vector<PartitionInfoField> fields;
+  struct PartitionTuple {
+    std::vector<PartitionKey> fields;
 
-    auto operator<=>(const PartitionInfo& other) const = default;
+    bool operator==(const PartitionTuple& other) const = default;
   };
 
   FileContent content;
   std::string file_path;
   std::string file_format;
 
-  PartitionInfo partition_info;
+  PartitionTuple partition_tuple;
   // TODO(gmusya): read partition info from file
 
   int64_t record_count;
@@ -110,10 +172,21 @@ std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::fs
 
 namespace ice_tea {
 
-Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionField>& partition_spec = {});
-Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionField>& partition_spec = {});
+struct PartitionKeyField {
+  std::string name;
+  std::shared_ptr<iceberg::types::Type> type;
+
+  PartitionKeyField(std::string n, std::shared_ptr<iceberg::types::Type> t) : name(std::move(n)), type(t) {
+    if (!type) {
+      throw std::runtime_error("PartitionValueInfo: type is not set");
+    }
+  }
+};
+
+Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionKeyField>& partition_spec = {});
+Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionKeyField>& partition_spec = {});
 std::string WriteManifestEntries(const Manifest& manifest_entries,
-                                 const std::vector<PartitionField>& partition_spec = {});
+                                 const std::vector<PartitionKeyField>& partition_spec = {});
 
 void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, std::shared_ptr<arrow::fs::FileSystem> fs);
 void FillManifestSplitOffsets(std::vector<ManifestEntry>& data,

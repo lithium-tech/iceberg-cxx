@@ -101,6 +101,22 @@ class DecimalType final : public PrimitiveType {
   int32_t scale_;
 };
 
+class FixedType final : public PrimitiveType {
+ public:
+  FixedType(int32_t size) : PrimitiveType(TypeID::kFixed), size_(size) {
+    if (size <= 0) {
+      throw std::runtime_error("FixedType: size = " + std::to_string(size));
+    }
+  }
+
+  std::string ToString() const override { return "fixed(" + std::to_string(size_) + ")"; }
+
+  int32_t Size() const { return size_; }
+
+ private:
+  int32_t size_;
+};
+
 class ListType final : public Type {
  public:
   ListType(int32_t element_id, bool element_required, std::shared_ptr<const Type> element_type)

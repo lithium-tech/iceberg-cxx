@@ -198,4 +198,58 @@ TEST_F(MetadataYearPartitioningTest, Timestamptz) {
   Run("tables/year_timestamptz_partitioning/metadata/00002-d52e2c04-065b-4d14-98bb-ec47abcd1597.metadata.json");
 }
 
+TEST(Metadata, WithPartitionSpecsManyColumns) {
+  std::ifstream input("tables/identity_partitioning/metadata/00002-30bff4d8-0c4f-46a9-8e7a-ebea458dbb1d.metadata.json");
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(metadata);
+  ASSERT_EQ(metadata->partition_specs.size(), 1);
+  const auto& partition_spec = metadata->partition_specs[0];
+
+  EXPECT_EQ(partition_spec->spec_id, 0);
+
+  const auto& fields = partition_spec->fields;
+  ASSERT_EQ(fields.size(), 13);
+
+  std::vector<std::string> column_names = {
+      "col_bool", "col_int",       "col_long",        "col_float",  "col_double", "col_decimal",  "col_date",
+      "col_time", "col_timestamp", "col_timestamptz", "col_string", "col_uuid",   "col_varbinary"};
+
+  for (size_t i = 0; i < 13; ++i) {
+    const auto& field = fields[i];
+    EXPECT_EQ(field.name, column_names[i]);
+    EXPECT_EQ(field.field_id, 1000 + i);
+    EXPECT_EQ(field.source_id, i + 1);
+    EXPECT_EQ(field.transform, "identity");
+  }
+}
+
+TEST(Metadata, WithBucketPartitioning) {
+  std::ifstream input("tables/bucket_partitioning/metadata/00002-53948f10-cced-409f-8dd9-6dea096895e8.metadata.json");
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(metadata);
+  ASSERT_EQ(metadata->partition_specs.size(), 1);
+  const auto& partition_spec = metadata->partition_specs[0];
+
+  EXPECT_EQ(partition_spec->spec_id, 0);
+
+  const auto& fields = partition_spec->fields;
+  ASSERT_EQ(fields.size(), 10);
+
+  std::vector<std::string> column_names = {"col_int",  "col_long",      "col_decimal",     "col_date",
+                                           "col_time", "col_timestamp", "col_timestamptz", "col_string",
+                                           "col_uuid", "col_varbinary"};
+
+  std::vector<int> buckets = {2, 3, 4, 5, 6, 100, 123, 42, 55, 812};
+
+  for (size_t i = 0; i < 10; ++i) {
+    const auto& field = fields[i];
+    EXPECT_EQ(field.name, column_names[i] + "_bucket");
+    EXPECT_EQ(field.field_id, 1000 + i);
+    EXPECT_EQ(field.source_id, i + 1);
+    EXPECT_EQ(field.transform, "bucket[" + std::to_string(buckets[i]) + "]");
+  }
+}
+
 }  // namespace iceberg

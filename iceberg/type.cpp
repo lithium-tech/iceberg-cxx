@@ -100,5 +100,4 @@ std::shared_ptr<Type> ConvertArrowTypeToIceberg(const std::shared_ptr<arrow::Dat
       return std::make_shared<PrimitiveType>(TypeID::kUnknown);
   }
 }
-
 };  // namespace iceberg::types
