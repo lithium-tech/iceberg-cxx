@@ -28,11 +28,11 @@ add_library(iceberg-cpp STATIC
     sql_catalog.h
     transaction.cpp
     transaction.h
+    parquet/io.cpp
+    parquet/io.h
 )
 
-add_subdirectory(parquet)
-
-target_link_libraries(iceberg-cpp PUBLIC rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static ice_parquet)
+target_link_libraries(iceberg-cpp PUBLIC rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static)
 target_link_libraries(iceberg-cpp PUBLIC Arrow::arrow_static)
 if (USE_SMHASHER)
     target_link_libraries(iceberg-cpp PUBLIC SMHasherSupport)
