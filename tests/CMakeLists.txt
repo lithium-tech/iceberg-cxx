@@ -3,6 +3,7 @@ add_executable(iceberg_local_test
     manifest_metadata_test.cpp
     validation_test.cpp
     table_metadata_test.cpp
+    tea_scan_test.cpp
     snapshot_test.cpp
     run_tests.cpp
     compat/transforms_test.cpp

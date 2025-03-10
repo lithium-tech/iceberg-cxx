@@ -340,6 +340,7 @@ DataFile Deserialize(const avro::GenericDatum& datum) {
   data_file.record_count = Extract<int64_t>(record, "record_count");
   data_file.file_size_in_bytes = Extract<int64_t>(record, "file_size_in_bytes");
   data_file.sort_order_id = Extract<std::optional<int32_t>>(record, "sort_order_id");
+  data_file.referenced_data_file = Extract<std::optional<std::string>>(record, "referenced_data_file");
   data_file.column_sizes = Extract<std::map<int32_t, int64_t>>(record, "column_sizes");
   data_file.value_counts = Extract<std::map<int32_t, int64_t>>(record, "value_counts");
   data_file.split_offsets = Extract<std::vector<int64_t>>(record, "split_offsets");
@@ -347,6 +348,7 @@ DataFile Deserialize(const avro::GenericDatum& datum) {
   data_file.lower_bounds = Extract<std::map<int32_t, std::vector<uint8_t>>>(record, "lower_bounds");
   data_file.upper_bounds = Extract<std::map<int32_t, std::vector<uint8_t>>>(record, "upper_bounds");
   data_file.partition_tuple = Extract<DataFile::PartitionTuple>(record, "partition");
+  data_file.equality_ids = Extract<std::vector<int32_t>>(record, "equality_ids");
   return data_file;
 }
 
@@ -553,7 +555,9 @@ avro::ValidSchema MakeSchemaDataFile(const std::vector<PartitionKeyField>& parti
   AddField(schema, "file_size_in_bytes", MakeSchemaLong());
   AddField(schema, "record_count", MakeSchemaLong());
   AddField(schema, "split_offsets", MakeSchemaOptional(MakeSchemaArray(MakeSchemaLong())));
+  AddField(schema, "equality_ids", MakeSchemaOptional(MakeSchemaArray(MakeSchemaInt())));
   AddField(schema, "sort_order_id", MakeSchemaOptional(MakeSchemaInt()));
+  AddField(schema, "referenced_data_file", MakeSchemaOptional(MakeSchemaString()));
   AddField(schema, "column_sizes", MakeSchemaOptional(MakeSchemaMap("k117_v118", MakeSchemaInt(), MakeSchemaLong())));
   AddField(schema, "value_counts", MakeSchemaOptional(MakeSchemaMap("k119_v120", MakeSchemaInt(), MakeSchemaLong())));
   AddField(schema, "null_value_counts",
@@ -713,6 +717,15 @@ avro::GenericDatum SerializeVectorLong(const std::vector<int64_t>& array) {
   return SerializeVectorGenericDatum(result_schema, std::move(result));
 }
 
+avro::GenericDatum SerializeVectorInt(const std::vector<int>& array) {
+  std::vector<avro::GenericDatum> result;
+  for (const int32_t& value : array) {
+    result.emplace_back(SerializeInt(value));
+  }
+  auto result_schema = MakeSchemaArray(MakeSchemaInt());
+  return SerializeVectorGenericDatum(result_schema, std::move(result));
+}
+
 avro::GenericDatum SerializeMapIntLong(const std::map<int32_t, int64_t>& map, const std::string& element_name) {
   std::vector<avro::GenericDatum> array;
   for (const auto& p : map) {
@@ -777,6 +790,7 @@ avro::GenericDatum SerializePartition(const std::vector<PartitionKeyField>& part
                                                   : std::optional(std::get<std::vector<uint8_t>>(info.value)));
           case TypeID::kDecimal:
           case TypeID::kFixed:
+          case TypeID::kUuid:
             return SerializeOptionalFixed(is_null ? std::nullopt
                                                   : std::optional(std::get<DataFile::PartitionKey::Fixed>(info.value)));
           default:
@@ -799,9 +813,13 @@ avro::GenericDatum SerializeDataFile(const std::vector<PartitionKeyField>& parti
   AddMember(result, "split_offsets",
             SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaArray(MakeSchemaLong())),
                                        SerializeVectorLong(data_file.split_offsets)));
+  AddMember(result, "equality_ids",
+            SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaArray(MakeSchemaInt())),
+                                       SerializeVectorInt(data_file.equality_ids)));
   AddMember(result, "file_format", SerializeString(data_file.file_format));
   AddMember(result, "file_path", SerializeString(data_file.file_path));
   AddMember(result, "content", SerializeInt(static_cast<int>(data_file.content)));
+  AddMember(result, "referenced_data_file", SerializeOptionalString(data_file.referenced_data_file));
   AddMember(result, "sort_order_id", SerializeOptionalInt(data_file.sort_order_id));
   AddMember(
       result, "column_sizes",
@@ -848,23 +866,10 @@ Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKey
     throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": input is invalid");
   }
 
-// MakeSchemaManifestEntry uses avro::Schema API which does not set default values
-// (causing UB if writer schema differs from reader schema).
-// compileJsonSchemaFromString uses static "make...Node" functions from Compiler.cc.
-// These functions DO set default values.
-// DO NOT CHANGE THIS CODE UNLESS YOU UNDERSTAND WHAT YOU ARE DOING.
-// If you really want to change this code, read avrocpp implementation first.
-#if 1
-  auto schema = avro::compileJsonSchemaFromString(MakeSchemaManifestEntry(partition_spec).toJson());
-#else
-  auto schema = MakeSchemaManifestEntry(partition_spec);
-#endif
-
   auto istream = avro::istreamInputStream(input);
-  avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream), schema);
+  avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream));
   Manifest result;
-  avro::GenericDatum manifest_entry(schema);
-
+  avro::GenericDatum manifest_entry(data_file_reader.dataSchema());
   const auto& meta = data_file_reader.metadata();
 
   result.metadata = data_file_reader.metadata();
@@ -885,6 +890,31 @@ Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKey
   }
   while (data_file_reader.read(manifest_entry)) {
     ManifestEntry entry = Deserialize<ManifestEntry>(manifest_entry);
+    if (partition_spec.size() != entry.data_file.partition_tuple.fields.size()) {
+      throw std::runtime_error("Manifest entry contains unexpected number of fields in partition " +
+                               std::to_string(entry.data_file.partition_tuple.fields.size()) + " (expected " +
+                               std::to_string(partition_spec.size()) + ")");
+    }
+    for (const auto& expected_field : partition_spec) {
+      bool is_found = false;
+      for (const auto& actual_field : entry.data_file.partition_tuple.fields) {
+        if (actual_field.name == expected_field.name) {
+          is_found = true;
+          if (actual_field.type && expected_field.type &&
+              actual_field.type->ToString() != expected_field.type->ToString()) {
+            throw std::runtime_error("Manifest entry contains partition field '" + actual_field.name + "' with type " +
+                                     actual_field.type->ToString() + " but expected type is " +
+                                     expected_field.type->ToString());
+          }
+          break;
+        }
+      }
+
+      if (!is_found) {
+        throw std::runtime_error("Manifest entry does not contain expected partition field '" + expected_field.name +
+                                 "'");
+      }
+    }
     result.entries.emplace_back(std::move(entry));
   }
   return result;

@@ -1,19 +1,21 @@
 #include "iceberg/tea_scan.h"
 
-#include <iostream>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <utility>
 
 #include "arrow/filesystem/filesystem.h"
-#include "arrow/filesystem/s3fs.h"
 #include "arrow/io/file.h"
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
+#include "arrow/status.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
+#include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"
 #include "iceberg/tea_column_stats.h"
-#include "iceberg/tea_hive_catalog.h"
+#include "iceberg/type.h"
 
 namespace iceberg::ice_tea {
 
@@ -53,6 +55,64 @@ std::string UrlToPath(const std::string& url) {
     return components.location + components.path;
   }
   return {};
+}
+
+// clang-format off
+template <typename T>
+std::string SerializeValue(const T& value)
+requires(std::is_same_v<bool, T> || std::is_same_v<int, T> || std::is_same_v<int64_t, T> || std::is_same_v<float, T> ||
+         std::is_same_v<double, T>) {
+  std::string result(sizeof(T), ' ');
+  std::memcpy(result.data(), &value, sizeof(T));
+  return result;
+}
+// clang-format on
+
+std::string SerializeValue(const std::monostate& value) { return "null"; }
+
+std::string SerializeValue(const std::string& value) { return value; }
+
+std::string SerializeValue(const std::vector<uint8_t>& value) {
+  std::string result(value.size(), ' ');
+  std::memcpy(result.data(), value.data(), value.size());
+  return result;
+}
+
+std::string SerializeValue(const DataFile::PartitionKey::Fixed& value) { return SerializeValue(value.bytes); }
+
+std::string SerializePartitionKey(const DataFile::PartitionKey& key) {
+  std::string result;
+  result += key.name;
+  result += key.type->ToString();
+  result += std::to_string(key.value.index());
+  result += std::visit([](auto&& arg) { return SerializeValue(arg); }, key.value);
+  return result;
+}
+
+std::string SerializePartitionTuple(const DataFile::PartitionTuple& partition_tuple) {
+  if (partition_tuple.fields.empty()) {
+    return "";
+  }
+  std::vector<std::string> serialized_keys;
+  serialized_keys.reserve(partition_tuple.fields.size());
+  for (const auto& field : partition_tuple.fields) {
+    serialized_keys.emplace_back(SerializePartitionKey(field));
+  }
+
+  std::string result;
+  size_t total_size = 0;
+  for (const auto& key : serialized_keys) {
+    total_size += key.size();
+    total_size += std::to_string(key.size()).size();
+  }
+
+  result.reserve(total_size);
+  for (const auto& key : serialized_keys) {
+    result += key;
+    result += std::to_string(key.size());
+  }
+
+  return result;
 }
 
 }  // namespace
@@ -177,6 +237,39 @@ arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, c
   return buffer;
 }
 
+// https://iceberg.apache.org/spec/#partition-transforms
+struct Transforms {
+  static constexpr std::string_view kBucket = "bucket";  // actual name is bucket[X]
+  static constexpr std::string_view kYear = "year";
+  static constexpr std::string_view kMonth = "month";
+  static constexpr std::string_view kDay = "day";
+  static constexpr std::string_view kHour = "hour";
+
+  static constexpr std::string_view kIdentity = "identity";
+  static constexpr std::string_view kTruncate = "truncate";  // actual name is truncate[X]
+
+  static constexpr std::string_view kVoid = "void";  // TODO(gmusya): support
+
+  static arrow::Result<std::shared_ptr<const types::Type>> GetTypeFromSourceType(
+      int source_id, std::shared_ptr<const iceberg::Schema> schema) {
+    for (const auto& column : schema->Columns()) {
+      if (column.field_id == source_id) {
+        return [&]() -> std::shared_ptr<const types::Type> {
+          if (column.type->TypeId() == TypeID::kUuid) {
+            return std::make_shared<types::FixedType>(16);
+          }
+          if (column.type->TypeId() == TypeID::kTimestamptz) {
+            return std::make_shared<types::PrimitiveType>(TypeID::kTimestamp);
+          }
+          return column.type;
+        }();
+      }
+    }
+    return arrow::Status::ExecutionError("Partition spec expects column with field id ", source_id,
+                                         " for transform, but this column is missing");
+  }
+};
+
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location) {
   ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(fs, metadata_location));
@@ -193,6 +286,27 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
     return ScanMetadata{.schema = schema};
   }
 
+  auto partiton_spec = table_metadata->GetCurrentPartitionSpec();
+
+  // https://iceberg.apache.org/spec/#partition-evolution
+  // TODO(gmusya): support partition evolution
+  if (table_metadata->partition_specs.size() != 1) {
+    return arrow::Status::ExecutionError("GetScanMetadata: tables with multiple partition specs are not supported yet");
+  }
+  std::vector<PartitionKeyField> partition_fields;
+  for (const auto& value : partiton_spec->fields) {
+    const auto& transform = value.transform;
+    if (transform.starts_with(Transforms::kBucket) || transform == Transforms::kYear ||
+        transform == Transforms::kMonth || transform == Transforms::kDay || transform == Transforms::kHour) {
+      partition_fields.emplace_back(value.name, std::make_shared<types::PrimitiveType>(TypeID::kInt));
+    } else if (transform == Transforms::kIdentity || transform.starts_with(Transforms::kTruncate)) {
+      ARROW_ASSIGN_OR_RAISE(auto partition_field_type, Transforms::GetTypeFromSourceType(value.source_id, schema));
+      partition_fields.emplace_back(value.name, partition_field_type);
+    } else {
+      return arrow::Status::ExecutionError("GetScanMetadata: unexpected transform type " + transform);
+    }
+  }
+
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   if (!maybe_manifest_list_path.has_value()) {
     return arrow::Status::ExecutionError("no manifest_list_path");
@@ -207,13 +321,19 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   std::vector<DataEntry> entries_output;
 
   using SequenceNumber = int64_t;
-  std::map<SequenceNumber, ScanMetadata::Layer> layers;
+  std::map<std::string, std::map<SequenceNumber, ScanMetadata::Layer>> partitions;
+  // if there are k partitions and t global equality delete entries, k * t entries will be created
+  // TODO(gmusya): improve
+  std::map<SequenceNumber, std::vector<ManifestEntry>> global_equality_deletes;
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
     ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs, manifest_path));
-    Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
+    Manifest manifest = ice_tea::ReadManifestEntries(entries_content, partition_fields);
     auto& entries_input = manifest.entries;
     for (auto&& entry : entries_input) {
+      if (entry.data_file.referenced_data_file.has_value()) {
+        return arrow::Status::ExecutionError("Referenced data file for delete files is not supported yet");
+      }
       entry.data_file.null_value_counts.clear();
       entry.data_file.nan_value_counts.clear();
       entry.data_file.distinct_counts.clear();
@@ -232,6 +352,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         return arrow::Status::ExecutionError("no sequence_number");
       }
       entry.sequence_number = sequence_number;
+      std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
       switch (entry.data_file.content) {
         case ContentFile::FileContent::kData: {
           std::vector<DataEntry::Segment> segments;
@@ -244,25 +365,31 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
             }
             segments.emplace_back(split_offsets.back(), 0);
           }
-          layers[sequence_number].data_entries_.emplace_back(DataEntry(std::move(entry), std::move(segments)));
+          partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
+              DataEntry(std::move(entry), std::move(segments)));
           break;
         }
         case ContentFile::FileContent::kPositionDeletes:
-          /*
-          A position delete file must be applied to a data file when all of the following are true:
-          - The data file's data sequence number is LESS THAN OR EQUAL to the delete file's data sequence number
-          - The data file's partition (both spec and partition values) is equal to the delete file's partition
-          */
-          layers[sequence_number].positional_delete_entries_.emplace_back(std::move(entry));
+          // A position delete file must be applied to a data file when all of the following are true:
+          // - The data file's file_path is equal to the delete file's referenced_data_file if it is non-null
+          // - The data file's data sequence number is less than or equal to the delete file's data sequence number
+          // - The data file's partition (both spec and partition values) is equal [4] to the delete file's partition
+          // - There is no deletion vector that must be applied to the data file (when added, such a vector must contain
+          //   all deletes from existing position delete files)
+          partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
+              std::move(entry));
           break;
         case ContentFile::FileContent::kEqualityDeletes:
-          /*
-          An equality delete file must be applied to a data file when all of the following are true:
-          - The data file's data sequence number is STRICTLY LESS than the delete's data sequence number
-          - The data file's partition (both spec id and partition values) is equal to the delete file's partition or the
-          delete file's partition spec is unpartitioned
-          */
-          layers[sequence_number - 1].equality_delete_entries_.emplace_back(std::move(entry));
+          // An equality delete file must be applied to a data file when all of the following are true:
+          // - The data file's data sequence number is strictly less than the delete's data sequence number
+          // - The data file's partition (both spec id and partition values) is equal [4] to the delete file's partition
+          //   or the delete file's partition spec is unpartitioned
+          if (serialized_partition_key.empty()) {
+            global_equality_deletes[sequence_number - 1].emplace_back(std::move(entry));
+          } else {
+            partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(
+                std::move(entry));
+          }
           break;
       }
     }
@@ -271,11 +398,21 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   ScanMetadata result;
   result.schema = schema;
 
-  ScanMetadata::Partition partition;
-  for (auto&& [seqnum, layer] : layers) {
-    partition.emplace_back(std::move(layer));
+  for (auto& [partition_key, partition_map] : partitions) {
+    for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
+      auto& deletes_at_current_layer = partition_map[seqnum].equality_delete_entries_;
+      deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
+                                      equality_delete_entries.end());
+    }
   }
-  result.partitions.emplace_back(std::move(partition));
+
+  for (auto& [partition_key, partition_map] : partitions) {
+    ScanMetadata::Partition partition;
+    for (auto& [seqnum, layer] : partition_map) {
+      partition.emplace_back(std::move(layer));
+    }
+    result.partitions.emplace_back(std::move(partition));
+  }
 
   return result;
 }

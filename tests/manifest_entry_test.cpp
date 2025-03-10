@@ -245,11 +245,9 @@ TEST(ManifestEntryTest, TestPartitioned) {
   ss << input.rdbuf();
   std::string data = ss.str();
 
-  // data was generated with old version of trino
-  // it did not set logical types
   std::vector<ice_tea::PartitionKeyField> fields = {
       ice_tea::PartitionKeyField("c1", std::make_shared<types::PrimitiveType>(TypeID::kInt)),
-      ice_tea::PartitionKeyField("c2", std::make_shared<types::PrimitiveType>(TypeID::kInt))};
+      ice_tea::PartitionKeyField("c2", std::make_shared<types::PrimitiveType>(TypeID::kDate))};
 
   Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 6);
@@ -264,7 +262,7 @@ TEST(ManifestEntryTest, TestPartitioned) {
   using PF = DataFile::PartitionKey;
 
   auto int_type = std::make_shared<types::PrimitiveType>(TypeID::kInt);
-  auto date_type = std::make_shared<types::PrimitiveType>(TypeID::kInt);
+  auto date_type = std::make_shared<types::PrimitiveType>(TypeID::kDate);
 
   std::vector<PI> expected_infos;
   expected_infos.push_back(PI{.fields = {PF("c1", 1, int_type), PF("c2", 20149, date_type)}});
@@ -412,13 +410,13 @@ TEST(ManifestEntryTest, TestPartitionedManyTypes) {
     ice_tea::PartitionKeyField("col_date", std::make_shared<types::PrimitiveType>(TypeID::kDate)),
     ice_tea::PartitionKeyField("col_time", std::make_shared<types::PrimitiveType>(TypeID::kTime)),
     ice_tea::PartitionKeyField("col_timestamp", std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
-    ice_tea::PartitionKeyField("col_timestamptz", std::make_shared<types::PrimitiveType>(TypeID::kTimestamptz)),
+    ice_tea::PartitionKeyField("col_timestamptz", std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
     ice_tea::PartitionKeyField("col_string", std::make_shared<types::PrimitiveType>(TypeID::kString)),
 
-#if 1
+#if 0
     ice_tea::PartitionKeyField("col_uuid", std::make_shared<types::PrimitiveType>(TypeID::kUuid)),
 #else
-    ice_tea::PartitionTupleSchema("col_uuid", std::make_shared<types::FixedType>(16)),
+    ice_tea::PartitionKeyField("col_uuid", std::make_shared<types::FixedType>(16)),
 #endif
 
     ice_tea::PartitionKeyField("col_varbinary", std::make_shared<types::PrimitiveType>(TypeID::kBinary))
@@ -435,8 +433,6 @@ TEST(ManifestEntryTest, TestPartitionedManyTypes) {
   DataFile::PartitionKey::Fixed expected_decimal{.bytes = {0, 0, 0x01, 0x2C}};
   std::vector<uint8_t> expected_col_fixed_value{'s', 'o', 'm', 'e', '-', 'v', 'a', 'r', 'b', 'i', 'n', 'a', 'r', 'y'};
 
-  fields.erase(std::find_if(fields.begin(), fields.end(), [](const auto& elem) { return elem.name == "col_uuid"; }));
-
   DataFile::PartitionTuple expected_partition_info{
       .fields = {
           PF("col_bool", false, std::make_shared<types::PrimitiveType>(TypeID::kBoolean)),
@@ -450,9 +446,7 @@ TEST(ManifestEntryTest, TestPartitionedManyTypes) {
           PF("col_timestamp", 1740960000000000, std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
           PF("col_timestamptz", 1740960000000000, std::make_shared<types::PrimitiveType>(TypeID::kTimestamptz)),
           PF("col_string", "some-string", std::make_shared<types::PrimitiveType>(TypeID::kString)),
-#if 0
-          PF("col_uuid", expected_uuid, std::make_shared<types::PrimitiveType>(TypeID::kUuid)),
-#endif
+          PF("col_uuid", expected_uuid, std::make_shared<types::FixedType>(16)),
           PF("col_varbinary", expected_col_fixed_value, std::make_shared<types::PrimitiveType>(TypeID::kBinary)),
       }};
 
@@ -564,8 +558,8 @@ TEST(ManifestEntryTest, TestWithWrongSchema) {
     ice_tea::ReadManifestEntries(data, fields);
     FAIL();
   } catch (const std::runtime_error& x) {
-    // TODO(gmusya): improve error message
-    EXPECT_EQ(x.what(), std::string("EOF reached"));
+    EXPECT_EQ(x.what(),
+              std::string("Manifest entry contains unexpected number of fields in partition 13 (expected 1)"));
   }
 }
 

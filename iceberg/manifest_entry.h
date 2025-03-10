@@ -117,6 +117,7 @@ struct ContentFile {
   std::vector<int64_t> split_offsets;
   std::vector<int32_t> equality_ids;
   std::optional<int32_t> sort_order_id;
+  std::optional<std::string> referenced_data_file;
 };
 
 struct DataFile : public ContentFile {
@@ -174,9 +175,9 @@ namespace ice_tea {
 
 struct PartitionKeyField {
   std::string name;
-  std::shared_ptr<iceberg::types::Type> type;
+  std::shared_ptr<const iceberg::types::Type> type;
 
-  PartitionKeyField(std::string n, std::shared_ptr<iceberg::types::Type> t) : name(std::move(n)), type(t) {
+  PartitionKeyField(std::string n, std::shared_ptr<const iceberg::types::Type> t) : name(std::move(n)), type(t) {
     if (!type) {
       throw std::runtime_error("PartitionValueInfo: type is not set");
     }

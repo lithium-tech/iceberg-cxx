@@ -7,7 +7,6 @@
 #include <unordered_set>
 
 #include "iceberg/nested_field.h"
-#include "iceberg/transforms.h"
 #include "iceberg/type.h"
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
@@ -760,6 +759,16 @@ std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
     }
   }
   throw std::runtime_error(std::string(__FUNCTION__) + ": no schema with current schema id");
+}
+
+std::shared_ptr<PartitionSpec> TableMetadataV2::GetCurrentPartitionSpec() const {
+  for (const auto& partition_spec : partition_specs) {
+    if (partition_spec->spec_id == default_spec_id) {
+      return partition_spec;
+    }
+  }
+  throw std::runtime_error("TableMetadataV2: partition spec with id " + std::to_string(default_spec_id) +
+                           " is not found");
 }
 
 std::shared_ptr<SortOrder> TableMetadataV2::GetSortOrder() const {

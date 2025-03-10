@@ -1,0 +1,78 @@
+#include "iceberg/tea_scan.h"
+
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/localfs.h>
+#include <arrow/status.h>
+
+#include <fstream>
+
+#include "gtest/gtest.h"
+#include "iceberg/type.h"
+
+namespace iceberg {
+namespace {
+
+class FileSystemWrapper : public arrow::fs::SubTreeFileSystem {
+ public:
+  explicit FileSystemWrapper(std::shared_ptr<arrow::fs::FileSystem> fs) : arrow::fs::SubTreeFileSystem("", fs) {}
+};
+
+class ReplacingFilesystem : public FileSystemWrapper {
+ public:
+  explicit ReplacingFilesystem(std::shared_ptr<arrow::fs::FileSystem> fs) : FileSystemWrapper(fs) {}
+
+  arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenInputFile(const std::string& path) override {
+    std::string path_to_use;
+    if (path.starts_with("warehouse/")) {
+      path_to_use = "tables/" + path.substr(std::string("warehouse/").size());
+    } else {
+      return arrow::Status::ExecutionError("Unexpected file prefix in file ", path);
+    }
+    return FileSystemWrapper::OpenInputFile(path_to_use);
+  }
+};
+
+TEST(GetScanMetadata, WithPartitionSpecs) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  struct TestInfo {
+    std::string meta_path;
+    size_t partitions;
+    size_t data_entries;
+  };
+
+  std::vector<TestInfo> path_to_expected_partitions_count = {
+      TestInfo{"s3://warehouse/partitioned_table/metadata/00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json", 6,
+               6},
+      TestInfo{
+          "s3://warehouse/year_date_partitioning/metadata/00002-b30c996e-fb0e-4ebc-a987-3536ceb792ea.metadata.json", 2,
+          2},
+      TestInfo{"s3://warehouse/year_timestamp_partitioning/metadata/"
+               "00002-ac56aa65-6214-44b3-bb0f-86728eb58d8b.metadata.json",
+               2, 2},
+      TestInfo{"s3://warehouse/year_timestamptz_partitioning/metadata/"
+               "00002-d52e2c04-065b-4d14-98bb-ec47abcd1597.metadata.json",
+               2, 2},
+      TestInfo{"s3://warehouse/identity_partitioning/metadata/00002-30bff4d8-0c4f-46a9-8e7a-ebea458dbb1d.metadata.json",
+               1, 1},
+      TestInfo{"s3://warehouse/bucket_partitioning/metadata/00002-53948f10-cced-409f-8dd9-6dea096895e8.metadata.json",
+               1, 1},
+      {"s3://warehouse/no_partitioning/metadata/00002-f7dd062a-ad44-4948-ba0c-4cd9f585ba04.metadata.json", 1, 1}};
+
+  for (const auto& test_info : path_to_expected_partitions_count) {
+    auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, test_info.meta_path);
+    ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK()) << test_info.meta_path;
+    EXPECT_EQ(maybe_scan_metadata->partitions.size(), test_info.partitions) << test_info.meta_path;
+    size_t entries = 0;
+    for (auto& p : maybe_scan_metadata->partitions) {
+      for (auto& l : p) {
+        entries += l.data_entries_.size();
+      }
+    }
+    EXPECT_EQ(entries, test_info.data_entries) << test_info.meta_path;
+  }
+}
+
+}  // namespace
+}  // namespace iceberg

@@ -9,7 +9,6 @@
 
 #include "iceberg/schema.h"
 #include "iceberg/snapshot.h"
-#include "iceberg/transforms.h"
 
 namespace iceberg {
 
@@ -121,6 +120,7 @@ struct TableMetadataV2 {
   std::optional<std::string> GetCurrentManifestListPath() const;
   std::shared_ptr<Schema> GetCurrentSchema() const;
   std::shared_ptr<SortOrder> GetSortOrder() const;
+  std::shared_ptr<PartitionSpec> GetCurrentPartitionSpec() const;
   int32_t SetSortOrder(std::shared_ptr<SortOrder> order);
 
   static constexpr uint32_t format_vesion = 2;                  // required
