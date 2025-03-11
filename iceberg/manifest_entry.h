@@ -92,6 +92,7 @@ struct ContentFile {
   };
 
   struct PartitionTuple {
+    // sorted by name
     std::vector<PartitionKey> fields;
 
     bool operator==(const PartitionTuple& other) const = default;
@@ -177,15 +178,11 @@ struct PartitionKeyField {
   std::string name;
   std::shared_ptr<const iceberg::types::Type> type;
 
-  PartitionKeyField(std::string n, std::shared_ptr<const iceberg::types::Type> t) : name(std::move(n)), type(t) {
-    if (!type) {
-      throw std::runtime_error("PartitionValueInfo: type is not set");
-    }
-  }
+  PartitionKeyField(std::string n, std::shared_ptr<const iceberg::types::Type> t) : name(std::move(n)), type(t) {}
 };
 
-Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionKeyField>& partition_spec = {});
-Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionKeyField>& partition_spec = {});
+Manifest ReadManifestEntries(std::istream& istream);
+Manifest ReadManifestEntries(const std::string& data);
 std::string WriteManifestEntries(const Manifest& manifest_entries,
                                  const std::vector<PartitionKeyField>& partition_spec = {});
 

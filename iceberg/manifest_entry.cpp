@@ -323,6 +323,9 @@ DataFile::PartitionTuple Deserialize(const avro::GenericDatum& datum) {
                                std::to_string(static_cast<int>(field.type())));
     }
   }
+
+  std::sort(result.fields.begin(), result.fields.end(),
+            [&](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
   return result;
 }
 
@@ -861,7 +864,7 @@ avro::GenericDatum SerializeManifestEntry(const std::vector<PartitionKeyField>& 
 
 }  // namespace
 
-Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKeyField>& partition_spec) {
+Manifest ReadManifestEntries(std::istream& input) {
   if (!input) {
     throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": input is invalid");
   }
@@ -890,39 +893,14 @@ Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKey
   }
   while (data_file_reader.read(manifest_entry)) {
     ManifestEntry entry = Deserialize<ManifestEntry>(manifest_entry);
-    if (partition_spec.size() != entry.data_file.partition_tuple.fields.size()) {
-      throw std::runtime_error("Manifest entry contains unexpected number of fields in partition " +
-                               std::to_string(entry.data_file.partition_tuple.fields.size()) + " (expected " +
-                               std::to_string(partition_spec.size()) + ")");
-    }
-    for (const auto& expected_field : partition_spec) {
-      bool is_found = false;
-      for (const auto& actual_field : entry.data_file.partition_tuple.fields) {
-        if (actual_field.name == expected_field.name) {
-          is_found = true;
-          if (actual_field.type && expected_field.type &&
-              actual_field.type->ToString() != expected_field.type->ToString()) {
-            throw std::runtime_error("Manifest entry contains partition field '" + actual_field.name + "' with type " +
-                                     actual_field.type->ToString() + " but expected type is " +
-                                     expected_field.type->ToString());
-          }
-          break;
-        }
-      }
-
-      if (!is_found) {
-        throw std::runtime_error("Manifest entry does not contain expected partition field '" + expected_field.name +
-                                 "'");
-      }
-    }
     result.entries.emplace_back(std::move(entry));
   }
   return result;
 }
 
-Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionKeyField>& partition_spec) {
+Manifest ReadManifestEntries(const std::string& data) {
   std::stringstream ss(data);
-  return ReadManifestEntries(ss, partition_spec);
+  return ReadManifestEntries(ss);
 }
 
 std::string WriteManifestEntries(const Manifest& manifest, const std::vector<PartitionKeyField>& partition_spec) {

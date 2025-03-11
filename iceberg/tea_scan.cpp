@@ -248,7 +248,7 @@ struct Transforms {
   static constexpr std::string_view kIdentity = "identity";
   static constexpr std::string_view kTruncate = "truncate";  // actual name is truncate[X]
 
-  static constexpr std::string_view kVoid = "void";  // TODO(gmusya): support
+  static constexpr std::string_view kVoid = "void";
 
   static arrow::Result<std::shared_ptr<const types::Type>> GetTypeFromSourceType(
       int source_id, std::shared_ptr<const iceberg::Schema> schema) {
@@ -270,6 +270,72 @@ struct Transforms {
   }
 };
 
+static std::optional<std::vector<PartitionKeyField>> GetFieldsFromPartitionSpec(
+    const PartitionSpec& partition_spec, std::shared_ptr<iceberg::Schema> schema) {
+  std::vector<PartitionKeyField> partition_fields;
+  for (const auto& value : partition_spec.fields) {
+    const auto& transform = value.transform;
+    if (transform.starts_with(Transforms::kBucket) || transform == Transforms::kYear ||
+        transform == Transforms::kMonth || transform == Transforms::kDay || transform == Transforms::kHour) {
+      partition_fields.emplace_back(value.name, std::make_shared<types::PrimitiveType>(TypeID::kInt));
+    } else if (transform == Transforms::kIdentity || transform.starts_with(Transforms::kTruncate)) {
+      auto maybe_partition_field_type = Transforms::GetTypeFromSourceType(value.source_id, schema);
+      if (!maybe_partition_field_type.ok()) {
+        return std::nullopt;
+      }
+      partition_fields.emplace_back(value.name, maybe_partition_field_type.MoveValueUnsafe());
+    } else if (transform == Transforms::kVoid) {
+      partition_fields.emplace_back(value.name, nullptr);
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  return partition_fields;
+}
+
+static bool MatchesSpecification(const PartitionSpec& partition_spec, std::shared_ptr<iceberg::Schema> schema,
+                                 const ContentFile::PartitionTuple& tuple) {
+  std::optional<std::vector<PartitionKeyField>> partition_fields = GetFieldsFromPartitionSpec(partition_spec, schema);
+  if (!partition_fields) {
+    return false;
+  }
+
+  if (partition_fields->size() != tuple.fields.size()) {
+    return false;
+  }
+
+  for (const auto& expected_field : *partition_fields) {
+    bool is_found = false;
+    for (const auto& actual_field : tuple.fields) {
+      if (actual_field.name == expected_field.name) {
+        if (is_found) {
+          // multiple fields with one name is unexpected
+          return false;
+        }
+
+        is_found = true;
+        if (actual_field.type && expected_field.type &&
+            actual_field.type->ToString() != expected_field.type->ToString()) {
+          return false;
+        }
+
+        bool is_void_transform = expected_field.type == nullptr;
+        bool result_is_null = std::holds_alternative<std::monostate>(actual_field.value);
+        if (is_void_transform && !result_is_null) {
+          return false;
+        }
+      }
+    }
+
+    if (!is_found) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location) {
   ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(fs, metadata_location));
@@ -287,25 +353,6 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   }
 
   auto partiton_spec = table_metadata->GetCurrentPartitionSpec();
-
-  // https://iceberg.apache.org/spec/#partition-evolution
-  // TODO(gmusya): support partition evolution
-  if (table_metadata->partition_specs.size() != 1) {
-    return arrow::Status::ExecutionError("GetScanMetadata: tables with multiple partition specs are not supported yet");
-  }
-  std::vector<PartitionKeyField> partition_fields;
-  for (const auto& value : partiton_spec->fields) {
-    const auto& transform = value.transform;
-    if (transform.starts_with(Transforms::kBucket) || transform == Transforms::kYear ||
-        transform == Transforms::kMonth || transform == Transforms::kDay || transform == Transforms::kHour) {
-      partition_fields.emplace_back(value.name, std::make_shared<types::PrimitiveType>(TypeID::kInt));
-    } else if (transform == Transforms::kIdentity || transform.starts_with(Transforms::kTruncate)) {
-      ARROW_ASSIGN_OR_RAISE(auto partition_field_type, Transforms::GetTypeFromSourceType(value.source_id, schema));
-      partition_fields.emplace_back(value.name, partition_field_type);
-    } else {
-      return arrow::Status::ExecutionError("GetScanMetadata: unexpected transform type " + transform);
-    }
-  }
 
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   if (!maybe_manifest_list_path.has_value()) {
@@ -328,7 +375,8 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   for (const auto& manifest_metadata : manifest_metadatas) {
     const std::string manifest_path = manifest_metadata.path;
     ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs, manifest_path));
-    Manifest manifest = ice_tea::ReadManifestEntries(entries_content, partition_fields);
+    Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
+
     auto& entries_input = manifest.entries;
     for (auto&& entry : entries_input) {
       if (entry.data_file.referenced_data_file.has_value()) {
@@ -343,6 +391,31 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         continue;
       }
 
+      {
+        // https://iceberg.apache.org/docs/1.7.1/evolution/
+        // We do not know from which partition the current entry is
+        size_t matching_specifications = 0;
+        const auto& specs = table_metadata->partition_specs;
+        for (size_t i = 0; i < specs.size(); ++i) {
+          // Matching also should use field-id from partition specification and field-id (as custom attribute) from
+          // avro, but avrocpp does not currently support custom attributes
+          if (MatchesSpecification(*specs[i], schema, entry.data_file.partition_tuple)) {
+            ++matching_specifications;
+          }
+        }
+
+        if (matching_specifications == 0) {
+          return arrow::Status::ExecutionError("Partiton specification for entry ", entry.data_file.file_path,
+                                               " is not found");
+        }
+        if (matching_specifications > 1) {
+          return arrow::Status::ExecutionError("Multiple (", matching_specifications,
+                                               ") partiton specifications for entry ", entry.data_file.file_path,
+                                               " are found");
+        }
+      }
+      std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
+
       SequenceNumber sequence_number;
       if (entry.sequence_number.has_value()) {
         sequence_number = entry.sequence_number.value();
@@ -352,7 +425,6 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         return arrow::Status::ExecutionError("no sequence_number");
       }
       entry.sequence_number = sequence_number;
-      std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
       switch (entry.data_file.content) {
         case ContentFile::FileContent::kData: {
           std::vector<DataEntry::Segment> segments;
@@ -374,7 +446,8 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
           // - The data file's file_path is equal to the delete file's referenced_data_file if it is non-null
           // - The data file's data sequence number is less than or equal to the delete file's data sequence number
           // - The data file's partition (both spec and partition values) is equal [4] to the delete file's partition
-          // - There is no deletion vector that must be applied to the data file (when added, such a vector must contain
+          // - There is no deletion vector that must be applied to the data file (when added, such a vector must
+          // contain
           //   all deletes from existing position delete files)
           partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
               std::move(entry));
@@ -382,7 +455,8 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         case ContentFile::FileContent::kEqualityDeletes:
           // An equality delete file must be applied to a data file when all of the following are true:
           // - The data file's data sequence number is strictly less than the delete's data sequence number
-          // - The data file's partition (both spec id and partition values) is equal [4] to the delete file's partition
+          // - The data file's partition (both spec id and partition values) is equal [4] to the delete file's
+          // partition
           //   or the delete file's partition spec is unpartitioned
           if (serialized_partition_key.empty()) {
             global_equality_deletes[sequence_number - 1].emplace_back(std::move(entry));

@@ -58,7 +58,8 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
                1, 1},
       TestInfo{"s3://warehouse/bucket_partitioning/metadata/00002-53948f10-cced-409f-8dd9-6dea096895e8.metadata.json",
                1, 1},
-      {"s3://warehouse/no_partitioning/metadata/00002-f7dd062a-ad44-4948-ba0c-4cd9f585ba04.metadata.json", 1, 1}};
+      {"s3://warehouse/no_partitioning/metadata/00002-f7dd062a-ad44-4948-ba0c-4cd9f585ba04.metadata.json", 1, 1},
+      {"s3://warehouse/partition_evolution/metadata/00005-218c3743-5886-48b9-88d6-86c202862e0f.metadata.json", 7, 7}};
 
   for (const auto& test_info : path_to_expected_partitions_count) {
     auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, test_info.meta_path);
@@ -72,6 +73,55 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
     }
     EXPECT_EQ(entries, test_info.data_entries) << test_info.meta_path;
   }
+}
+
+TEST(GetScanMetadata, WithNoMatchingPartitionSpec) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs,
+                                                      "s3://warehouse/partitioned_table_with_missing_spec/metadata/"
+                                                      "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json");
+  ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
+  std::string error_message = maybe_scan_metadata.status().message();
+
+  EXPECT_EQ(error_message,
+            "Partiton specification for entry "
+            "s3a://warehouse/partitioned_table/data/c1=2/c2=2025-03-04/"
+            "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet is not found");
+}
+
+TEST(GetScanMetadata, WithVoidInPartitionSpec) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs,
+                                                      "s3://warehouse/partitioned_table_with_missing_spec/metadata/"
+                                                      "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json");
+  ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
+  std::string error_message = maybe_scan_metadata.status().message();
+
+  // null value was expected for void transform
+  EXPECT_EQ(error_message,
+            "Partiton specification for entry "
+            "s3a://warehouse/partitioned_table/data/c1=2/c2=2025-03-04/"
+            "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet is not found");
+}
+
+TEST(GetScanMetadata, WithMultipleMatchingPartitionSpecs) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs,
+                                                      "s3://warehouse/partitioned_table_with_multiple_spec/metadata/"
+                                                      "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json");
+  ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
+  std::string error_message = maybe_scan_metadata.status().message();
+
+  EXPECT_EQ(error_message,
+            "Multiple (2) partiton specifications for entry "
+            "s3a://warehouse/partitioned_table/data/c1=2/c2=2025-03-04/"
+            "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet are found");
 }
 
 }  // namespace
