@@ -4,6 +4,8 @@ add_library(iceberg-cpp STATIC
     manifest_entry.h
     manifest_file.h
     nested_field.h
+    puffin.cpp
+    puffin.h
     schema.cpp
     schema.h
     snapshot.h
@@ -39,3 +41,8 @@ if (USE_SMHASHER)
 endif()
 
 set_target_properties(iceberg-cpp PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_executable(iceberg-cpp-test
+  ut/puffin_test.cpp
+)
+target_link_libraries(iceberg-cpp-test iceberg-cpp gtest_main)
