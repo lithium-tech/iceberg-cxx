@@ -83,7 +83,9 @@ std::string SerializeValue(const DataFile::PartitionKey::Fixed& value) { return 
 std::string SerializePartitionKey(const DataFile::PartitionKey& key) {
   std::string result;
   result += key.name;
-  result += key.type->ToString();
+  if (key.type) {
+    result += key.type->ToString();
+  }
   result += std::to_string(key.value.index());
   result += std::visit([](auto&& arg) { return SerializeValue(arg); }, key.value);
   return result;
@@ -276,8 +278,12 @@ static std::optional<std::vector<PartitionKeyField>> GetFieldsFromPartitionSpec(
   for (const auto& value : partition_spec.fields) {
     const auto& transform = value.transform;
     if (transform.starts_with(Transforms::kBucket) || transform == Transforms::kYear ||
-        transform == Transforms::kMonth || transform == Transforms::kDay || transform == Transforms::kHour) {
+        transform == Transforms::kMonth || transform == Transforms::kHour) {
       partition_fields.emplace_back(value.name, std::make_shared<types::PrimitiveType>(TypeID::kInt));
+    } else if (transform == Transforms::kDay) {
+      // https://iceberg.apache.org/spec/#partition-transforms
+      // see https://github.com/apache/iceberg/pull/11749
+      partition_fields.emplace_back(value.name, std::make_shared<types::PrimitiveType>(TypeID::kDate));
     } else if (transform == Transforms::kIdentity || transform.starts_with(Transforms::kTruncate)) {
       auto maybe_partition_field_type = Transforms::GetTypeFromSourceType(value.source_id, schema);
       if (!maybe_partition_field_type.ok()) {

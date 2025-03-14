@@ -548,4 +548,88 @@ TEST(ManifestEntryTest, TestBucketPartitioning) {
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }
 
+TEST(ManifestEntryTest, MonthTimestamptzPartitioning) {
+  std::ifstream input("tables/month_timestamptz_partitioning/metadata/1fcf77ef-6cf3-4bdb-94a7-e06502b15dc0-m0.avro");
+  std::stringstream ss;
+  ss << input.rdbuf();
+  std::string data = ss.str();
+
+  std::vector<ice_tea::PartitionKeyField> fields = {
+      ice_tea::PartitionKeyField("c2_month", std::make_shared<types::PrimitiveType>(TypeID::kInt))};
+
+  using PF = DataFile::PartitionKey;
+
+  DataFile::PartitionTuple expected_partition_info{
+      .fields = {PF("c2_month", 662, std::make_shared<types::PrimitiveType>(TypeID::kInt))}};
+
+  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  ASSERT_EQ(manifest.entries.size(), 3);
+  auto info = manifest.entries[1].data_file.partition_tuple;
+
+  std::sort(expected_partition_info.fields.begin(), expected_partition_info.fields.end(), IsLess);
+  ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
+
+  data = ice_tea::WriteManifestEntries(manifest, fields);
+  std::vector<DataFile::PartitionTuple> new_infos;
+  manifest = ice_tea::ReadManifestEntries(data);
+  info = manifest.entries[1].data_file.partition_tuple;
+  ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
+}
+
+TEST(ManifestEntryTest, DayTimestamptzPartitioning) {
+  std::ifstream input("tables/day_timestamptz_partitioning/metadata/50c451b7-68a3-45d5-924a-8d655175c051-m0.avro");
+  std::stringstream ss;
+  ss << input.rdbuf();
+  std::string data = ss.str();
+
+  std::vector<ice_tea::PartitionKeyField> fields = {
+      ice_tea::PartitionKeyField("c2_day", std::make_shared<types::PrimitiveType>(TypeID::kDate))};
+
+  using PF = DataFile::PartitionKey;
+
+  DataFile::PartitionTuple expected_partition_info{
+      .fields = {PF("c2_day", 20150, std::make_shared<types::PrimitiveType>(TypeID::kDate))}};
+
+  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  ASSERT_EQ(manifest.entries.size(), 3);
+  auto info = manifest.entries[1].data_file.partition_tuple;
+
+  std::sort(expected_partition_info.fields.begin(), expected_partition_info.fields.end(), IsLess);
+  ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
+
+  data = ice_tea::WriteManifestEntries(manifest, fields);
+  std::vector<DataFile::PartitionTuple> new_infos;
+  manifest = ice_tea::ReadManifestEntries(data);
+  info = manifest.entries[1].data_file.partition_tuple;
+  ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
+}
+
+TEST(ManifestEntryTest, HourTimestamptzPartitioning) {
+  std::ifstream input("tables/hour_timestamptz_partitioning/metadata/dd2a408a-3d27-4ab0-b560-839ff3265ac8-m0.avro");
+  std::stringstream ss;
+  ss << input.rdbuf();
+  std::string data = ss.str();
+
+  std::vector<ice_tea::PartitionKeyField> fields = {
+      ice_tea::PartitionKeyField("c2_hour", std::make_shared<types::PrimitiveType>(TypeID::kInt))};
+
+  using PF = DataFile::PartitionKey;
+
+  DataFile::PartitionTuple expected_partition_info{
+      .fields = {PF("c2_hour", 474863, std::make_shared<types::PrimitiveType>(TypeID::kInt))}};
+
+  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  ASSERT_EQ(manifest.entries.size(), 3);
+  auto info = manifest.entries[0].data_file.partition_tuple;
+
+  std::sort(expected_partition_info.fields.begin(), expected_partition_info.fields.end(), IsLess);
+  ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
+
+  data = ice_tea::WriteManifestEntries(manifest, fields);
+  std::vector<DataFile::PartitionTuple> new_infos;
+  manifest = ice_tea::ReadManifestEntries(data);
+  info = manifest.entries[0].data_file.partition_tuple;
+  ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
+}
+
 }  // namespace iceberg

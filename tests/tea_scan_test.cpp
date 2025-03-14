@@ -25,6 +25,8 @@ class ReplacingFilesystem : public FileSystemWrapper {
     std::string path_to_use;
     if (path.starts_with("warehouse/")) {
       path_to_use = "tables/" + path.substr(std::string("warehouse/").size());
+    } else if (path.starts_with("dl-test-maintenance/check/tea-partitioned/")) {
+      path_to_use = "tables/" + path.substr(std::string("dl-test-maintenance/check/tea-partitioned/").size());
     } else {
       return arrow::Status::ExecutionError("Unexpected file prefix in file ", path);
     }
@@ -45,9 +47,6 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
   std::vector<TestInfo> path_to_expected_partitions_count = {
       TestInfo{"s3://warehouse/partitioned_table/metadata/00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json", 6,
                6},
-      TestInfo{
-          "s3://warehouse/year_date_partitioning/metadata/00002-b30c996e-fb0e-4ebc-a987-3536ceb792ea.metadata.json", 2,
-          2},
       TestInfo{"s3://warehouse/year_timestamp_partitioning/metadata/"
                "00002-ac56aa65-6214-44b3-bb0f-86728eb58d8b.metadata.json",
                2, 2},
@@ -59,7 +58,18 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
       TestInfo{"s3://warehouse/bucket_partitioning/metadata/00002-53948f10-cced-409f-8dd9-6dea096895e8.metadata.json",
                1, 1},
       {"s3://warehouse/no_partitioning/metadata/00002-f7dd062a-ad44-4948-ba0c-4cd9f585ba04.metadata.json", 1, 1},
-      {"s3://warehouse/partition_evolution/metadata/00005-218c3743-5886-48b9-88d6-86c202862e0f.metadata.json", 7, 7}};
+      {"s3://warehouse/partition_evolution/metadata/00005-218c3743-5886-48b9-88d6-86c202862e0f.metadata.json", 7, 7},
+      TestInfo{
+          "s3://warehouse/year_date_partitioning/metadata/00002-b30c996e-fb0e-4ebc-a987-3536ceb792ea.metadata.json", 2,
+          2},
+      {"s3://warehouse/month_timestamptz_partitioning/metadata/"
+       "00002-f44ed222-470e-4e33-b813-6646d434b185.metadata.json",
+       3, 3},
+      {"s3://warehouse/day_timestamptz_partitioning/metadata/00002-bf5ed300-c344-41fe-87ad-0d1190705bf9.metadata.json",
+       3, 3},
+      {"s3://warehouse/hour_timestamptz_partitioning/metadata/00002-aa3a65d9-0e43-452c-a96f-2ec0194f0104.metadata.json",
+       3, 3},
+      {"s3://warehouse/v_20240913/iceberg/metadata/00001-dcd3b13f-b249-4256-9156-0f653f7da773.metadata.json", 2, 3}};
 
   for (const auto& test_info : path_to_expected_partitions_count) {
     auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, test_info.meta_path);
