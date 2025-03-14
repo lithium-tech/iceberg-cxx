@@ -5,10 +5,12 @@
 #include <thrift/transport/TSocket.h>
 #include <thrift/transport/TTransportUtils.h>
 
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
 #include "arrow/api.h"
+#include "iceberg/tea_remote_catalog.h"
 #include "iceberg/tea_scan.h"
 
 namespace iceberg::ice_tea {
@@ -43,6 +45,10 @@ class HiveClientImpl {
     }
   }
 
+  bool TableExists(const std::string& db_name, const std::string& table_name) {
+    return !GetTable(db_name, table_name).tableName.empty();
+  }
+
  private:
   std::shared_ptr<apache::thrift::transport::TTransport> socket_;
   std::shared_ptr<apache::thrift::transport::TTransport> transport_;
@@ -50,71 +56,17 @@ class HiveClientImpl {
   Apache::Hadoop::Hive::ThriftHiveMetastoreClient client_;
 };
 
+HiveClient::HiveClient(const std::string& host, int port) : client_(std::make_shared<HiveClientImpl>(host, port)) {}
+
+std::string HiveClient::GetMetadataLocation(const std::string& db_name, const std::string& table_name) {
+  return client_->GetMetadataLocation(db_name, table_name);
+}
+
+bool HiveClient::TableExists(const std::string& db_name, const std::string& table_name) {
+  return client_->TableExists(db_name, table_name);
+}
+
 HiveCatalog::HiveCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs)
-    : impl_(std::make_unique<HiveClientImpl>(host, port)), s3fs_(s3fs) {}
-HiveCatalog::~HiveCatalog() = default;
-
-bool HiveCatalog::TableExists(const catalog::TableIdentifier& identifier) {
-  Apache::Hadoop::Hive::Table table = impl_->GetTable(identifier.db, identifier.name);
-  return !table.tableName.empty();
-}
-
-std::shared_ptr<Table> HiveCatalog::LoadTable(const catalog::TableIdentifier& identifier) {
-  auto location = impl_->GetMetadataLocation(identifier.db, identifier.name);
-  if (properties_.empty()) {
-    return std::make_shared<HiveTable>(identifier, location, s3fs_);
-  }
-
-  if (!s3fs_) {
-    if (!arrow::fs::IsS3Initialized()) {
-      return {};
-    }
-
-    auto s3_opts = MakeS3Opts(properties_);
-    auto res = arrow::fs::S3FileSystem::Make(s3_opts);
-    if (!res.ok()) {
-      return {};
-    }
-    s3fs_ = *res;
-  }
-
-  auto res = ReadFile(s3fs_, location);
-  if (!res.ok()) {
-    return {};
-  }
-  auto metadata = ice_tea::ReadTableMetadataV2(*res);
-  if (!metadata) {
-    return {};
-  }
-  return std::make_shared<HiveTable>(identifier, location, metadata, s3fs_);
-}
-
-static inline std::string GetOpt(const std::map<std::string, std::string>& properties, const std::string& key) {
-  auto it = properties.find(key);
-  if (it != properties.end()) {
-    return it->second;
-  }
-  return {};
-}
-
-arrow::fs::S3Options HiveCatalog::MakeS3Opts(const std::map<std::string, std::string>& properties) {
-  const std::string access_key = GetOpt(properties, OPT_ACCESS_KEY);
-  const std::string secret_key = GetOpt(properties, OPT_SECRET_KEY);
-
-  auto options = arrow::fs::S3Options::FromAccessKey(access_key, secret_key);
-  options.endpoint_override = GetOpt(properties, OPT_ENDPOINT);
-  options.scheme = GetOpt(properties, OPT_SCHEME);
-  return options;
-}
-
-std::shared_ptr<Table> HiveCatalog::CreateTable(const catalog::TableIdentifier& identifier, const Schema& schema,
-                                                std::shared_ptr<TableMetadataV2> table_metadata) {
-  auto dir_path = "/" + identifier.db + "/" + identifier.name;
-  auto status = s3fs_->CreateDir(dir_path);
-  if (!status.ok()) {
-    throw std::runtime_error("Could not create dir " + dir_path);
-  }
-  return std::make_shared<HiveTable>(identifier, dir_path, table_metadata, s3fs_);
-}
+    : RemoteCatalog(std::make_shared<HiveClient>(host, port), s3fs) {}
 
 }  // namespace iceberg::ice_tea

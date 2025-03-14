@@ -1,4 +1,4 @@
-add_executable(iceberg_local_test
+set(iceberg_local_test_files
     manifest_entry_test.cpp
     manifest_metadata_test.cpp
     validation_test.cpp
@@ -9,7 +9,13 @@ add_executable(iceberg_local_test
     compat/transforms_test.cpp
     compat/partitions_test.cpp
 )
-target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp dl iceberg-tools)
+
+if (ENABLE_REST_TESTS)
+    list(APPEND iceberg_local_test_files rest/test_rest_catalog.cpp)
+endif()
+
+add_executable(iceberg_local_test ${iceberg_local_test_files})
+target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp dl iceberg-tools cpr)
 target_include_directories(iceberg_local_test PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (USE_SMHASHER)

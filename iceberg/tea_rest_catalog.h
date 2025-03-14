@@ -11,28 +11,29 @@
 #include "iceberg/table_metadata.h"
 #include "iceberg/tea_remote_catalog.h"
 #include "iceberg/transaction.h"
+#include "rapidjson/document.h"
 
 namespace iceberg::ice_tea {
 
-class HiveClientImpl;
-
-class HiveClient : public IMetadataClient {
+class RESTClientImpl : public IMetadataClient {
  public:
-  HiveClient(const std::string& host, int port);
+  RESTClientImpl(const std::string& host, int port);
 
   std::string GetMetadataLocation(const std::string& db_name, const std::string& table_name) override;
 
   bool TableExists(const std::string& db_name, const std::string& table_name) override;
 
  private:
-  std::shared_ptr<HiveClientImpl> client_;
+  std::optional<rapidjson::Document> GetTable(const std::string& db_name, const std::string& table_name);
+
+  std::string base_url_;
 };
 
-using HiveTable = RemoteTable;
+using RESTTable = RemoteTable;
 
-class HiveCatalog : public RemoteCatalog {
+class RESTCatalog : public RemoteCatalog {
  public:
-  HiveCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs = {});
+  RESTCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs = {});
 };
 
 }  // namespace iceberg::ice_tea

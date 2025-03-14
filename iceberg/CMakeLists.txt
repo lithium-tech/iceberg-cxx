@@ -32,9 +32,13 @@ add_library(iceberg-cpp STATIC
     transaction.h
     parquet/io.cpp
     parquet/io.h
+    tea_rest_catalog.cpp
+    tea_rest_catalog.h
+    tea_remote_catalog.cpp
+    tea_remote_catalog.h
 )
 
-target_link_libraries(iceberg-cpp PUBLIC rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static)
+target_link_libraries(iceberg-cpp PUBLIC rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static cpr)
 target_link_libraries(iceberg-cpp PUBLIC Arrow::arrow_static)
 if (USE_SMHASHER)
     target_link_libraries(iceberg-cpp PUBLIC SMHasherSupport)

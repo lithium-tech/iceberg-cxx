@@ -22,6 +22,13 @@ if(USE_SMHASHER)
     add_definitions(-DUSE_SMHASHER)
 endif()
 
+option(ENABLE_REST_TESTS "enable rest tests" ON)
+
+if(ENABLE_REST_TESTS)
+  add_definitions(-DENABLE_REST_TESTS)
+endif()
+
+
 set(CMAKE_CXX_STANDARD 20)
 
 include_directories(
