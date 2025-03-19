@@ -19,7 +19,7 @@ target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp dl iceberg-too
 target_include_directories(iceberg_local_test PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (USE_SMHASHER)
-    target_link_libraries(iceberg_local_test PUBLIC SMHasherSupport)
+    target_link_libraries(iceberg_local_test PUBLIC SMHasherMurmurHash3)
 endif()
 
 # TODO(gmusya): get rid of following commands

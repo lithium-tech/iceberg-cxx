@@ -23,7 +23,7 @@
 #include "arrow/visit_scalar_inline.h"
 
 #ifdef USE_SMHASHER
-#include "smhasher/src/MurmurHash3.h"
+#include "MurmurHash3.h"
 #endif
 
 namespace iceberg {

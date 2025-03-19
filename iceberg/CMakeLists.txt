@@ -41,7 +41,7 @@ add_library(iceberg-cpp STATIC
 target_link_libraries(iceberg-cpp PUBLIC rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static cpr)
 target_link_libraries(iceberg-cpp PUBLIC Arrow::arrow_static)
 if (USE_SMHASHER)
-    target_link_libraries(iceberg-cpp PUBLIC SMHasherSupport)
+    target_link_libraries(iceberg-cpp PUBLIC SMHasherMurmurHash3)
 endif()
 
 set_target_properties(iceberg-cpp PROPERTIES POSITION_INDEPENDENT_CODE ON)

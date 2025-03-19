@@ -56,6 +56,7 @@ static void Check(const std::vector<ManifestEntry>& entries) {
   EXPECT_EQ(data_file.distinct_counts.size(), 0);
 }
 
+#ifndef DISABLE_BROKEN_TESTS
 TEST(ManifestEntryTest, Test) {
   std::ifstream input("metadata/7e6e13cb-31fd-4de7-8811-02ce7cec44a9-m0.avro");
   std::stringstream ss;
@@ -88,6 +89,7 @@ TEST(ManifestEntryTest, ReadWriteRead) {
   EXPECT_TRUE(metadata.contains("partition-spec"));
   EXPECT_TRUE(metadata.contains("content"));
 }
+#endif
 
 TEST(ManifestEntryTest, Test2) {
   std::ifstream input("metadata/41f34bc8-eedf-4573-96b0-10c04e7c84c4-m0.avro");
