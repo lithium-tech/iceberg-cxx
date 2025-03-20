@@ -6,8 +6,11 @@ option(USE_SMHASHER "Enable SMHasher" OFF)
 option(ENABLE_REST_TESTS "enable rest tests" ON)
 option(BUILD_TOOLS "build binaries" ON)
 option(ICEBERG_GEN "build generator" OFF)
+option(USE_REST "enable rest tests" ON)
 
 set(CMAKE_CXX_STANDARD 20)
+set(ICEBERG_GEN ON)
+
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-macro-redefined")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20 -Wno-macro-redefined")
 
@@ -51,6 +54,10 @@ endif()
 # libs/bins
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if(USE_REST)
+  add_definitions(-USE_REST)
+endif()
 
 set(ICEBERG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(
