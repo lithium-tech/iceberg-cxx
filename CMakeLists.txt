@@ -22,13 +22,15 @@ set_property(TARGET Arrow::arrow_bundled_dependencies
   APPEND PROPERTY INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto;OpenSSL::SSL"
 )
 
-set(GITLAB github.com)
-set(GITLAB_SSH ssh://git@${GITLAB}:7999)
-if (GIT_SSH)
-  set(GITHUB_MIRROR ${GITLAB_SSH}/github-mirror)
-else ()
-  set(GITHUB_MIRROR https://${GITLAB}/github-mirror)
+if (NOT GITLAB_URL)
+  set(GITLAB github.com)
+  if (GIT_HTTPS)
+    set(GITLAB_URL https://${GITLAB})
+  else()
+    set(GITLAB_URL ssh://git@${GITLAB}:7999)
+  endif()
 endif()
+set(GITHUB_MIRROR ${GITLAB_URL}/github-mirror)
 
 add_subdirectory(vendor)
 
