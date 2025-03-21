@@ -1,15 +1,22 @@
 cmake_minimum_required(VERSION 3.20)
 project(iceberg-cpp)
 
-option(HAS_ARROW_CSV "Arrow built with csv" ON)
-option(USE_SMHASHER "Enable SMHasher" OFF)
-option(ENABLE_REST_TESTS "enable rest tests" ON)
-option(BUILD_TOOLS "build binaries" ON)
-option(ICEBERG_GEN "build generator" OFF)
-option(USE_REST "enable rest tests" ON)
+macro(option_v OPTION_NAME OPTION_TEXT OPTION_DEFAULT)
+  option(${OPTION_NAME} ${OPTION_TEXT} ${OPTION_DEFAULT})
+  if(${OPTION_NAME})
+    add_definitions(-D${OPTION_NAME})
+  endif()
+  message(STATUS "  ${OPTION_NAME}: ${${OPTION_NAME}}")
+endmacro()
+
+option_v(HAS_ARROW_CSV "Arrow built with csv" ON)
+option_v(USE_SMHASHER "Enable SMHasher" OFF)
+option_v(BUILD_TOOLS "build binaries" ON)
+option_v(ICEBERG_GEN "build generator" ON)
+option_v(USE_REST "enable rest tests" ON)
+option_v(DISABLE_BROKEN_TESTS "disable some tests" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
-set(ICEBERG_GEN ON)
 
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-macro-redefined")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20 -Wno-macro-redefined")
@@ -87,10 +94,4 @@ target_include_directories(iceberg SYSTEM INTERFACE
 
 # tests
 
-if (ENABLE_REST_TESTS)
-  add_definitions(-DENABLE_REST_TESTS)
-endif()
-if (DISABLE_BROKEN_TESTS)
-  add_definitions(-DDISABLE_BROKEN_TESTS)
-endif()
 add_subdirectory(tests)
