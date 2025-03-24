@@ -58,6 +58,22 @@ Schema MakeIcebergSchemaFromArrow(int schema_id, const std::shared_ptr<arrow::Sc
   return Schema(schema_id, std::move(fields));
 }
 
+std::shared_ptr<TableMetadataV2> DefaultTableMetadata() {
+  return std::make_shared<iceberg::TableMetadataV2>(
+      std::string{"1"}, std::string{"1"}, 0, 0, 0,
+      std::vector<std::shared_ptr<iceberg::Schema>>{
+          std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+      0,
+      std::vector<std::shared_ptr<iceberg::PartitionSpec>>{
+          std::make_shared<iceberg::PartitionSpec>(iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+      0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+      std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+      std::vector<std::shared_ptr<iceberg::SortOrder>>{
+          std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+      0, std::map<std::string, iceberg::SnapshotRef>{});
+  ;
+}
+
 }  // namespace
 
 TEST(CompatPartitions, NoPartitioning) {
@@ -74,11 +90,7 @@ TEST(CompatPartitions, NoPartitioning) {
 TEST(CompatPartitions, IdentityPartitioning) {
   auto parquet_table = ReadTableFromParquet("data/00000-7-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00002.parquet");
 
-  std::shared_ptr<TableMetadataV2> table_metadata = std::make_shared<TableMetadataV2>(
-      std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<Schema>>{}, 0,
-      std::vector<std::shared_ptr<PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
-      std::vector<std::shared_ptr<Snapshot>>{}, std::vector<SnapshotLog>{}, std::vector<MetadataLog>{},
-      std::vector<std::shared_ptr<SortOrder>>{}, 0, std::map<std::string, SnapshotRef>{});
+  std::shared_ptr<TableMetadataV2> table_metadata = DefaultTableMetadata();
   PartitionSpec partition_spec{.spec_id = 0,
                                .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
                                                          .field_id = static_cast<int32_t>(0),
@@ -98,11 +110,7 @@ TEST(CompatPartitions, IdentityPartitioning) {
 TEST(CompatPartitions, BucketPartitioning) {
   auto parquet_table = ReadTableFromParquet("data/00000-7-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00002.parquet");
 
-  std::shared_ptr<TableMetadataV2> table_metadata = std::make_shared<TableMetadataV2>(
-      std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<Schema>>{}, 0,
-      std::vector<std::shared_ptr<PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
-      std::vector<std::shared_ptr<Snapshot>>{}, std::vector<SnapshotLog>{}, std::vector<MetadataLog>{},
-      std::vector<std::shared_ptr<SortOrder>>{}, 0, std::map<std::string, SnapshotRef>{});
+  std::shared_ptr<TableMetadataV2> table_metadata = DefaultTableMetadata();
   PartitionSpec partition_spec{.spec_id = 0,
                                .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
                                                          .field_id = static_cast<int32_t>(0),
@@ -126,11 +134,7 @@ TEST(CompatPartitions, BucketPartitioning) {
 TEST(CompatPartitions, TruncateTransform) {
   auto parquet_table = ReadTableFromParquet("data/00000-7-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00002.parquet");
 
-  std::shared_ptr<TableMetadataV2> table_metadata = std::make_shared<TableMetadataV2>(
-      std::string{}, std::string{}, 0, 0, 0, std::vector<std::shared_ptr<Schema>>{}, 0,
-      std::vector<std::shared_ptr<PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{}, std::nullopt,
-      std::vector<std::shared_ptr<Snapshot>>{}, std::vector<SnapshotLog>{}, std::vector<MetadataLog>{},
-      std::vector<std::shared_ptr<SortOrder>>{}, 0, std::map<std::string, SnapshotRef>{});
+  std::shared_ptr<TableMetadataV2> table_metadata = DefaultTableMetadata();
   PartitionSpec partition_spec{.spec_id = 0,
                                .fields = {PartitionField{.source_id = static_cast<int32_t>(0),
                                                          .field_id = static_cast<int32_t>(0),

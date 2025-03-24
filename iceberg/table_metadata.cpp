@@ -1,6 +1,7 @@
 #include "iceberg/table_metadata.h"
 
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -725,6 +726,39 @@ std::optional<std::map<std::string, SnapshotRef>> ExtractRefs(const rapidjson::V
 
 }  // namespace
 
+TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_, int64_t last_sequence_number_,
+                                 int64_t last_updated_ms_, int32_t last_column_id_,
+                                 std::vector<std::shared_ptr<Schema>>&& schemas_, int32_t current_schema_id_,
+                                 std::vector<std::shared_ptr<PartitionSpec>>&& partition_specs_,
+                                 int32_t default_spec_id_, int32_t last_partition_id_,
+                                 std::map<std::string, std::string>&& properties_,
+                                 std::optional<int64_t> current_snapshot_id_,
+                                 std::vector<std::shared_ptr<Snapshot>>&& snapshots_,
+                                 std::vector<SnapshotLog>&& snapshot_log_, std::vector<MetadataLog>&& metadata_log_,
+                                 std::vector<std::shared_ptr<SortOrder>>&& sort_orders_, int32_t default_sort_order_id_,
+                                 std::map<std::string, SnapshotRef>&& refs_)
+    : table_uuid(std::move(table_uuid_)),
+      location(std::move(location_)),
+      last_sequence_number(last_sequence_number_),
+      last_updated_ms(last_updated_ms_),
+      last_column_id(last_column_id_),
+      schemas(std::move(schemas_)),
+      current_schema_id(current_schema_id_),
+      partition_specs(std::move(partition_specs_)),
+      default_spec_id(default_spec_id_),
+      last_partition_id(last_partition_id_),
+      properties(std::move(properties_)),
+      current_snapshot_id(current_snapshot_id_),
+      snapshots(std::move(snapshots_)),
+      snapshot_log(std::move(snapshot_log_)),
+      metadata_log(std::move(metadata_log_)),
+      sort_orders(std::move(sort_orders_)),
+      default_sort_order_id(default_sort_order_id_),
+      refs(std::move(refs_)) {
+  DefaultChecker default_checker;
+  default_checker.Check(*this);
+}
+
 std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
   if (!current_snapshot_id.has_value() || snapshots.empty()) {
     return std::nullopt;
@@ -940,4 +974,100 @@ std::string WriteTableMetadataV2(const TableMetadataV2& metadata, bool pretty) {
 }
 
 }  // namespace ice_tea
+
+MetadataChecker::MetadataChecker(bool fatal_on_error, bool cerr_errors)
+    : fatal_on_error_(fatal_on_error), cerr_errors_(cerr_errors) {}
+
+bool MetadataChecker::Check(std::shared_ptr<TableMetadataV2> metadata) const { return this->Check(*metadata); }
+
+bool MetadataChecker::Ensure(bool condition, const std::string& message) const {
+  if (condition) {
+    return true;
+  }
+  if (fatal_on_error_) {
+    throw std::runtime_error(message);
+  }
+  if (cerr_errors_) {
+    std::cerr << message << '\n';
+  }
+  return false;
+}
+
+MetadataChecker::~MetadataChecker() {}
+
+DefaultChecker::DefaultChecker(bool fatal_on_error, bool cerr_errors) : MetadataChecker(fatal_on_error, cerr_errors) {}
+JavaCompatibleChecker::JavaCompatibleChecker(bool fatal_on_error, bool cerr_errors)
+    : MetadataChecker(fatal_on_error, cerr_errors) {}
+
+bool DefaultChecker::Check(const TableMetadataV2& metadata) const {
+  bool result = true;
+  result &= Ensure(!metadata.table_uuid.empty(), "Invalid TableMetadataV2 argument: table_uuid is empty");
+  result &= Ensure(!metadata.location.empty(), "Invalid TableMetadataV2 argument: location is empty");
+  result &= Ensure(!metadata.sort_orders.empty(), "Invalid TableMetadataV2 argument: sort_orders is empty");
+  std::unordered_set<int64_t> snapshots_ids;
+  for (const auto& snapshot : metadata.snapshots) {
+    result &= Ensure(snapshot->sequence_number <= metadata.last_sequence_number,
+                     "Invalid TableMetadataV2 argument: snapshot sequence number is greater than last sequence number");
+    snapshots_ids.insert(snapshot->snapshot_id);
+  }
+  for (const auto& snapshot_log_entry : metadata.snapshot_log) {
+    result &=
+        Ensure(snapshots_ids.contains(snapshot_log_entry.snapshot_id),
+               "Invalid TableMetadataV2 argument: snapshot_log contains snapshot_id that is not present in snapshots");
+  }
+  for (const auto& [name, ref] : metadata.refs) {
+    result &= Ensure(snapshots_ids.contains(ref.snapshot_id),
+                     "Invalid TableMetadataV2 argument: snapshot-ref id is not found in snapshots' ids");
+  }
+  result &=
+      Ensure(!metadata.current_snapshot_id.has_value() || snapshots_ids.contains(metadata.current_snapshot_id.value()),
+
+             "Invalid TableMetadataV2 argument: current snapshot id is not found in snapshots' ids");
+  {
+    bool found = false;
+    for (const auto& schema : metadata.schemas) {
+      found |= (schema->SchemaId() == metadata.current_schema_id);
+    }
+    result &= Ensure(found, "Invalid TableMetadataV2 argument: current schema id is not found in schemas' ids");
+  }
+  {
+    bool found = false;
+    for (const auto& spec : metadata.partition_specs) {
+      found |= (spec->spec_id == metadata.default_spec_id);
+    }
+    result &= Ensure(found, "Invalid TableMetadataV2 argument: default spec id is not found in partition specs' ids");
+  }
+
+  // Probably, we should check the same condition for sort orders
+  return result;
+}
+
+bool JavaCompatibleChecker::Check(const TableMetadataV2& metadata) const {
+  DefaultChecker default_checker(fatal_on_error_, cerr_errors_);
+  default_checker.Check(metadata);
+  constexpr int kMillisInMinute = 60 * 1000;
+  bool result = true;
+  for (size_t i = 0; i + 1 < metadata.snapshot_log.size(); ++i) {
+    result &=
+        Ensure(metadata.snapshot_log[i].timestamp_ms <= metadata.snapshot_log[i + 1].timestamp_ms + kMillisInMinute,
+
+               "Invalid TableMetadataV2 argument: snapshot log is not sorted by timestamp");
+  }
+  result &= Ensure(metadata.snapshot_log.empty() ||
+                       metadata.last_updated_ms + kMillisInMinute >= metadata.snapshot_log.back().timestamp_ms,
+
+                   "Invalid TableMetadataV2 argument: last updated ms is less than the last snapshot timestamp");
+  for (size_t i = 0; i + 1 < metadata.metadata_log.size(); ++i) {
+    result &=
+        Ensure(metadata.metadata_log[i].timestamp_ms <= metadata.metadata_log[i + 1].timestamp_ms + kMillisInMinute,
+
+               "Invalid TableMetadataV2 argument: metadata log is not sorted by timestamp");
+  }
+  result &= Ensure(metadata.metadata_log.empty() ||
+                       metadata.last_updated_ms + kMillisInMinute >= metadata.metadata_log.back().timestamp_ms,
+
+                   "Invalid TableMetadataV2 argument: last updated ms is less than the last metadata timestamp");
+  return result;
+}
+
 }  // namespace iceberg

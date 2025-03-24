@@ -98,6 +98,9 @@ void Check(const TableMetadataV2& metadata) {
   // EXPECT_EQ(metadata.refs, expected_refs);
 }
 
+constexpr char UNEXPECTED_EXCEPTION[] = "Unexpected exception";
+constexpr char NO_EXCEPTION[] = "Expected runtime-error was not thrown";
+
 }  // namespace
 
 TEST(Metadata, ReadSanityCheck) {
@@ -250,6 +253,318 @@ TEST(Metadata, WithBucketPartitioning) {
     EXPECT_EQ(field.source_id, i + 1);
     EXPECT_EQ(field.transform, "bucket[" + std::to_string(buckets[i]) + "]");
   }
+}
+
+TEST(Metadata, EmptyTableUUID) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: table_uuid is empty");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(Metadata, EmptyLocation) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: location is empty");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(Metadata, EmptySortOrders) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{}, 0, std::map<std::string, iceberg::SnapshotRef>{});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: sort_orders is empty");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(Metadata, InvalidSequenceNumber) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt,
+        std::vector<std::shared_ptr<iceberg::Snapshot>>{
+            std::make_shared<iceberg::Snapshot>(iceberg::Snapshot{.sequence_number = 1})},
+        std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(),
+                 "Invalid TableMetadataV2 argument: snapshot sequence number is greater than last sequence number");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(Metadata, InvalidSnapshotLogID) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{iceberg::SnapshotLog{0, 0}}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(
+        e.what(),
+        "Invalid TableMetadataV2 argument: snapshot_log contains snapshot_id that is not present in snapshots");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(Metadata, InvalidSnapshotRefID) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{{"", iceberg::SnapshotRef{.snapshot_id = 0}}});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: snapshot-ref id is not found in snapshots' ids");
+
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(Metadata, InvalidCurrentSnapshotID) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, 0, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: current snapshot id is not found in snapshots' ids");
+
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(Metadata, InvalidCurrentSchemaID) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0, {}, 0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: current schema id is not found in schemas' ids");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(Metadata, InvalidDefaultSpecID) {
+  try {
+    iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0, std::vector<std::shared_ptr<iceberg::PartitionSpec>>{}, 0, 0, std::map<std::string, std::string>{},
+        std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{}, std::vector<iceberg::SnapshotLog>{},
+        std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{});
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: default spec id is not found in partition specs' ids");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(JavaCompatibleChecker, InvalidLastUpdatedMS) {
+  iceberg::JavaCompatibleChecker checker(true, false);
+  try {
+    checker.Check(iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt,
+        std::vector<std::shared_ptr<iceberg::Snapshot>>{
+            std::make_shared<iceberg::Snapshot>(iceberg::Snapshot{.snapshot_id = 0})},
+        std::vector<iceberg::SnapshotLog>{iceberg::SnapshotLog{10000000, 0}}, std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{}));
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(),
+                 "Invalid TableMetadataV2 argument: last updated ms is less than the last snapshot timestamp");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+
+  try {
+    checker.Check(iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 0, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{iceberg::MetadataLog{10000000, ""}},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{}));
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(),
+                 "Invalid TableMetadataV2 argument: last updated ms is less than the last metadata timestamp");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(JavaCompatibleChecker, InvalidSnapshotLog) {
+  iceberg::JavaCompatibleChecker checker(true, false);
+  try {
+    checker.Check(iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 10000000, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt,
+        std::vector<std::shared_ptr<iceberg::Snapshot>>{
+            std::make_shared<iceberg::Snapshot>(iceberg::Snapshot{.snapshot_id = 0})},
+        std::vector<iceberg::SnapshotLog>{iceberg::SnapshotLog{10000000, 0}, iceberg::SnapshotLog{0, 0}},
+        std::vector<iceberg::MetadataLog>{},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{}));
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: snapshot log is not sorted by timestamp");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(JavaCompatibleChecker, InvalidMetadataLog) {
+  iceberg::JavaCompatibleChecker checker(true, false);
+  try {
+    checker.Check(iceberg::TableMetadataV2(
+        std::string{"1"}, std::string{"1"}, 0, 10000000, 0,
+        std::vector<std::shared_ptr<iceberg::Schema>>{
+            std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+        0,
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(
+            iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+        0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+        std::vector<iceberg::SnapshotLog>{},
+        std::vector<iceberg::MetadataLog>{iceberg::MetadataLog{10000000, ""}, iceberg::MetadataLog{0, ""}},
+        std::vector<std::shared_ptr<iceberg::SortOrder>>{
+            std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+        0, std::map<std::string, iceberg::SnapshotRef>{}));
+    FAIL() << NO_EXCEPTION;
+  } catch (const std::runtime_error& e) {
+    EXPECT_STREQ(e.what(), "Invalid TableMetadataV2 argument: metadata log is not sorted by timestamp");
+  } catch (...) {
+    FAIL() << UNEXPECTED_EXCEPTION;
+  }
+}
+
+TEST(JavaCompatibleChecker, fatal_on_error) {
+  iceberg::JavaCompatibleChecker checker(false, false);
+  EXPECT_FALSE(checker.Check(iceberg::TableMetadataV2(
+      std::string{"1"}, std::string{"1"}, 0, 10000000, 0,
+      std::vector<std::shared_ptr<iceberg::Schema>>{
+          std::make_shared<iceberg::Schema>(0, std::vector<types::NestedField>{})},
+      0,
+      std::vector<std::shared_ptr<iceberg::PartitionSpec>>{
+          std::make_shared<iceberg::PartitionSpec>(iceberg::PartitionSpec{0, std::vector<iceberg::PartitionField>{}})},
+      0, 0, std::map<std::string, std::string>{}, std::nullopt, std::vector<std::shared_ptr<iceberg::Snapshot>>{},
+      std::vector<iceberg::SnapshotLog>{},
+      std::vector<iceberg::MetadataLog>{iceberg::MetadataLog{10000000, ""}, iceberg::MetadataLog{0, ""}},
+      std::vector<std::shared_ptr<iceberg::SortOrder>>{
+          std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
+      0, std::map<std::string, iceberg::SnapshotRef>{})));
 }
 
 }  // namespace iceberg

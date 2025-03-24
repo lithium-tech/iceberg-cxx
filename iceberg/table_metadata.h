@@ -97,25 +97,7 @@ struct TableMetadataV2 {
                   std::map<std::string, std::string>&& properties_, std::optional<int64_t> current_snapshot_id_,
                   std::vector<std::shared_ptr<Snapshot>>&& snapshots_, std::vector<SnapshotLog>&& snapshot_log_,
                   std::vector<MetadataLog>&& metadata_log_, std::vector<std::shared_ptr<SortOrder>>&& sort_orders_,
-                  int32_t default_sort_order_id_, std::map<std::string, SnapshotRef>&& refs_)
-      : table_uuid(std::move(table_uuid_)),
-        location(std::move(location_)),
-        last_sequence_number(last_sequence_number_),
-        last_updated_ms(last_updated_ms_),
-        last_column_id(last_column_id_),
-        schemas(std::move(schemas_)),
-        current_schema_id(current_schema_id_),
-        partition_specs(std::move(partition_specs_)),
-        default_spec_id(default_spec_id_),
-        last_partition_id(last_partition_id_),
-        properties(std::move(properties_)),
-        current_snapshot_id(current_snapshot_id_),
-        snapshots(std::move(snapshots_)),
-        snapshot_log(std::move(snapshot_log_)),
-        metadata_log(std::move(metadata_log_)),
-        sort_orders(std::move(sort_orders_)),
-        default_sort_order_id(default_sort_order_id_),
-        refs(std::move(refs_)) {}
+                  int32_t default_sort_order_id_, std::map<std::string, SnapshotRef>&& refs_);
 
   std::optional<std::string> GetCurrentManifestListPath() const;
   std::shared_ptr<Schema> GetCurrentSchema() const;
@@ -190,4 +172,28 @@ std::shared_ptr<TableMetadataV2> ReadTableMetadataV2(std::istream& istream);
 std::string WriteTableMetadataV2(const TableMetadataV2& metadata, bool pretty = false);
 
 }  // namespace ice_tea
+class MetadataChecker {
+ public:
+  MetadataChecker(bool fatal_on_error = false, bool cerr_errors = false);
+  virtual bool Check(const TableMetadataV2& metadata) const = 0;
+  bool Check(std::shared_ptr<TableMetadataV2> metadata) const;
+  virtual ~MetadataChecker();
+
+ protected:
+  bool Ensure(bool condition, const std::string& message) const;
+  bool fatal_on_error_;
+  bool cerr_errors_;
+};
+
+class DefaultChecker : public MetadataChecker {
+ public:
+  DefaultChecker(bool fatal_on_error = true, bool cerr_errors = false);
+  bool Check(const TableMetadataV2& metadata) const override;
+};
+class JavaCompatibleChecker : public MetadataChecker {
+ public:
+  JavaCompatibleChecker(bool fatal_on_error = false, bool cerr_errors = true);
+  bool Check(const TableMetadataV2& metadata) const override;
+};
+
 }  // namespace iceberg
