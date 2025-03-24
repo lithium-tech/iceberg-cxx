@@ -873,7 +873,6 @@ Manifest ReadManifestEntries(std::istream& input) {
   avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream));
   Manifest result;
   avro::GenericDatum manifest_entry(data_file_reader.dataSchema());
-  const auto& meta = data_file_reader.metadata();
 
   result.metadata = data_file_reader.metadata();
 
