@@ -144,7 +144,6 @@ TEST(TableMetadataValidation, NoRestrictions) {
   EXPECT_THROW(validator.ValidateTableMetadata(DefaultTableMetadata()), std::runtime_error);
 }
 
-#ifndef DISABLE_BROKEN_TESTS  // Segmentation fault under RH
 TEST(TableMetadataValidation, Properties) {
   auto table_metadata = DefaultTableMetadata();
   table_metadata->properties.erase("write.parquet.compression-codec");
@@ -155,7 +154,6 @@ TEST(TableMetadataValidation, Properties) {
   table_metadata->properties["created-at"] = "wrong argument";
   EXPECT_NO_THROW(DefaultValidator().ValidateTableMetadata(table_metadata));
 }
-#endif
 
 TEST(TableMetadataValidation, Partitioned) {
   auto table_metadata = DefaultTableMetadata();

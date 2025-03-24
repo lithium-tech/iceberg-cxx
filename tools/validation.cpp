@@ -51,18 +51,22 @@ class ErrorLog {
  public:
   void Add(const std::string& message) { errors_ += message; }
 
-  void Check(bool condition, const std::string& message) {
+  bool Check(bool condition, const std::string& message) {
     if (!condition) {
       Add(message);
+      return false;
     }
+    return true;
   }
 
   // use this function if you check condition more than once, but don't want to see the same message many times
-  void CheckOnce(bool condition, const std::string& message) {
+  bool CheckOnce(bool condition, const std::string& message) {
     if (!condition && !was_.contains(message)) {
       errors_ += message;
       was_.insert(message);
+      return false;
     }
+    return true;
   }
 
   void ThrowIfWasError() {
@@ -93,8 +97,8 @@ void IcebergMetadataValidator::ValidateTableMetadata(const iceberg::TableMetadat
       "No partition spec\n");
   for (auto& i : restrictions.properties) {
     auto iter = table_metadata.properties.find(i.first);
-    error_log.Check(iter != table_metadata.properties.end(), "Missing required properties: " + i.first + '\n');
-    if (i.second.has_value()) {
+    if (error_log.Check(iter != table_metadata.properties.end(), "Missing required properties: " + i.first + '\n') &&
+        i.second.has_value()) {
       error_log.Check(iter->second == i.second.value(), "Wrong required properties: " + i.second.value() + '\n');
     }
   }
