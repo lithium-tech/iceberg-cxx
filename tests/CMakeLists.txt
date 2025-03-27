@@ -5,6 +5,7 @@ set(iceberg_local_test_files
     table_metadata_test.cpp
     tea_scan_test.cpp
     snapshot_test.cpp
+    referenced_data_file_test.cpp
     run_tests.cpp
     compat/transforms_test.cpp
     compat/partitions_test.cpp
