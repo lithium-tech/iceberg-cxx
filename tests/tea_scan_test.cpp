@@ -40,48 +40,54 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
 
   struct TestInfo {
     std::string meta_path;
-    size_t partitions;
-    size_t data_entries;
+    size_t partitions = 0;
+    size_t data_entries = 0;
+    size_t delete_entries = 0;
   };
 
   std::vector<TestInfo> path_to_expected_partitions_count = {
       TestInfo{"s3://warehouse/partitioned_table/metadata/00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json", 6,
-               6},
+               6, 0},
       TestInfo{"s3://warehouse/year_timestamp_partitioning/metadata/"
                "00002-ac56aa65-6214-44b3-bb0f-86728eb58d8b.metadata.json",
-               2, 2},
+               2, 2, 0},
       TestInfo{"s3://warehouse/year_timestamptz_partitioning/metadata/"
                "00002-d52e2c04-065b-4d14-98bb-ec47abcd1597.metadata.json",
-               2, 2},
+               2, 2, 0},
       TestInfo{"s3://warehouse/identity_partitioning/metadata/00002-30bff4d8-0c4f-46a9-8e7a-ebea458dbb1d.metadata.json",
-               1, 1},
+               1, 1, 0},
       TestInfo{"s3://warehouse/bucket_partitioning/metadata/00002-53948f10-cced-409f-8dd9-6dea096895e8.metadata.json",
-               1, 1},
-      {"s3://warehouse/no_partitioning/metadata/00002-f7dd062a-ad44-4948-ba0c-4cd9f585ba04.metadata.json", 1, 1},
-      {"s3://warehouse/partition_evolution/metadata/00005-218c3743-5886-48b9-88d6-86c202862e0f.metadata.json", 7, 7},
+               1, 1, 0},
+      {"s3://warehouse/no_partitioning/metadata/00002-f7dd062a-ad44-4948-ba0c-4cd9f585ba04.metadata.json", 1, 1, 0},
+      {"s3://warehouse/partition_evolution/metadata/00005-218c3743-5886-48b9-88d6-86c202862e0f.metadata.json", 7, 7, 0},
       TestInfo{
           "s3://warehouse/year_date_partitioning/metadata/00002-b30c996e-fb0e-4ebc-a987-3536ceb792ea.metadata.json", 2,
-          2},
+          2, 0},
       {"s3://warehouse/month_timestamptz_partitioning/metadata/"
        "00002-f44ed222-470e-4e33-b813-6646d434b185.metadata.json",
-       3, 3},
+       3, 3, 0},
       {"s3://warehouse/day_timestamptz_partitioning/metadata/00002-bf5ed300-c344-41fe-87ad-0d1190705bf9.metadata.json",
-       3, 3},
+       3, 3, 0},
       {"s3://warehouse/hour_timestamptz_partitioning/metadata/00002-aa3a65d9-0e43-452c-a96f-2ec0194f0104.metadata.json",
-       3, 3},
-      {"s3://warehouse/v_20240913/iceberg/metadata/00001-dcd3b13f-b249-4256-9156-0f653f7da773.metadata.json", 2, 3}};
+       3, 3, 0},
+      {"s3://warehouse/v_20240913/iceberg/metadata/00001-dcd3b13f-b249-4256-9156-0f653f7da773.metadata.json", 2, 3, 0},
+      {"s3://warehouse/prod/db/refdeletes3/metadata/00002-8dbf0bf0-882a-4822-ae9c-ec1c0f34ef6d.metadata.json", 1, 6,
+       6}};
 
   for (const auto& test_info : path_to_expected_partitions_count) {
     auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, test_info.meta_path);
     ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK()) << test_info.meta_path;
     EXPECT_EQ(maybe_scan_metadata->partitions.size(), test_info.partitions) << test_info.meta_path;
-    size_t entries = 0;
+    size_t data_entries = 0;
+    size_t del_entries = 0;
     for (auto& p : maybe_scan_metadata->partitions) {
       for (auto& l : p) {
-        entries += l.data_entries_.size();
+        data_entries += l.data_entries_.size();
+        del_entries += l.positional_delete_entries_.size();
       }
     }
-    EXPECT_EQ(entries, test_info.data_entries) << test_info.meta_path;
+    EXPECT_EQ(data_entries, test_info.data_entries) << test_info.meta_path;
+    EXPECT_EQ(del_entries, test_info.delete_entries) << test_info.meta_path;
   }
 }
 
