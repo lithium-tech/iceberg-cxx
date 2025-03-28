@@ -1,6 +1,9 @@
 #include "iceberg/tea_scan.h"
 
+#include <deque>
+#include <iterator>
 #include <memory>
+#include <queue>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -342,6 +345,70 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
   return true;
 }
 
+using SequenceNumber = int64_t;
+
+class IcebergEntriesStream {
+ public:
+  IcebergEntriesStream(std::shared_ptr<arrow::fs::FileSystem> fs, std::deque<ManifestFile> manifest_files)
+      : fs_(fs), manifest_files_(std::move(manifest_files)) {}
+
+  static arrow::Result<IcebergEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                                  const std::string& manifest_list_path) {
+    ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(fs, manifest_list_path));
+
+    std::stringstream ss(manifest_metadatas_content);
+    std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
+    std::deque<ManifestFile> manifest_files_queue(std::make_move_iterator(manifest_metadatas.begin()),
+                                                  std::make_move_iterator(manifest_metadatas.end()));
+
+    return IcebergEntriesStream(fs, std::move(manifest_files_queue));
+  }
+
+  arrow::Result<std::optional<ManifestEntry>> ReadNext() {
+    while (true) {
+      if (!entries_for_current_manifest_file_.empty()) {
+        auto entry = std::move(entries_for_current_manifest_file_.front());
+        entries_for_current_manifest_file_.pop();
+
+        SequenceNumber sequence_number;
+        if (entry.sequence_number.has_value()) {
+          sequence_number = entry.sequence_number.value();
+        } else if (entry.status == ManifestEntry::Status::kAdded) {
+          sequence_number = current_manifest_file.sequence_number;
+        } else {
+          return arrow::Status::ExecutionError("no sequence_number");
+        }
+        entry.sequence_number = sequence_number;
+
+        return entry;
+      }
+
+      if (manifest_files_.empty()) {
+        return std::nullopt;
+      }
+
+      current_manifest_file = std::move(manifest_files_.front());
+      manifest_files_.pop();
+
+      const std::string manifest_path = current_manifest_file.path;
+      ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs_, manifest_path));
+      Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
+
+      // it is impossible to construct queue from iterators before C++23
+      entries_for_current_manifest_file_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(
+          std::make_move_iterator(manifest.entries.begin()), std::make_move_iterator(manifest.entries.end())));
+    }
+  }
+
+ private:
+  std::shared_ptr<arrow::fs::FileSystem> fs_;
+
+  std::queue<ManifestFile> manifest_files_;
+
+  ManifestFile current_manifest_file;
+  std::queue<ManifestEntry> entries_for_current_manifest_file_;
+};
+
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location) {
   ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(fs, metadata_location));
@@ -366,112 +433,100 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   }
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
-  ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(fs, manifest_list_path));
-
-  std::stringstream ss(manifest_metadatas_content);
-  const std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
+  ARROW_ASSIGN_OR_RAISE(auto entries_stream, IcebergEntriesStream::Make(fs, manifest_list_path));
 
   std::vector<DataEntry> entries_output;
 
-  using SequenceNumber = int64_t;
   std::map<std::string, std::map<SequenceNumber, ScanMetadata::Layer>> partitions;
   // if there are k partitions and t global equality delete entries, k * t entries will be created
   // TODO(gmusya): improve
   std::map<SequenceNumber, std::vector<ManifestEntry>> global_equality_deletes;
-  for (const auto& manifest_metadata : manifest_metadatas) {
-    const std::string manifest_path = manifest_metadata.path;
-    ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs, manifest_path));
-    Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
+  while (true) {
+    ARROW_ASSIGN_OR_RAISE(std::optional<ManifestEntry> maybe_entry, entries_stream.ReadNext());
+    if (!maybe_entry.has_value()) {
+      break;
+    }
 
-    auto& entries_input = manifest.entries;
-    for (auto&& entry : entries_input) {
-      if (entry.data_file.referenced_data_file.has_value()) {
-        return arrow::Status::ExecutionError("Referenced data file for delete files is not supported yet");
+    ManifestEntry entry = std::move(maybe_entry.value());
+
+    if (entry.data_file.referenced_data_file.has_value()) {
+      return arrow::Status::ExecutionError("Referenced data file for delete files is not supported yet");
+    }
+    entry.data_file.null_value_counts.clear();
+    entry.data_file.nan_value_counts.clear();
+    entry.data_file.distinct_counts.clear();
+    entry.data_file.key_metadata.clear();
+
+    if (entry.status == ManifestEntry::Status::kDeleted) {
+      continue;
+    }
+
+    {
+      // https://iceberg.apache.org/docs/1.7.1/evolution/
+      // We do not know from which partition the current entry is
+      size_t matching_specifications = 0;
+      const auto& specs = table_metadata->partition_specs;
+      for (size_t i = 0; i < specs.size(); ++i) {
+        // Matching also should use field-id from partition specification and field-id (as custom attribute) from
+        // avro, but avrocpp does not currently support custom attributes
+        if (MatchesSpecification(*specs[i], schema, entry.data_file.partition_tuple)) {
+          ++matching_specifications;
+        }
       }
-      entry.data_file.null_value_counts.clear();
-      entry.data_file.nan_value_counts.clear();
-      entry.data_file.distinct_counts.clear();
-      entry.data_file.key_metadata.clear();
 
-      if (entry.status == ManifestEntry::Status::kDeleted) {
-        continue;
+      if (matching_specifications == 0) {
+        return arrow::Status::ExecutionError("Partiton specification for entry ", entry.data_file.file_path,
+                                             " is not found");
       }
+      if (matching_specifications > 1) {
+        return arrow::Status::ExecutionError("Multiple (", matching_specifications,
+                                             ") partiton specifications for entry ", entry.data_file.file_path,
+                                             " are found");
+      }
+    }
+    std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
 
-      {
-        // https://iceberg.apache.org/docs/1.7.1/evolution/
-        // We do not know from which partition the current entry is
-        size_t matching_specifications = 0;
-        const auto& specs = table_metadata->partition_specs;
-        for (size_t i = 0; i < specs.size(); ++i) {
-          // Matching also should use field-id from partition specification and field-id (as custom attribute) from
-          // avro, but avrocpp does not currently support custom attributes
-          if (MatchesSpecification(*specs[i], schema, entry.data_file.partition_tuple)) {
-            ++matching_specifications;
+    SequenceNumber sequence_number = entry.sequence_number.value();
+
+    switch (entry.data_file.content) {
+      case ContentFile::FileContent::kData: {
+        std::vector<DataEntry::Segment> segments;
+        const auto& split_offsets = entry.data_file.split_offsets;
+        if (split_offsets.empty()) {
+          segments.emplace_back(4, 0);
+        } else {
+          for (size_t i = 0; i + 1 < split_offsets.size(); ++i) {
+            segments.emplace_back(split_offsets[i], split_offsets[i + 1] - split_offsets[i]);
           }
+          segments.emplace_back(split_offsets.back(), 0);
         }
-
-        if (matching_specifications == 0) {
-          return arrow::Status::ExecutionError("Partiton specification for entry ", entry.data_file.file_path,
-                                               " is not found");
-        }
-        if (matching_specifications > 1) {
-          return arrow::Status::ExecutionError("Multiple (", matching_specifications,
-                                               ") partiton specifications for entry ", entry.data_file.file_path,
-                                               " are found");
-        }
+        partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
+            DataEntry(std::move(entry), std::move(segments)));
+        break;
       }
-      std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
-
-      SequenceNumber sequence_number;
-      if (entry.sequence_number.has_value()) {
-        sequence_number = entry.sequence_number.value();
-      } else if (entry.status == ManifestEntry::Status::kAdded) {
-        sequence_number = manifest_metadata.sequence_number;
-      } else {
-        return arrow::Status::ExecutionError("no sequence_number");
-      }
-      entry.sequence_number = sequence_number;
-      switch (entry.data_file.content) {
-        case ContentFile::FileContent::kData: {
-          std::vector<DataEntry::Segment> segments;
-          const auto& split_offsets = entry.data_file.split_offsets;
-          if (split_offsets.empty()) {
-            segments.emplace_back(4, 0);
-          } else {
-            for (size_t i = 0; i + 1 < split_offsets.size(); ++i) {
-              segments.emplace_back(split_offsets[i], split_offsets[i + 1] - split_offsets[i]);
-            }
-            segments.emplace_back(split_offsets.back(), 0);
-          }
-          partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
-              DataEntry(std::move(entry), std::move(segments)));
-          break;
-        }
-        case ContentFile::FileContent::kPositionDeletes:
-          // A position delete file must be applied to a data file when all of the following are true:
-          // - The data file's file_path is equal to the delete file's referenced_data_file if it is non-null
-          // - The data file's data sequence number is less than or equal to the delete file's data sequence number
-          // - The data file's partition (both spec and partition values) is equal [4] to the delete file's partition
-          // - There is no deletion vector that must be applied to the data file (when added, such a vector must
-          // contain
-          //   all deletes from existing position delete files)
-          partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
+      case ContentFile::FileContent::kPositionDeletes:
+        // A position delete file must be applied to a data file when all of the following are true:
+        // - The data file's file_path is equal to the delete file's referenced_data_file if it is non-null
+        // - The data file's data sequence number is less than or equal to the delete file's data sequence number
+        // - The data file's partition (both spec and partition values) is equal [4] to the delete file's partition
+        // - There is no deletion vector that must be applied to the data file (when added, such a vector must
+        // contain
+        //   all deletes from existing position delete files)
+        partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(std::move(entry));
+        break;
+      case ContentFile::FileContent::kEqualityDeletes:
+        // An equality delete file must be applied to a data file when all of the following are true:
+        // - The data file's data sequence number is strictly less than the delete's data sequence number
+        // - The data file's partition (both spec id and partition values) is equal [4] to the delete file's
+        // partition
+        //   or the delete file's partition spec is unpartitioned
+        if (serialized_partition_key.empty()) {
+          global_equality_deletes[sequence_number - 1].emplace_back(std::move(entry));
+        } else {
+          partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(
               std::move(entry));
-          break;
-        case ContentFile::FileContent::kEqualityDeletes:
-          // An equality delete file must be applied to a data file when all of the following are true:
-          // - The data file's data sequence number is strictly less than the delete's data sequence number
-          // - The data file's partition (both spec id and partition values) is equal [4] to the delete file's
-          // partition
-          //   or the delete file's partition spec is unpartitioned
-          if (serialized_partition_key.empty()) {
-            global_equality_deletes[sequence_number - 1].emplace_back(std::move(entry));
-          } else {
-            partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(
-                std::move(entry));
-          }
-          break;
-      }
+        }
+        break;
     }
   }
 
