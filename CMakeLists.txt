@@ -63,14 +63,6 @@ endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if(USE_REST)
-  add_definitions(-USE_REST)
-endif()
-
-if(REST_TESTS)
-  add_definitions(-REST_TESTS)
-endif()
-
 set(ICEBERG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(
   ${ICEBERG_SOURCE_DIR}
