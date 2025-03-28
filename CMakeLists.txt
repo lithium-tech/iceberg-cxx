@@ -13,7 +13,8 @@ option_v(HAS_ARROW_CSV "Arrow built with csv" ON)
 option_v(USE_SMHASHER "Enable SMHasher" OFF)
 option_v(BUILD_TOOLS "build binaries" ON)
 option_v(ICEBERG_GEN "build generator" ON)
-option_v(USE_REST "enable rest tests" ON)
+option_v(USE_REST "enable rest building" ON)
+option_v(REST_TESTS "enable rest tests" ON)
 option_v(DISABLE_BROKEN_TESTS "disable some tests" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -64,6 +65,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(USE_REST)
   add_definitions(-USE_REST)
+endif()
+
+if(REST_TESTS)
+  add_definitions(-REST_TESTS)
 endif()
 
 set(ICEBERG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})

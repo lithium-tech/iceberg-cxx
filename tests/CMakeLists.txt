@@ -11,7 +11,7 @@ set(iceberg_local_test_files
     compat/partitions_test.cpp
 )
 
-if (USE_REST)
+if (USE_REST AND REST_TESTS)
     list(APPEND iceberg_local_test_files rest/test_rest_catalog.cpp)
 endif()
 
