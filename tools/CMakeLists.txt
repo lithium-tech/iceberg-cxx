@@ -37,6 +37,10 @@ set_target_properties(ice_validator PROPERTIES LINK_FLAGS_RELEASE -s)
 set_target_properties(ice_validator PROPERTIES LINK_FLAGS_RELWITHDEBINFO -s)
 
 if(USE_ARROW)
+  add_executable(ice_explorer explorer.cpp)
+  target_include_directories(ice_explorer PUBLIC "${PROJECT_SOURCE_DIR}")
+  target_link_libraries(ice_explorer iceberg-tools)
+
   add_executable(ice_ls ls.cpp)
   target_include_directories(ice_ls PUBLIC "${PROJECT_SOURCE_DIR}")
   target_link_libraries(ice_ls iceberg-tools ${CMAKE_DL_LIBS})
