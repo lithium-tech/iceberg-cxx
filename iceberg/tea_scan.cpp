@@ -15,6 +15,7 @@
 #include "arrow/status.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
+#include "iceberg/result.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"
 #include "iceberg/tea_column_stats.h"
@@ -121,106 +122,6 @@ std::string SerializePartitionTuple(const DataFile::PartitionTuple& partition_tu
 }
 
 }  // namespace
-
-std::optional<int64_t> DataEntry::GetValueCounts(int32_t field_id) const {
-  for (const auto& [id, cnt] : entry.data_file.value_counts) {
-    if (id == field_id) {
-      return cnt;
-    }
-  }
-  return std::nullopt;
-}
-
-std::optional<int64_t> DataEntry::GetColumnSize(int32_t field_id) const {
-  for (const auto& [id, cnt] : entry.data_file.column_sizes) {
-    if (id == field_id) {
-      return cnt;
-    }
-  }
-  return std::nullopt;
-}
-
-ColumnStats DataEntry::GetColumnStats(int32_t field_id) const {
-  uint64_t total_rows = entry.data_file.record_count;
-  std::optional<int64_t> value_count = GetValueCounts(field_id);
-  std::optional<int64_t> column_size = GetColumnSize(field_id);
-
-  ColumnStats result{.null_count = -1,
-                     .distinct_count = -1,
-                     .not_null_count = -1,
-                     .total_compressed_size = -1,
-                     .total_uncompressed_size = -1};
-
-  if (value_count.has_value()) {
-    result.not_null_count = value_count.value();
-    result.null_count = total_rows - value_count.value();
-  }
-
-  if (column_size.has_value()) {
-    result.total_compressed_size = column_size.value();
-    // TODO(gmusya): estimate total_uncompressed_size
-  }
-
-  return result;
-}
-
-namespace {
-void Add(ColumnStats& base, const ColumnStats& addition) {
-  base.distinct_count = -1;
-
-  if (addition.not_null_count == -1 || base.not_null_count == -1) {
-    base.not_null_count = -1;
-  } else {
-    base.not_null_count += addition.not_null_count;
-  }
-
-  if (addition.null_count == -1 || base.null_count == -1) {
-    base.null_count = -1;
-  } else {
-    base.null_count += addition.null_count;
-  }
-
-  if (addition.total_uncompressed_size == -1 || base.total_uncompressed_size == -1) {
-    base.total_uncompressed_size = -1;
-  } else {
-    base.total_uncompressed_size += addition.total_uncompressed_size;
-  }
-
-  if (addition.total_compressed_size == -1 || base.total_compressed_size == -1) {
-    base.total_compressed_size = -1;
-  } else {
-    base.total_compressed_size += addition.total_compressed_size;
-  }
-}
-}  // namespace
-
-arrow::Result<ColumnStats> ScanMetadata::GetColumnStats(const std::string& column_name) const {
-  int field_id = -1;
-  {
-    auto maybe_field_id = schema->FindColumnIgnoreCase(column_name);
-    if (!maybe_field_id.has_value()) {
-      return arrow::Status::ExecutionError("GetIcebergColumnStats: Column ", column_name, " not found in schema");
-    }
-    field_id = maybe_field_id.value();
-  }
-
-  ColumnStats result{.null_count = 0,
-                     .distinct_count = 0,
-                     .not_null_count = 0,
-                     .total_compressed_size = 0,
-                     .total_uncompressed_size = 0};
-
-  for (const auto& part : partitions) {
-    for (const auto& layer : part) {
-      for (const auto& data_entry : layer.data_entries_) {
-        ColumnStats task_stats = data_entry.GetColumnStats(field_id);
-        Add(result, task_stats);
-      }
-    }
-  }
-
-  return result;
-}
 
 arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenFile(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                                      const std::string& url) {
@@ -347,102 +248,90 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
 
 using SequenceNumber = int64_t;
 
-class IcebergEntriesStream {
- public:
-  IcebergEntriesStream(std::shared_ptr<arrow::fs::FileSystem> fs, std::deque<ManifestFile> manifest_files)
-      : fs_(fs), manifest_files_(std::move(manifest_files)) {}
+std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                                         const std::string& manifest_list_path) {
+  const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
 
-  static arrow::Result<IcebergEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                  const std::string& manifest_list_path) {
-    ARROW_ASSIGN_OR_RAISE(const std::string manifest_metadatas_content, ReadFile(fs, manifest_list_path));
+  std::stringstream ss(manifest_metadatas_content);
+  std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
+  std::queue<ManifestFile> manifest_files_queue(std::deque<ManifestFile>(
+      std::make_move_iterator(manifest_metadatas.begin()), std::make_move_iterator(manifest_metadatas.end())));
 
-    std::stringstream ss(manifest_metadatas_content);
-    std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
-    std::deque<ManifestFile> manifest_files_queue(std::make_move_iterator(manifest_metadatas.begin()),
-                                                  std::make_move_iterator(manifest_metadatas.end()));
+  return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue));
+}
 
-    return IcebergEntriesStream(fs, std::move(manifest_files_queue));
-  }
-
-  arrow::Result<std::optional<ManifestEntry>> ReadNext() {
-    while (true) {
-      if (!entries_for_current_manifest_file_.empty()) {
-        auto entry = std::move(entries_for_current_manifest_file_.front());
-        entries_for_current_manifest_file_.pop();
-
-        SequenceNumber sequence_number;
-        if (entry.sequence_number.has_value()) {
-          sequence_number = entry.sequence_number.value();
-        } else if (entry.status == ManifestEntry::Status::kAdded) {
-          sequence_number = current_manifest_file.sequence_number;
-        } else {
-          return arrow::Status::ExecutionError("no sequence_number");
-        }
-        entry.sequence_number = sequence_number;
-
-        return entry;
-      }
-
-      if (manifest_files_.empty()) {
-        return std::nullopt;
-      }
-
-      current_manifest_file = std::move(manifest_files_.front());
-      manifest_files_.pop();
-
-      const std::string manifest_path = current_manifest_file.path;
-      ARROW_ASSIGN_OR_RAISE(const std::string entries_content, ReadFile(fs_, manifest_path));
-      Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
-
-      // it is impossible to construct queue from iterators before C++23
-      entries_for_current_manifest_file_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(
-          std::make_move_iterator(manifest.entries.begin()), std::make_move_iterator(manifest.entries.end())));
-    }
-  }
-
- private:
-  std::shared_ptr<arrow::fs::FileSystem> fs_;
-
-  std::queue<ManifestFile> manifest_files_;
-
-  ManifestFile current_manifest_file;
-  std::queue<ManifestEntry> entries_for_current_manifest_file_;
-};
-
-arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                            const std::string& metadata_location) {
-  ARROW_ASSIGN_OR_RAISE(const std::string table_metadata_content, ReadFile(fs, metadata_location));
-  auto table_metadata = ice_tea::ReadTableMetadataV2(table_metadata_content);
-  if (!table_metadata) {
-    return arrow::Status::ExecutionError("cannot read metadata");
-  }
-  if (!table_metadata->current_snapshot_id.has_value()) {
-    return arrow::Status::ExecutionError("no current_snapshot_id");
-  }
-
-  std::shared_ptr<Schema> schema = table_metadata->GetCurrentSchema();
-  if (table_metadata->snapshots.empty()) {
-    return ScanMetadata{.schema = schema};
-  }
-
-  auto partiton_spec = table_metadata->GetCurrentPartitionSpec();
-
+std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                                         std::shared_ptr<TableMetadataV2> table_metadata) {
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   if (!maybe_manifest_list_path.has_value()) {
-    return arrow::Status::ExecutionError("no manifest_list_path");
+    throw arrow::Status::ExecutionError("MakeIcebergEntriesStream: manifest list path is not found");
   }
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
-  ARROW_ASSIGN_OR_RAISE(auto entries_stream, IcebergEntriesStream::Make(fs, manifest_list_path));
+  return AllEntriesStream::Make(fs, manifest_list_path);
+}
+
+std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
+  while (true) {
+    if (!entries_for_current_manifest_file_.empty()) {
+      auto entry = std::move(entries_for_current_manifest_file_.front());
+      entries_for_current_manifest_file_.pop();
+
+      if (!entry.sequence_number.has_value() && entry.status == ManifestEntry::Status::kAdded) {
+        entry.sequence_number = current_manifest_file.sequence_number;
+      }
+      if (!entry.sequence_number.has_value()) {
+        throw arrow::Status::ExecutionError("No sequence_number in iceberg::ManifestEntry for data file " +
+                                            entry.data_file.file_path);
+      }
+
+      if (entry.status == ManifestEntry::Status::kDeleted) {
+        continue;
+      }
+
+      return entry;
+    }
+
+    if (manifest_files_.empty()) {
+      return std::nullopt;
+    }
+
+    current_manifest_file = std::move(manifest_files_.front());
+    manifest_files_.pop();
+
+    const std::string manifest_path = current_manifest_file.path;
+    const std::string entries_content = ValueSafe(ReadFile(fs_, manifest_path));
+    Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
+
+    // it is impossible to construct queue from iterators before C++23
+    entries_for_current_manifest_file_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(
+        std::make_move_iterator(manifest.entries.begin()), std::make_move_iterator(manifest.entries.end())));
+  }
+}
+
+arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                            const std::string& metadata_location) {
+  auto data = ValueSafe(ReadFile(fs, metadata_location));
+  std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
+  if (!table_metadata) {
+    return arrow::Status::ExecutionError("GetScanMetadata: failed to parse metadata " + metadata_location);
+  }
+  auto entries_stream = AllEntriesStream::Make(fs, table_metadata);
+  return GetScanMetadata(*entries_stream, *table_metadata);
+}
+
+arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
+                                            const TableMetadataV2& table_metadata) {
+  auto schema = table_metadata.GetCurrentSchema();
 
   std::vector<DataEntry> entries_output;
 
   std::map<std::string, std::map<SequenceNumber, ScanMetadata::Layer>> partitions;
   // if there are k partitions and t global equality delete entries, k * t entries will be created
   // TODO(gmusya): improve
-  std::map<SequenceNumber, std::vector<ManifestEntry>> global_equality_deletes;
+  std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
   while (true) {
-    ARROW_ASSIGN_OR_RAISE(std::optional<ManifestEntry> maybe_entry, entries_stream.ReadNext());
+    std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();
     if (!maybe_entry.has_value()) {
       break;
     }
@@ -465,7 +354,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
       // https://iceberg.apache.org/docs/1.7.1/evolution/
       // We do not know from which partition the current entry is
       size_t matching_specifications = 0;
-      const auto& specs = table_metadata->partition_specs;
+      const auto& specs = table_metadata.partition_specs;
       for (size_t i = 0; i < specs.size(); ++i) {
         // Matching also should use field-id from partition specification and field-id (as custom attribute) from
         // avro, but avrocpp does not currently support custom attributes
@@ -501,7 +390,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
           segments.emplace_back(split_offsets.back(), 0);
         }
         partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
-            DataEntry(std::move(entry), std::move(segments)));
+            DataEntry(std::move(entry.data_file.file_path), std::move(segments)));
         break;
       }
       case ContentFile::FileContent::kPositionDeletes:
@@ -512,7 +401,8 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         // - There is no deletion vector that must be applied to the data file (when added, such a vector must
         // contain
         //   all deletes from existing position delete files)
-        partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(std::move(entry));
+        partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
+            std::move(entry.data_file.file_path));
         break;
       case ContentFile::FileContent::kEqualityDeletes:
         // An equality delete file must be applied to a data file when all of the following are true:
@@ -521,10 +411,11 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
         // partition
         //   or the delete file's partition spec is unpartitioned
         if (serialized_partition_key.empty()) {
-          global_equality_deletes[sequence_number - 1].emplace_back(std::move(entry));
+          global_equality_deletes[sequence_number - 1].emplace_back(std::move(entry.data_file.file_path),
+                                                                    std::move(entry.data_file.equality_ids));
         } else {
           partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(
-              std::move(entry));
+              std::move(entry.data_file.file_path), std::move(entry.data_file.equality_ids));
         }
         break;
     }

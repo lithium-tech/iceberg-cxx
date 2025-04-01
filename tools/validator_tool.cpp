@@ -6,6 +6,7 @@
 
 #include <fstream>
 
+#include "arrow/filesystem/s3fs.h"
 #include "iceberg/tea_scan.h"
 #include "tools/validation.h"
 
