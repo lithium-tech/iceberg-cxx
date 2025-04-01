@@ -5,6 +5,7 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 #include "iceberg/nested_field.h"
@@ -12,6 +13,7 @@
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
 #include "rapidjson/prettywriter.h"
+#include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
@@ -72,6 +74,11 @@ struct Names {
   static constexpr const char* min_snapshots_to_keep = "min-snapshots-to-keep";
   static constexpr const char* max_snapshot_age_ms = "max-snapshot-age-ms";
   static constexpr const char* max_ref_age_ms = "max-ref-age-ms";
+  static constexpr const char* statistics = "statistics";
+  static constexpr const char* statistics_path = "statistics-path";
+  static constexpr const char* file_size_in_bytes = "file-size-in-bytes";
+  static constexpr const char* file_footer_size_in_bytes = "file-footer-size-in-bytes";
+  static constexpr const char* blob_metadata = "blob-metadata";
 };
 
 auto Ref(const char* s) { return rapidjson::StringRef(s, strlen(s)); }
@@ -233,6 +240,45 @@ class WriterContext {
       snapshots.PushBack(snap.Move(), GetAllocator());
     }
     doc.AddMember(Ref(Names::snapshots), snapshots.Move(), GetAllocator());
+  }
+
+  void WriteBlobMetadata(rapidjson::Value& document, const BlobMetadata& blob_meta) {
+    WriteProperties(document, blob_meta.properties);
+    WriteIntField(document, Names::sequence_number, blob_meta.sequence_number);
+    WriteIntField(document, Names::snapshot_id, blob_meta.snapshot_id);
+    WriteStringField(document, Names::type, blob_meta.type);
+
+    rapidjson::Value field_id_array(rapidjson::kArrayType);
+    for (int id : blob_meta.field_ids) {
+      rapidjson::Value x(id);
+      field_id_array.PushBack(x.Move(), GetAllocator());
+    }
+    document.AddMember(Ref(Names::fields), field_id_array.Move(), GetAllocator());
+  }
+
+  void WriteStatistic(rapidjson::Value& document, const Statistics& stat) {
+    WriteStringField(document, Names::statistics_path, stat.statistics_path);
+    WriteIntField(document, Names::snapshot_id, stat.snapshot_id);
+    WriteIntField(document, Names::file_size_in_bytes, stat.file_size_in_bytes);
+    WriteIntField(document, Names::file_footer_size_in_bytes, stat.file_footer_size_in_bytes);
+
+    rapidjson::Value blob_metadata_array(rapidjson::kArrayType);
+    for (const auto& blob : stat.blob_metadata) {
+      rapidjson::Value blob_metadata(rapidjson::kObjectType);
+      WriteBlobMetadata(blob_metadata, blob);
+      blob_metadata_array.PushBack(blob_metadata.Move(), GetAllocator());
+    }
+    document.AddMember(Ref(Names::blob_metadata), blob_metadata_array.Move(), GetAllocator());
+  }
+
+  void WriteStatistics(rapidjson::Value& doc, const std::vector<Statistics>& stats) {
+    rapidjson::Value statistics(rapidjson::kArrayType);
+    for (auto s : stats) {
+      rapidjson::Value stat(rapidjson::kObjectType);
+      WriteStatistic(stat, s);
+      statistics.PushBack(stat.Move(), GetAllocator());
+    }
+    doc.AddMember(Ref(Names::statistics), statistics.Move(), GetAllocator());
   }
 
   void WriteSnapshotLogEntry(rapidjson::Value& doc, const SnapshotLog& entry) {
@@ -587,6 +633,62 @@ std::shared_ptr<Snapshot> JsonToSnapshot(const rapidjson::Value& document) {
                                              .schema_id = schema_id});
 }
 
+int32_t JsonToFieldId(const rapidjson::Value& document) {
+  if (!document.IsInt()) {
+    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsInt()");
+  }
+  return document.GetInt();
+}
+
+std::vector<int32_t> ExtractFieldIds(const rapidjson::Value& document) {
+  static constexpr const char* field_name = Names::fields;
+  if (!document.HasMember(field_name)) {
+    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
+  }
+  std::vector<int32_t> result;
+  ProcessArray(document[field_name],
+               [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToFieldId(elem)); });
+  return result;
+}
+
+BlobMetadata JsonToBlobMetadata(const rapidjson::Value& document) {
+  BlobMetadata blob_metadata;
+  blob_metadata.type = ExtractStringField(document, Names::type);
+  blob_metadata.snapshot_id = ExtractInt64Field(document, Names::snapshot_id);
+  blob_metadata.sequence_number = ExtractInt64Field(document, Names::sequence_number);
+  blob_metadata.field_ids = ExtractFieldIds(document);
+  blob_metadata.properties = ExtractStringMap(document, Names::properties);
+  return blob_metadata;
+}
+
+std::vector<BlobMetadata> ExtractBlobMetadata(const rapidjson::Value& document) {
+  static constexpr const char* field_name = Names::blob_metadata;
+  if (!document.HasMember(field_name)) {
+    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
+  }
+  std::vector<BlobMetadata> result;
+  ProcessArray(document[field_name],
+               [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToBlobMetadata(elem)); });
+  return result;
+}
+
+Statistics JsonToStatistics(const rapidjson::Value& document) {
+  if (!document.IsObject()) {
+    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
+  }
+
+  Statistics statistics;
+  statistics.statistics_path = ExtractStringField(document, Names::statistics_path);
+  statistics.snapshot_id = ExtractInt64Field(document, Names::snapshot_id);
+  statistics.file_size_in_bytes = ExtractInt64Field(document, Names::file_size_in_bytes);
+  statistics.file_footer_size_in_bytes = ExtractInt64Field(document, Names::file_footer_size_in_bytes);
+  statistics.blob_metadata = ExtractBlobMetadata(document);
+
+  // TODO(gmusya): handle key metadata
+  // statistics.key_metadata = ...
+  return statistics;
+}
+
 std::optional<std::vector<std::shared_ptr<Snapshot>>> ExtractSnapshots(const rapidjson::Value& document) {
   static constexpr const char* field_name = Names::snapshots;
   if (!document.HasMember(field_name)) {
@@ -724,6 +826,17 @@ std::optional<std::map<std::string, SnapshotRef>> ExtractRefs(const rapidjson::V
   return JsonToRefsMap(document[field_name]);
 }
 
+std::optional<std::vector<Statistics>> ExtractStatistics(const rapidjson::Value& document) {
+  static constexpr const char* field_name = Names::statistics;
+  if (!document.HasMember(field_name)) {
+    return std::nullopt;
+  }
+  std::vector<Statistics> result;
+  ProcessArray(document[field_name],
+               [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToStatistics(elem)); });
+  return result;
+}
+
 }  // namespace
 
 TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_, int64_t last_sequence_number_,
@@ -736,7 +849,7 @@ TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_,
                                  std::vector<std::shared_ptr<Snapshot>>&& snapshots_,
                                  std::vector<SnapshotLog>&& snapshot_log_, std::vector<MetadataLog>&& metadata_log_,
                                  std::vector<std::shared_ptr<SortOrder>>&& sort_orders_, int32_t default_sort_order_id_,
-                                 std::map<std::string, SnapshotRef>&& refs_)
+                                 std::map<std::string, SnapshotRef>&& refs_, std::vector<Statistics>&& statistics_)
     : table_uuid(std::move(table_uuid_)),
       location(std::move(location_)),
       last_sequence_number(last_sequence_number_),
@@ -754,7 +867,8 @@ TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_,
       metadata_log(std::move(metadata_log_)),
       sort_orders(std::move(sort_orders_)),
       default_sort_order_id(default_sort_order_id_),
-      refs(std::move(refs_)) {
+      refs(std::move(refs_)),
+      statistics(std::move(statistics_)) {
   DefaultChecker default_checker;
   default_checker.Check(*this);
 }
@@ -879,7 +993,8 @@ std::shared_ptr<TableMetadataV2> TableMetadataV2Builder::Build() {
       (snapshot_log ? std::move(snapshot_log.value()) : std::vector<SnapshotLog>{}),
       (metadata_log ? std::move(metadata_log.value()) : std::vector<MetadataLog>{}),
       (sort_orders ? std::move(sort_orders.value()) : std::vector<std::shared_ptr<SortOrder>>{}),
-      default_sort_order_id.value(), (refs ? std::move(refs.value()) : std::map<std::string, SnapshotRef>{}));
+      default_sort_order_id.value(), (refs ? std::move(refs.value()) : std::map<std::string, SnapshotRef>{}),
+      (statistics ? std::move(statistics.value()) : std::vector<Statistics>{}));
 }
 
 static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Document& document) {
@@ -902,6 +1017,7 @@ static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Doc
   builder.sort_orders = ExtractSortOrders(document);
   builder.default_sort_order_id = ExtractInt32Field(document, Names::default_sort_order_id);
   builder.refs = ExtractRefs(document);
+  builder.statistics = ExtractStatistics(document);
   return builder.Build();
 }
 
@@ -948,6 +1064,7 @@ std::string WriteTableMetadataV2(const TableMetadataV2& metadata, bool pretty) {
   ctx.WriteIntField(document, Names::default_sort_order_id, metadata.default_sort_order_id);
   ctx.WriteSortOrder(document, metadata.sort_orders);
   ctx.WriteProperties(document, metadata.properties);
+  ctx.WriteStatistics(document, metadata.statistics);
   if (metadata.current_snapshot_id) {
     ctx.WriteIntField(document, Names::current_snapshot_id, *metadata.current_snapshot_id);
   }

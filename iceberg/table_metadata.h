@@ -25,6 +25,23 @@ struct SnapshotLog {
   }
 };
 
+struct BlobMetadata {
+  std::string type;
+  int64_t snapshot_id;
+  int64_t sequence_number;
+  std::vector<int32_t> field_ids;
+  std::map<std::string, std::string> properties;
+};
+
+struct Statistics {
+  int64_t snapshot_id;  // it is string according to spec, maybe it is a typo
+  std::string statistics_path;
+  int64_t file_size_in_bytes;
+  int64_t file_footer_size_in_bytes;
+  std::optional<std::string> key_metadata;
+  std::vector<BlobMetadata> blob_metadata;
+};
+
 struct MetadataLog {
   int64_t timestamp_ms;
   std::string metadata_file;
@@ -97,7 +114,8 @@ struct TableMetadataV2 {
                   std::map<std::string, std::string>&& properties_, std::optional<int64_t> current_snapshot_id_,
                   std::vector<std::shared_ptr<Snapshot>>&& snapshots_, std::vector<SnapshotLog>&& snapshot_log_,
                   std::vector<MetadataLog>&& metadata_log_, std::vector<std::shared_ptr<SortOrder>>&& sort_orders_,
-                  int32_t default_sort_order_id_, std::map<std::string, SnapshotRef>&& refs_);
+                  int32_t default_sort_order_id_, std::map<std::string, SnapshotRef>&& refs_,
+                  std::vector<Statistics>&& statistics_);
 
   std::optional<std::string> GetCurrentManifestListPath() const;
   std::shared_ptr<Schema> GetCurrentSchema() const;
@@ -124,7 +142,7 @@ struct TableMetadataV2 {
   std::vector<std::shared_ptr<SortOrder>> sort_orders;  // required
   int32_t default_sort_order_id;                        // required
   std::map<std::string, SnapshotRef> refs;
-  // std::vector<Statistics> statistics_;
+  std::vector<Statistics> statistics;
   // std::vector<PartitionStatistics> partition_statistics_;
 
   template <typename T>
@@ -163,6 +181,7 @@ struct TableMetadataV2Builder {
   std::optional<std::vector<std::shared_ptr<SortOrder>>> sort_orders;
   std::optional<int32_t> default_sort_order_id;
   std::optional<std::map<std::string, SnapshotRef>> refs;
+  std::optional<std::vector<Statistics>> statistics;
 };
 
 namespace ice_tea {

@@ -70,7 +70,7 @@ std::shared_ptr<TableMetadataV2> DefaultTableMetadata() {
       std::vector<iceberg::SnapshotLog>{}, std::vector<iceberg::MetadataLog>{},
       std::vector<std::shared_ptr<iceberg::SortOrder>>{
           std::make_shared<iceberg::SortOrder>(iceberg::SortOrder{0, std::vector<iceberg::SortField>{}})},
-      0, std::map<std::string, iceberg::SnapshotRef>{});
+      0, std::map<std::string, iceberg::SnapshotRef>{}, std::vector<iceberg::Statistics>{});
   ;
 }
 
