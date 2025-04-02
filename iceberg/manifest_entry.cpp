@@ -872,7 +872,6 @@ Manifest ReadManifestEntries(std::istream& input) {
   auto istream = avro::istreamInputStream(input);
   avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream));
   Manifest result;
-  avro::GenericDatum manifest_entry(data_file_reader.dataSchema());
 
   result.metadata = data_file_reader.metadata();
 
@@ -890,9 +889,14 @@ Manifest ReadManifestEntries(std::istream& input) {
       result.metadata["schema-id"] = schema_id_bytes;
     }
   }
-  while (data_file_reader.read(manifest_entry)) {
-    ManifestEntry entry = Deserialize<ManifestEntry>(manifest_entry);
-    result.entries.emplace_back(std::move(entry));
+  while (true) {
+    avro::GenericDatum manifest_entry(data_file_reader.dataSchema());
+    if (data_file_reader.read(manifest_entry)) {
+      ManifestEntry entry = Deserialize<ManifestEntry>(manifest_entry);
+      result.entries.emplace_back(std::move(entry));
+    } else {
+      break;
+    }
   }
   return result;
 }

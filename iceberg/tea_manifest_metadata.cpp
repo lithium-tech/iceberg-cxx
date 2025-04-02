@@ -124,10 +124,14 @@ std::vector<ManifestFile> ReadManifestList(std::istream& input) {
   auto istream = avro::istreamInputStream(input);
   avro::DataFileReader<iceberg::manifest_file> data_file_reader(std::move(istream), ManifestListSchema());
   std::vector<ManifestFile> result;
-  iceberg::manifest_file manifest_file;
-  while (data_file_reader.read(manifest_file)) {
-    ManifestFile manifest = Convert(manifest_file);
-    result.emplace_back(std::move(manifest));
+  while (true) {
+    iceberg::manifest_file manifest_file;
+    if (data_file_reader.read(manifest_file)) {
+      ManifestFile manifest = Convert(manifest_file);
+      result.emplace_back(std::move(manifest));
+    } else {
+      break;
+    }
   }
   return result;
 }
