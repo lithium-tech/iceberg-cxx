@@ -177,7 +177,7 @@ struct Transforms {
 };
 
 static std::optional<std::vector<PartitionKeyField>> GetFieldsFromPartitionSpec(
-    const PartitionSpec& partition_spec, std::shared_ptr<iceberg::Schema> schema) {
+    const PartitionSpec& partition_spec, std::shared_ptr<const iceberg::Schema> schema) {
   std::vector<PartitionKeyField> partition_fields;
   for (const auto& value : partition_spec.fields) {
     const auto& transform = value.transform;
@@ -204,7 +204,7 @@ static std::optional<std::vector<PartitionKeyField>> GetFieldsFromPartitionSpec(
   return partition_fields;
 }
 
-static bool MatchesSpecification(const PartitionSpec& partition_spec, std::shared_ptr<iceberg::Schema> schema,
+static bool MatchesSpecification(const PartitionSpec& partition_spec, std::shared_ptr<const iceberg::Schema> schema,
                                  const ContentFile::PartitionTuple& tuple) {
   std::optional<std::vector<PartitionKeyField>> partition_fields = GetFieldsFromPartitionSpec(partition_spec, schema);
   if (!partition_fields) {
@@ -320,61 +320,53 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   return GetScanMetadata(*entries_stream, *table_metadata);
 }
 
-arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
-                                            const TableMetadataV2& table_metadata) {
-  auto schema = table_metadata.GetCurrentSchema();
+class ScanMetadataBuilder {
+ public:
+  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata)
+      : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()) {}
 
-  std::vector<DataEntry> entries_output;
-
-  std::map<std::string, std::map<SequenceNumber, ScanMetadata::Layer>> partitions;
-  // if there are k partitions and t global equality delete entries, k * t entries will be created
-  // TODO(gmusya): improve
-  std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
-  while (true) {
-    std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();
-    if (!maybe_entry.has_value()) {
-      break;
-    }
-
-    ManifestEntry entry = std::move(maybe_entry.value());
-
+  arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
     if (entry.data_file.referenced_data_file.has_value()) {
       return arrow::Status::ExecutionError("Referenced data file for delete files is not supported yet");
     }
-    entry.data_file.null_value_counts.clear();
-    entry.data_file.nan_value_counts.clear();
-    entry.data_file.distinct_counts.clear();
-    entry.data_file.key_metadata.clear();
 
     if (entry.status == ManifestEntry::Status::kDeleted) {
-      continue;
+      return arrow::Status::OK();
     }
 
-    {
-      // https://iceberg.apache.org/docs/1.7.1/evolution/
-      // We do not know from which partition the current entry is
-      size_t matching_specifications = 0;
-      const auto& specs = table_metadata.partition_specs;
-      for (size_t i = 0; i < specs.size(); ++i) {
-        // Matching also should use field-id from partition specification and field-id (as custom attribute) from
-        // avro, but avrocpp does not currently support custom attributes
-        if (MatchesSpecification(*specs[i], schema, entry.data_file.partition_tuple)) {
-          ++matching_specifications;
-        }
-      }
-
-      if (matching_specifications == 0) {
-        return arrow::Status::ExecutionError("Partiton specification for entry ", entry.data_file.file_path,
-                                             " is not found");
-      }
-      if (matching_specifications > 1) {
-        return arrow::Status::ExecutionError("Multiple (", matching_specifications,
-                                             ") partiton specifications for entry ", entry.data_file.file_path,
-                                             " are found");
-      }
-    }
+    ARROW_RETURN_NOT_OK(CheckPartitionTupleIsCorrect(entry));
     std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
 
+    StoreEntry(std::move(serialized_partition_key), entry);
+
+    return arrow::Status::OK();
+  }
+
+  ScanMetadata GetResult() {
+    ScanMetadata result;
+    result.schema = table_metadata_.GetCurrentSchema();
+
+    for (auto& [partition_key, partition_map] : partitions) {
+      for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
+        auto& deletes_at_current_layer = partition_map[seqnum].equality_delete_entries_;
+        deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
+                                        equality_delete_entries.end());
+      }
+    }
+
+    for (auto& [partition_key, partition_map] : partitions) {
+      ScanMetadata::Partition partition;
+      for (auto& [seqnum, layer] : partition_map) {
+        partition.emplace_back(std::move(layer));
+      }
+      result.partitions.emplace_back(std::move(partition));
+    }
+
+    return result;
+  }
+
+ private:
+  void StoreEntry(std::string serialized_partition_key, const iceberg::ManifestEntry& entry) {
     SequenceNumber sequence_number = entry.sequence_number.value();
 
     switch (entry.data_file.content) {
@@ -421,26 +413,56 @@ arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream
     }
   }
 
-  ScanMetadata result;
-  result.schema = schema;
-
-  for (auto& [partition_key, partition_map] : partitions) {
-    for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
-      auto& deletes_at_current_layer = partition_map[seqnum].equality_delete_entries_;
-      deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
-                                      equality_delete_entries.end());
+  arrow::Status CheckPartitionTupleIsCorrect(const iceberg::ManifestEntry& entry) const {
+    // https://iceberg.apache.org/docs/1.7.1/evolution/
+    // We do not know from which partition the current entry is
+    size_t matching_specifications = 0;
+    const auto& specs = table_metadata_.partition_specs;
+    for (size_t i = 0; i < specs.size(); ++i) {
+      // Matching also should use field-id from partition specification and field-id (as custom attribute) from
+      // avro, but avrocpp does not currently support custom attributes
+      if (MatchesSpecification(*specs[i], schema_, entry.data_file.partition_tuple)) {
+        ++matching_specifications;
+      }
     }
+
+    if (matching_specifications == 0) {
+      return arrow::Status::ExecutionError("Partiton specification for entry ", entry.data_file.file_path,
+                                           " is not found");
+    }
+    if (matching_specifications > 1) {
+      return arrow::Status::ExecutionError("Multiple (", matching_specifications,
+                                           ") partiton specifications for entry ", entry.data_file.file_path,
+                                           " are found");
+    }
+
+    return arrow::Status::OK();
   }
 
-  for (auto& [partition_key, partition_map] : partitions) {
-    ScanMetadata::Partition partition;
-    for (auto& [seqnum, layer] : partition_map) {
-      partition.emplace_back(std::move(layer));
+  const TableMetadataV2& table_metadata_;
+  std::shared_ptr<const iceberg::Schema> schema_;
+
+  std::map<std::string, std::map<SequenceNumber, ScanMetadata::Layer>> partitions;
+  // if there are k partitions and t global equality delete entries, k * t entries will be created
+  // TODO(gmusya): improve
+  std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
+};
+
+arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
+                                            const TableMetadataV2& table_metadata) {
+  ScanMetadataBuilder scan_metadata_builder(table_metadata);
+
+  while (true) {
+    std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();
+    if (!maybe_entry.has_value()) {
+      break;
     }
-    result.partitions.emplace_back(std::move(partition));
+
+    ManifestEntry entry = std::move(maybe_entry.value());
+    ARROW_RETURN_NOT_OK(scan_metadata_builder.AddEntry(entry));
   }
 
-  return result;
+  return scan_metadata_builder.GetResult();
 }
 
 }  // namespace iceberg::ice_tea
