@@ -39,6 +39,8 @@ struct DataEntry {
 
 struct PositionalDeleteInfo {
   std::string path;
+
+  PositionalDeleteInfo(std::string p) : path(std::move(p)) {}
 };
 
 struct EqualityDeleteInfo {
