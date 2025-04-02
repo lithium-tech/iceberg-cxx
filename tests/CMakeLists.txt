@@ -1,4 +1,5 @@
 set(iceberg_local_test_files
+    deletion_vector_test.cpp
     manifest_entry_test.cpp
     manifest_metadata_test.cpp
     validation_test.cpp

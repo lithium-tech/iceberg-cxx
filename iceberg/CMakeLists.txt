@@ -1,5 +1,7 @@
 set(iceberg_cpp_files
   catalog.h
+  deletion_vector.cpp
+  deletion_vector.h
   manifest_entry.cpp
   manifest_entry.h
   manifest_file.h
@@ -42,7 +44,7 @@ endif()
 
 add_library(iceberg-cpp STATIC ${iceberg_cpp_files})
 
-target_link_libraries(iceberg-cpp PUBLIC rapidjson _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static)
+target_link_libraries(iceberg-cpp PUBLIC rapidjson roaring _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static)
 if (USE_REST)
   target_link_libraries(iceberg-cpp PUBLIC cpr)
 endif()

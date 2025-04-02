@@ -44,6 +44,8 @@ class PuffinFile {
       int64_t length;
       std::optional<std::string> compression_codec;
       std::map<std::string, std::string> properties;
+
+      bool operator==(const BlobMetadata& other) const = default;
     };
 
     struct DeserializedFooter {
