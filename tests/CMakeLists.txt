@@ -17,7 +17,7 @@ if (USE_REST AND REST_TESTS)
 endif()
 
 add_executable(iceberg_local_test ${iceberg_local_test_files})
-target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp dl iceberg-tools)
+target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp iceberg-tools ${CMAKE_DL_LIBS})
 if (USE_REST)
     target_link_libraries(iceberg_local_test PUBLIC cpr)
 endif()
