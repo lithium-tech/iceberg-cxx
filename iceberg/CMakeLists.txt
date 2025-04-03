@@ -44,6 +44,7 @@ endif()
 
 add_library(iceberg-cpp STATIC ${iceberg_cpp_files})
 
+# TODO(gmusya): use private linkage where possible
 target_link_libraries(iceberg-cpp PUBLIC rapidjson roaring _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static)
 if (USE_REST)
   target_link_libraries(iceberg-cpp PUBLIC cpr)

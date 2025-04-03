@@ -12,6 +12,11 @@
 #include "iceberg/snapshot.h"
 #include "iceberg/table_metadata.h"
 
+#ifdef ICEBERG_STATISTICS
+#include "arrow/util/compression.h"
+#include "theta_sketch.hpp"
+#endif
+
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& p);
 
@@ -117,6 +122,29 @@ std::ostream& operator<<(std::ostream& os, const iceberg::PuffinFile::Footer::Bl
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, const iceberg::BlobMetadata& blob_metadata) {
+  os << "BlobMetadata(";
+  os << "type: " << blob_metadata.type << ", ";
+  os << "snapshot_id: " << blob_metadata.snapshot_id << ", ";
+  os << "sequence_number: " << blob_metadata.sequence_number << ", ";
+  os << "field_ids: " << blob_metadata.field_ids << ", ";
+  os << "properties: " << blob_metadata.properties;
+  os << ")";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const iceberg::Statistics& statistics) {
+  os << "Statistics(";
+  os << "snapshot_id: " << statistics.snapshot_id << ", ";
+  os << "statistics_path: " << statistics.statistics_path << ", ";
+  os << "file_size_in_bytes: " << statistics.file_size_in_bytes << ", ";
+  os << "file_footer_size_in_bytes: " << statistics.file_footer_size_in_bytes << ", ";
+  os << "key_metadata: " << statistics.key_metadata.value_or("") << ", ";
+  os << "blob_metadata: " << statistics.blob_metadata;
+  os << ")";
+  return os;
+}
+
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& p) {
   os << "[";
@@ -165,6 +193,11 @@ ABSL_FLAG(std::string, manifest_entry_location, "", "manifest entry file locatio
 
 ABSL_FLAG(std::string, stats_file_location, "", "stats file location");
 
+ABSL_FLAG(std::string, theta_sketch_location, "", "theta sketch file location");
+ABSL_FLAG(int64_t, length, -1, "theta sketch length");
+ABSL_FLAG(int64_t, offset, -1, "theta sketch offset");
+ABSL_FLAG(std::string, codec, "", "theta sketch codec");
+
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
 
@@ -206,7 +239,7 @@ int main(int argc, char** argv) {
     // std::cout << "metadata_log: " << table_metadata->metadata_log << std::endl;
     // std::cout << "sort_orders: " << table_metadata->sort_orders << std::endl;
     std::cout << "default_sort_order_id: " << table_metadata->default_sort_order_id << std::endl;
-    // std::cout << "statistics: " << table_metadata->statistics << std::endl;
+    std::cout << "statistics: " << table_metadata->statistics << std::endl;
     // std::cout << "refs: " << table_metadata->refs << std::endl;
     return 0;
   }
@@ -270,6 +303,82 @@ int main(int argc, char** argv) {
     std::cout << "properties: " << deserialized_footer.properties << std::endl;
     return 0;
   }
+
+#ifdef ICEBERG_STATISTICS
+  if (mode == "print-theta-sketch") {
+    const std::string theta_sketch_location = absl::GetFlag(FLAGS_theta_sketch_location);
+    const int64_t offset = absl::GetFlag(FLAGS_offset);
+    const int64_t length = absl::GetFlag(FLAGS_length);
+    const std::string codec_name = absl::GetFlag(FLAGS_codec);
+
+    if (theta_sketch_location.empty()) {
+      std::cerr << "theta_sketch_location is not set" << std::endl;
+      return 1;
+    }
+
+    if (offset == -1) {
+      std::cerr << "offset is not set" << std::endl;
+      return 1;
+    }
+
+    if (length == -1) {
+      std::cerr << "length is not set" << std::endl;
+      return 1;
+    }
+
+    std::ifstream is(theta_sketch_location, std::ios::binary);
+    std::stringstream ss;
+    ss << is.rdbuf();
+    std::string data = ss.str();
+    data = data.substr(offset, length);
+
+    if (!codec_name.empty()) {
+      if (codec_name == "zstd") {
+        auto maybe_codec = arrow::util::Codec::Create(arrow::Compression::type::ZSTD);
+        if (!maybe_codec.ok()) {
+          std::cerr << maybe_codec.status() << std::endl;
+          return 1;
+        }
+
+        auto codec = maybe_codec.MoveValueUnsafe();
+        auto maybe_decompressor = codec->MakeDecompressor();
+        if (!maybe_decompressor.ok()) {
+          std::cerr << maybe_decompressor.status() << std::endl;
+          return 1;
+        }
+        auto decompressor = maybe_decompressor.MoveValueUnsafe();
+        std::string decompressed_data;
+        decompressed_data.resize(data.size() * 10);
+        while (true) {
+          auto maybe_result =
+              decompressor->Decompress(data.size(), reinterpret_cast<const uint8_t*>(data.data()), data.size() * 10,
+                                       reinterpret_cast<uint8_t*>(decompressed_data.data()));
+          if (!maybe_result.ok()) {
+            std::cerr << "Failed to decompress:" << maybe_result.status();
+            return 1;
+          }
+          auto result = maybe_result.MoveValueUnsafe();
+          if (result.need_more_output) {
+            std::cerr << "Failed to decompress in one shot" << std::endl;
+            return 1;
+          }
+          decompressed_data.resize(result.bytes_written);
+          break;
+        }
+        std::swap(decompressed_data, data);
+      } else {
+        std::cerr << "Codec '" << codec_name << "' is not supported" << std::endl;
+        return 1;
+      }
+    }
+
+    std::stringstream sketch_stream(data);
+
+    auto sketch = datasketches::compact_theta_sketch::deserialize(sketch_stream);
+    std::cout << sketch.to_string() << std::endl;
+    return 0;
+  }
+#endif
 
   std::cerr << "Unexpected mode" << std::endl;
   return 1;

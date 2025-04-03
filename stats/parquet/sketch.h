@@ -16,7 +16,7 @@ class SketchWrapper {
   template <typename... Args>
   explicit SketchWrapper(Args... args) : sketch_(std::forward<Args>(args)...) {}
 
-  void SetFBLALength(int64_t length) { fbla_length_ = length; }
+  void SetFLBALength(int64_t length) { flba_length_ = length; }
 
   void AppendValues(const void* data, uint64_t num_values, parquet::Type::type type) {
     switch (type) {
@@ -37,7 +37,7 @@ class SketchWrapper {
       case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
         const parquet::FixedLenByteArray* values = reinterpret_cast<const parquet::FixedLenByteArray*>(data);
         for (uint64_t i = 0; i < num_values; ++i) {
-          sketch_.AppendValue(values[i].ptr, fbla_length_);
+          sketch_.AppendValue(values[i].ptr, flba_length_);
         }
         break;
       }
@@ -60,7 +60,7 @@ class SketchWrapper {
 
  private:
   Sketch sketch_;
-  int64_t fbla_length_;
+  int64_t flba_length_;
 };
 
 }  // namespace stats

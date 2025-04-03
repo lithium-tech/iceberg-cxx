@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "stats/datasketch/distinct.h"
+#include "stats/datasketch/distinct_theta.h"
 #include "stats/naive/distinct.h"
 #include "stats/parquet/sketch.h"
 
@@ -12,13 +13,16 @@ using NaiveDistinctCounterWrapper = SketchWrapper<NaiveDistinctCounter>;
 
 using HLLDistinctCounterWrapper = SketchWrapper<HLLDistinctCounter>;
 
+using ThetaDistinctCounterWrapper = SketchWrapper<ThetaDistinctCounter>;
+
 class CommonDistinctWrapper {
  public:
   explicit CommonDistinctWrapper(NaiveDistinctCounterWrapper&& naive) : impl_(std::move(naive)) {}
   explicit CommonDistinctWrapper(HLLDistinctCounterWrapper&& hll) : impl_(std::move(hll)) {}
+  explicit CommonDistinctWrapper(ThetaDistinctCounterWrapper&& theta) : impl_(std::move(theta)) {}
 
-  void SetFBLALength(int64_t length) {
-    return std::visit([&](auto&& arg) { return arg.SetFBLALength(length); }, impl_);
+  void SetFLBALength(int64_t length) {
+    return std::visit([&](auto&& arg) { return arg.SetFLBALength(length); }, impl_);
   }
 
   void AppendValues(const void* data, uint64_t num_values, parquet::Type::type type) {
@@ -35,8 +39,13 @@ class CommonDistinctWrapper {
         impl_);
   }
 
+  using SketchVariant =
+      std::variant<HLLDistinctCounterWrapper, NaiveDistinctCounterWrapper, ThetaDistinctCounterWrapper>;
+
+  const SketchVariant& GetState() const { return impl_; }
+
  private:
-  std::variant<HLLDistinctCounterWrapper, NaiveDistinctCounterWrapper> impl_;
+  SketchVariant impl_;
 };
 
 }  // namespace stats

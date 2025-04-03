@@ -12,7 +12,7 @@ class CommonQuantileWrapper {
  public:
   explicit CommonQuantileWrapper(stats::Type type) : sketch_(type) {}
 
-  void SetFBLALength(int64_t length) { return sketch_.SetFBLALength(length); }
+  void SetFLBALength(int64_t length) { return sketch_.SetFLBALength(length); }
 
   void AppendValues(const void* data, uint64_t num_values, parquet::Type::type type) {
     return sketch_.AppendValues(data, num_values, type);
