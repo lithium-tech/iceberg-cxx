@@ -60,21 +60,41 @@ TEST(ReferencedDataFile, ManifestEntry) {
   EXPECT_EQ(result.entries[0].data_file.referenced_data_file.value(), "s3://non-existing-data-path");
 }
 
+ManifestEntry MakeDataEntry(const std::string& data_path) {
+  ManifestEntry entry;
+  entry.status = ManifestEntry::Status::kAdded;
+  entry.data_file.content = ContentFile::FileContent::kData;
+  entry.data_file.file_format = "PARQUET";
+  entry.data_file.file_path = data_path;
+  entry.data_file.record_count = 1;
+  entry.data_file.file_size_in_bytes = 123;
+
+  return entry;
+}
+
+ManifestEntry MakePositionalDeleteEntry(const std::string& delete_path, const std::string& referenced_data_file) {
+  ManifestEntry entry;
+  entry.status = ManifestEntry::Status::kAdded;
+  entry.data_file.content = ContentFile::FileContent::kPositionDeletes;
+  entry.data_file.file_format = "PARQUET";
+  entry.data_file.file_path = delete_path;
+  entry.data_file.record_count = 1;
+  entry.data_file.file_size_in_bytes = 123;
+  entry.data_file.referenced_data_file = referenced_data_file;
+
+  return entry;
+}
+
 TEST(ReferencedDataFile, GetScanMetadata) {
   ScopedTempDir dir;
   {
     Manifest manifest;
     {
-      ManifestEntry entry;
-      entry.status = ManifestEntry::Status::kAdded;
-      entry.data_file.content = ContentFile::FileContent::kPositionDeletes;
-      entry.data_file.file_format = "PARQUET";
-      entry.data_file.file_path = "s3://non-existing-delete-path";
-      entry.data_file.record_count = 1;
-      entry.data_file.file_size_in_bytes = 123;
-      entry.data_file.referenced_data_file = "s3://non-existing-data-path";
-
-      manifest.entries = {entry};
+      manifest.entries.emplace_back(MakeDataEntry("data1"));
+      manifest.entries.emplace_back(MakeDataEntry("data2"));
+      manifest.entries.emplace_back(MakePositionalDeleteEntry("delete1", "data1"));
+      manifest.entries.emplace_back(MakePositionalDeleteEntry("delete2", "data2"));
+      manifest.entries.emplace_back(MakePositionalDeleteEntry("delete3", "data1"));
     }
 
     std::string data = ice_tea::WriteManifestEntries(manifest);
@@ -143,13 +163,29 @@ TEST(ReferencedDataFile, GetScanMetadata) {
 
   auto s = ice_tea::GetScanMetadata(fs, snapshot_path);
 
-  ASSERT_FALSE(s.ok());
-  EXPECT_EQ(s.status().message(), std::string("Referenced data file for delete files is not supported yet"));
-
-// TODO(gmusya)
-#if 0
   ASSERT_EQ(s.status(), arrow::Status::OK());
-#endif
+  auto& parts = s->partitions;
+
+  ASSERT_EQ(parts.size(), 2);
+  std::sort(parts.begin(), parts.end(), [](const auto& lhs, const auto& rhs) {
+    return lhs[0].data_entries_[0].path < rhs[0].data_entries_[0].path;
+  });
+
+  ASSERT_EQ(parts[0].size(), 1);
+
+  ASSERT_EQ(parts[0][0].data_entries_.size(), 1);
+  EXPECT_EQ(parts[0][0].data_entries_[0].path, "data1");
+
+  ASSERT_EQ(parts[0][0].positional_delete_entries_.size(), 2);
+  EXPECT_EQ(parts[0][0].positional_delete_entries_[0].path, "delete1");
+  EXPECT_EQ(parts[0][0].positional_delete_entries_[1].path, "delete3");
+
+  ASSERT_EQ(parts[1].size(), 1);
+
+  ASSERT_EQ(parts[1][0].data_entries_.size(), 1);
+  EXPECT_EQ(parts[1][0].data_entries_[0].path, "data2");
+  ASSERT_EQ(parts[1][0].positional_delete_entries_.size(), 1);
+  EXPECT_EQ(parts[1][0].positional_delete_entries_[0].path, "delete2");
 }
 
 }  // namespace

@@ -326,10 +326,6 @@ class ScanMetadataBuilder {
       : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()) {}
 
   arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
-    if (entry.data_file.referenced_data_file.has_value()) {
-      return arrow::Status::ExecutionError("Referenced data file for delete files is not supported yet");
-    }
-
     if (entry.status == ManifestEntry::Status::kDeleted) {
       return arrow::Status::OK();
     }
@@ -448,9 +444,156 @@ class ScanMetadataBuilder {
   std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
 };
 
+class ReferencedDataFileAwareScanPlanner {
+ public:
+  explicit ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
+      : default_scan_metadata_builder_(table_metadata) {}
+
+  arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
+    if (entry.status == iceberg::ManifestEntry::Status::kDeleted) {
+      return arrow::Status::OK();
+    }
+
+    switch (entry.data_file.content) {
+      case iceberg::DataFile::FileContent::kData:
+        break;
+      case iceberg::DataFile::FileContent::kEqualityDeletes:
+        has_equality_delete = true;
+        break;
+      case iceberg::DataFile::FileContent::kPositionDeletes:
+        if (entry.data_file.referenced_data_file.has_value()) {
+          has_referenced_data_file = true;
+          if (delete_file_path_to_referenced_data_file_path_.contains(entry.data_file.file_path)) {
+            return arrow::Status::ExecutionError("Two delete files with same path: " + entry.data_file.file_path);
+          }
+          delete_file_path_to_referenced_data_file_path_[entry.data_file.file_path] =
+              entry.data_file.referenced_data_file.value();
+        } else {
+          all_pos_deletes_annotated_with_referenced_data_file = false;
+        }
+        break;
+    }
+
+    return default_scan_metadata_builder_.AddEntry(entry);
+  }
+
+  arrow::Result<ScanMetadata> GetResult() {
+    ScanMetadata meta = default_scan_metadata_builder_.GetResult();
+
+    {
+      // there is nothing to optimize
+      if (!has_referenced_data_file) {
+        return meta;
+      }
+
+      // cannot optimize with current interface
+      // also optimizing case with both positional and equality deletes seems unnecessary
+      if (has_equality_delete) {
+        return meta;
+      }
+
+      // it is possible to optimize in this case, but it seems as rare case
+      if (!all_pos_deletes_annotated_with_referenced_data_file) {
+        return meta;
+      }
+    }
+
+    // now we know that:
+    // * all deletes are positional
+    // * all deletes are annotated with reference data file
+
+    ScanMetadata result;
+    result.schema = meta.schema;
+
+    // data without deletes are stored in 0-th layer of 0-th partition
+    // other partitions will contain exactly one data file and all deletes for this file (in one layer)
+    {
+      ScanMetadata::Layer layer{};
+      ScanMetadata::Partition partition;
+      partition.emplace_back(std::move(layer));
+      result.partitions.emplace_back(std::move(partition));
+    }
+
+    for (auto&& part : meta.partitions) {
+      ARROW_RETURN_NOT_OK(HandlePartition(std::move(part), result));
+    }
+
+    // if there are no data files without deletes, then 0-th partitions is empty
+    // remove empty partition from result
+    if (result.partitions[0][0].data_entries_.empty()) {
+      result.partitions.erase(result.partitions.begin());
+    }
+
+    return result;
+  }
+
+ private:
+  arrow::Status HandlePartition(ScanMetadata::Partition&& part, ScanMetadata& result) {
+    using LayerNumber = uint32_t;
+
+    std::map<std::string, std::pair<DataEntry, LayerNumber>> data_file_name_to_data_entry_;
+    std::map<std::string, std::vector<std::pair<PositionalDeleteInfo, LayerNumber>>> data_file_name_to_posdel_entries_;
+
+    for (LayerNumber layer_no = 0; layer_no < part.size(); ++layer_no) {
+      auto&& layer = std::move(part[layer_no]);
+      for (auto&& data_entry : layer.data_entries_) {
+        std::string path = data_entry.path;
+
+        if (data_file_name_to_data_entry_.contains(path)) {
+          return arrow::Status::ExecutionError(
+              "Error in iceberg metadata. There are at least two data entries with path ", path);
+        }
+        data_file_name_to_data_entry_.emplace(std::move(path), std::make_pair(std::move(data_entry), layer_no));
+      }
+
+      for (auto&& del_entry : layer.positional_delete_entries_) {
+        if (!delete_file_path_to_referenced_data_file_path_.contains(del_entry.path)) {
+          return arrow::Status::ExecutionError(__PRETTY_FUNCTION__, ": internal error for delete ", del_entry.path);
+        }
+        std::string data_path = delete_file_path_to_referenced_data_file_path_.at(del_entry.path);
+        data_file_name_to_posdel_entries_[data_path].emplace_back(std::move(del_entry), layer_no);
+      }
+    }
+
+    for (auto&& [data_path, data_entry_with_layer_no] : data_file_name_to_data_entry_) {
+      auto& [data_entry, data_layer_no] = data_entry_with_layer_no;
+      if (!data_file_name_to_posdel_entries_.contains(data_path)) {
+        result.partitions[0][0].data_entries_.emplace_back(std::move(data_entry));
+        continue;
+      }
+
+      result.partitions.emplace_back();
+      auto& new_partition = result.partitions.back();
+      new_partition.emplace_back();
+      auto& new_layer = new_partition.back();
+
+      new_layer.data_entries_.emplace_back(std::move(data_entry));
+
+      // ignore deletes with sequence number less than sequence number in data file
+      auto& deletes = data_file_name_to_posdel_entries_.at(data_path);
+      for (auto& [del, del_layer_no] : deletes) {
+        if (del_layer_no < data_layer_no) {
+          continue;
+        }
+
+        new_layer.positional_delete_entries_.emplace_back(std::move(del));
+      }
+    }
+
+    return arrow::Status::OK();
+  }
+
+  std::map<std::string, std::string> delete_file_path_to_referenced_data_file_path_;
+  ScanMetadataBuilder default_scan_metadata_builder_;
+
+  bool all_pos_deletes_annotated_with_referenced_data_file = true;
+  bool has_equality_delete = false;
+  bool has_referenced_data_file = false;
+};
+
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
                                             const TableMetadataV2& table_metadata) {
-  ScanMetadataBuilder scan_metadata_builder(table_metadata);
+  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata);
 
   while (true) {
     std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();

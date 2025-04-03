@@ -24,6 +24,8 @@ struct DataEntry {
     int64_t length;  // 0 <=> until end
   };
 
+  DataEntry(DataEntry&& other) = default;
+  DataEntry& operator=(DataEntry&& other) = default;
   DataEntry() = delete;
   DataEntry(std::string p) : path(std::move(p)) {}
   DataEntry(std::string other_path, std::vector<Segment> other_parts)
