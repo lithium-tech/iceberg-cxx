@@ -20,6 +20,8 @@ struct DataEntry {
     Segment() = delete;
     Segment(int64_t off, int64_t len) : offset(off), length(len) {}
 
+    bool operator==(const Segment& other) const = default;
+
     int64_t offset;
     int64_t length;  // 0 <=> until end
   };
@@ -34,6 +36,8 @@ struct DataEntry {
   std::string path;
   std::vector<Segment> parts;
 
+  bool operator==(const DataEntry& other) const = default;
+
   inline void SortParts() {
     std::sort(parts.begin(), parts.end(), [&](const auto& lhs, const auto& rhs) { return lhs.offset < rhs.offset; });
   }
@@ -43,6 +47,8 @@ struct PositionalDeleteInfo {
   std::string path;
 
   PositionalDeleteInfo(std::string p) : path(std::move(p)) {}
+
+  bool operator==(const PositionalDeleteInfo& other) const = default;
 };
 
 struct EqualityDeleteInfo {
@@ -50,6 +56,8 @@ struct EqualityDeleteInfo {
   std::vector<int32_t> field_ids;
 
   EqualityDeleteInfo(std::string p, std::vector<int32_t> f) : path(std::move(p)), field_ids(std::move(f)) {}
+
+  bool operator==(const EqualityDeleteInfo& other) const = default;
 };
 
 struct ScanMetadata {
@@ -57,12 +65,16 @@ struct ScanMetadata {
     std::vector<DataEntry> data_entries_;
     std::vector<PositionalDeleteInfo> positional_delete_entries_;
     std::vector<EqualityDeleteInfo> equality_delete_entries_;
+
+    bool operator==(const Layer& layer) const = default;
   };
 
   using Partition = std::vector<Layer>;
 
   std::shared_ptr<Schema> schema;
   std::vector<Partition> partitions;
+
+  bool operator==(const ScanMetadata& scan_meta) const = default;
 };
 
 arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& url);

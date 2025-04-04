@@ -51,6 +51,8 @@ class Schema {
     return ids;
   }
 
+  bool operator==(const Schema& schema) const = default;
+
  private:
   int32_t schema_id_;
   std::vector<types::NestedField> fields_;
