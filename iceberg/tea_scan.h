@@ -26,6 +26,8 @@ struct DataEntry {
     int64_t length;  // 0 <=> until end
   };
 
+  DataEntry(const DataEntry&) = default;
+  DataEntry& operator=(const DataEntry&) = default;
   DataEntry(DataEntry&& other) = default;
   DataEntry& operator=(DataEntry&& other) = default;
   DataEntry() = delete;
