@@ -36,6 +36,10 @@ set(iceberg_cpp_files
   parquet/io.h
   tea_remote_catalog.cpp
   tea_remote_catalog.h
+  tea_scan_hashers.cpp
+  tea_scan_hashers.h
+  experimental_representations.cpp
+  experimental_representations.h
 )
 
 if (USE_REST)

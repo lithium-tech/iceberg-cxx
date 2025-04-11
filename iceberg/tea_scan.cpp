@@ -5,20 +5,25 @@
 #include <memory>
 #include <queue>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
+#include <variant>
 
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/io/file.h"
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
+#include "iceberg/experimental_representations.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
 #include "iceberg/result.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"
 #include "iceberg/tea_column_stats.h"
+#include "iceberg/tea_scan_hashers.h"
 #include "iceberg/type.h"
 
 namespace iceberg::ice_tea {
@@ -122,6 +127,38 @@ std::string SerializePartitionTuple(const DataFile::PartitionTuple& partition_tu
 }
 
 }  // namespace
+
+DataEntry operator+(const DataEntry& lhs, const DataEntry& rhs) {
+  if (lhs.path != rhs.path) {
+    throw std::runtime_error("Pathes of left and right entries are not equals: " + lhs.path + ", " + rhs.path);
+  }
+
+  std::vector<DataEntry::Segment> all_segments = lhs.parts;
+  for (const auto& elem : rhs.parts) {
+    all_segments.push_back(elem);
+  }
+  std::sort(all_segments.begin(), all_segments.end(),
+            [](const auto& lhs, const auto& rhs) { return lhs.offset < rhs.offset; });
+  all_segments = experimental::UniteSegments(all_segments);
+  return DataEntry(lhs.path, all_segments);
+}
+
+DataEntry& DataEntry::operator+=(const DataEntry& other) {
+  if (path != other.path) {
+    throw std::runtime_error("Pathes of left and right entries are not equals: " + path + ", " + other.path);
+  }
+
+  for (const auto& elem : other.parts) {
+    parts.push_back(elem);
+  }
+  std::sort(parts.begin(), parts.end(), [](const auto& lhs, const auto& rhs) { return lhs.offset < rhs.offset; });
+  parts = experimental::UniteSegments(parts);
+  return *this;
+}
+
+bool ScanMetadata::Layer::Empty() const {
+  return data_entries_.empty() && positional_delete_entries_.empty() && equality_delete_entries_.empty();
+}
 
 arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenFile(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                                      const std::string& url) {

@@ -35,6 +35,8 @@ struct DataEntry {
   DataEntry(std::string other_path, std::vector<Segment> other_parts)
       : path(std::move(other_path)), parts(std::move(other_parts)) {}
 
+  DataEntry& operator+=(const DataEntry& other);
+
   std::string path;
   std::vector<Segment> parts;
 
@@ -44,6 +46,8 @@ struct DataEntry {
     std::sort(parts.begin(), parts.end(), [&](const auto& lhs, const auto& rhs) { return lhs.offset < rhs.offset; });
   }
 };
+
+DataEntry operator+(const DataEntry& lhs, const DataEntry& rhs);
 
 struct PositionalDeleteInfo {
   std::string path;
@@ -69,6 +73,8 @@ struct ScanMetadata {
     std::vector<EqualityDeleteInfo> equality_delete_entries_;
 
     bool operator==(const Layer& layer) const = default;
+
+    bool Empty() const;
   };
 
   using Partition = std::vector<Layer>;

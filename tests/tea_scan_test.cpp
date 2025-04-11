@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "gtest/gtest.h"
+#include "iceberg/experimental_representations.h"
 #include "iceberg/type.h"
 
 namespace iceberg {
@@ -138,6 +139,145 @@ TEST(GetScanMetadata, WithMultipleMatchingPartitionSpecs) {
             "Multiple (2) partiton specifications for entry "
             "s3a://warehouse/partitioned_table/data/c1=2/c2=2025-03-04/"
             "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet are found");
+}
+
+TEST(GetScanMetadata, EqualityDataEntries) {
+  ice_tea::DataEntry data_entry1(
+      "a", {ice_tea::DataEntry::Segment(3, 5), ice_tea::DataEntry::Segment(10, 3), ice_tea::DataEntry::Segment(13, 2)});
+  ice_tea::DataEntry data_entry2(
+      "a", {ice_tea::DataEntry::Segment(3, 2), ice_tea::DataEntry::Segment(5, 3), ice_tea::DataEntry::Segment(10, 5)});
+  ice_tea::DataEntry data_entry3("a", {ice_tea::DataEntry::Segment(3, 2), ice_tea::DataEntry::Segment(5, 8)});
+
+  EXPECT_TRUE(experimental::AreDataEntriesEqual(data_entry1, data_entry2));
+  EXPECT_FALSE(experimental::AreDataEntriesEqual(data_entry1, data_entry3));
+  EXPECT_FALSE(experimental::AreDataEntriesEqual(data_entry2, data_entry3));
+
+  ice_tea::DataEntry data_entry4("a", {ice_tea::DataEntry::Segment(3, 0)});
+  ice_tea::DataEntry data_entry5("a", {ice_tea::DataEntry::Segment(3, 2), ice_tea::DataEntry::Segment(5, 0)});
+
+  EXPECT_TRUE(experimental::AreDataEntriesEqual(data_entry4, data_entry5));
+}
+
+TEST(GetScanMetadata, EqualityScanMetadataWithoutDeletes) {
+  ice_tea::ScanMetadata scan_meta1;
+  ice_tea::ScanMetadata scan_meta2;
+  ice_tea::ScanMetadata scan_meta3;
+  ice_tea::ScanMetadata scan_meta4;
+
+  ice_tea::DataEntry data_entry1("a");
+  ice_tea::DataEntry data_entry2("b");
+  ice_tea::DataEntry data_entry3("c");
+
+  scan_meta1.partitions.push_back(
+      ice_tea::ScanMetadata::Partition{ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry1}}});
+  scan_meta1.partitions.push_back(
+      ice_tea::ScanMetadata::Partition{ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry2}}});
+  scan_meta1.partitions.push_back(
+      ice_tea::ScanMetadata::Partition{ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry3}}});
+
+  scan_meta2.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry1}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry2}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry3}},
+  });
+
+  scan_meta3.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry1, data_entry2, data_entry3}},
+  });
+
+  scan_meta4.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry1, data_entry2}},
+  });
+
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta1));
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta2));
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta3));
+  EXPECT_FALSE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta4));
+
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta2, scan_meta2));
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta2, scan_meta3));
+  EXPECT_FALSE(experimental::AreScanMetadataEqual(scan_meta2, scan_meta4));
+
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta3, scan_meta3));
+  EXPECT_FALSE(experimental::AreScanMetadataEqual(scan_meta3, scan_meta4));
+
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta4, scan_meta4));
+}
+
+TEST(GetScanMetadata, EqualityScanMetadataWithDeletes) {
+  ice_tea::ScanMetadata scan_meta1;
+  ice_tea::ScanMetadata scan_meta2;
+  ice_tea::ScanMetadata scan_meta3;
+  ice_tea::ScanMetadata scan_meta4;
+
+  ice_tea::DataEntry data_entry1("a");
+  ice_tea::DataEntry data_entry2("b");
+  ice_tea::DataEntry data_entry3("c");
+  ice_tea::DataEntry data_entry4("c");
+
+  ice_tea::PositionalDeleteInfo pos_delete1("p_a");
+
+  ice_tea::EqualityDeleteInfo eq_delete1("eq_a", {});
+
+  scan_meta1.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry1}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry2, data_entry3, data_entry4}},
+      ice_tea::ScanMetadata::Layer{.equality_delete_entries_ = std::vector{eq_delete1}},
+  });
+
+  scan_meta2.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry1},
+                                   .equality_delete_entries_ = std::vector{eq_delete1}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry2, data_entry3, data_entry4}},
+      ice_tea::ScanMetadata::Layer{.positional_delete_entries_ = std::vector{pos_delete1}},
+  });
+
+  scan_meta3.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.equality_delete_entries_ = std::vector{eq_delete1}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry3, data_entry1}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry4, data_entry2},
+                                   .positional_delete_entries_ = std::vector{pos_delete1}},
+  });
+
+  scan_meta4.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.equality_delete_entries_ = std::vector{eq_delete1}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry3, data_entry1}},
+      ice_tea::ScanMetadata::Layer{.positional_delete_entries_ = std::vector{pos_delete1}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry4, data_entry2}},
+  });
+
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(iceberg::ice_tea::ScanMetadata{}, iceberg::ice_tea::ScanMetadata{}));
+
+  EXPECT_FALSE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta2));
+  EXPECT_FALSE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta3));
+  EXPECT_FALSE(experimental::AreScanMetadataEqual(scan_meta2, scan_meta3));
+
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta3, scan_meta4));
+}
+
+TEST(GetScanMetadata, EqualityScanMetadataWithMultipleSegments) {
+  ice_tea::ScanMetadata scan_meta1;
+  ice_tea::ScanMetadata scan_meta2;
+  ice_tea::ScanMetadata scan_meta3;
+
+  ice_tea::DataEntry data_entry1("a", {ice_tea::DataEntry::Segment(3, 5), ice_tea::DataEntry::Segment(10, 5)});
+  ice_tea::DataEntry data_entry2("a", {ice_tea::DataEntry::Segment(3, 5)});
+  ice_tea::DataEntry data_entry3("a", {ice_tea::DataEntry::Segment(10, 5)});
+
+  scan_meta1.partitions.push_back(
+      ice_tea::ScanMetadata::Partition{ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry1}}});
+
+  scan_meta2.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry2}},
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry3}},
+  });
+
+  scan_meta3.partitions.push_back(ice_tea::ScanMetadata::Partition{
+      ice_tea::ScanMetadata::Layer{.data_entries_ = std::vector{data_entry1, data_entry2}},
+  });
+
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta2));
+  EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta3));
 }
 
 }  // namespace
