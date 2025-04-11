@@ -181,8 +181,38 @@ struct PartitionKeyField {
   PartitionKeyField(std::string n, std::shared_ptr<const iceberg::types::Type> t) : name(std::move(n)), type(t) {}
 };
 
-Manifest ReadManifestEntries(std::istream& istream);
-Manifest ReadManifestEntries(const std::string& data);
+struct DataFileDeserializerConfig {
+  bool extract_content = true;
+  bool extract_file_path = true;
+  bool extract_file_format = true;
+  bool extract_partition_tuple = true;
+  bool extract_record_count = true;
+  bool extract_file_size_in_bytes = true;
+  bool extract_column_sizes = true;
+  bool extract_value_counts = true;
+  bool extract_null_value_counts = true;
+  bool extract_nan_value_counts = true;
+  bool extract_distinct_counts = true;
+  bool extract_lower_bounds = true;
+  bool extract_upper_bounds = true;
+  // bool extract_key_metadata = true;
+  bool extract_split_offsets = true;
+  bool extract_equality_ids = true;
+  bool extract_sort_order_id = true;
+  bool extract_referenced_data_file = true;
+};
+
+struct ManifestEntryDeserializerConfig {
+  bool extract_status = true;
+  bool extract_snapshot_id = true;
+  bool extract_sequence_number = true;
+  bool extract_file_sequence_number = true;
+
+  DataFileDeserializerConfig datafile_config = {};
+};
+
+Manifest ReadManifestEntries(std::istream& istream, const ManifestEntryDeserializerConfig& config = {});
+Manifest ReadManifestEntries(const std::string& data, const ManifestEntryDeserializerConfig& config = {});
 std::string WriteManifestEntries(const Manifest& manifest_entries,
                                  const std::vector<PartitionKeyField>& partition_spec = {});
 

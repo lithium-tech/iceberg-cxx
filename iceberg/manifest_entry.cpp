@@ -329,47 +329,84 @@ DataFile::PartitionTuple Deserialize(const avro::GenericDatum& datum) {
   return result;
 }
 
-template <>
-DataFile Deserialize(const avro::GenericDatum& datum) {
-  if (datum.type() != avro::AVRO_RECORD) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": data.type() is not record");
+template <typename T>
+void ExtractIf(const avro::GenericRecord& datum, const std::string& name, T& value, bool cond) {
+  if (cond) {
+    value = Extract<T>(datum, name);
   }
-  const auto& record = datum.value<avro::GenericRecord>();
-
-  DataFile data_file;
-  data_file.file_path = Extract<std::string>(record, "file_path");
-  data_file.content = static_cast<DataFile::FileContent>(Extract<int>(record, "content"));
-  data_file.file_format = Extract<std::string>(record, "file_format");
-  data_file.record_count = Extract<int64_t>(record, "record_count");
-  data_file.file_size_in_bytes = Extract<int64_t>(record, "file_size_in_bytes");
-  data_file.sort_order_id = Extract<std::optional<int32_t>>(record, "sort_order_id");
-  data_file.referenced_data_file = Extract<std::optional<std::string>>(record, "referenced_data_file");
-  data_file.column_sizes = Extract<std::map<int32_t, int64_t>>(record, "column_sizes");
-  data_file.value_counts = Extract<std::map<int32_t, int64_t>>(record, "value_counts");
-  data_file.split_offsets = Extract<std::vector<int64_t>>(record, "split_offsets");
-  data_file.null_value_counts = Extract<std::map<int32_t, int64_t>>(record, "null_value_counts");
-  data_file.lower_bounds = Extract<std::map<int32_t, std::vector<uint8_t>>>(record, "lower_bounds");
-  data_file.upper_bounds = Extract<std::map<int32_t, std::vector<uint8_t>>>(record, "upper_bounds");
-  data_file.partition_tuple = Extract<DataFile::PartitionTuple>(record, "partition");
-  data_file.equality_ids = Extract<std::vector<int32_t>>(record, "equality_ids");
-  return data_file;
 }
 
-template <>
-ManifestEntry Deserialize(const avro::GenericDatum& datum) {
-  if (datum.type() != avro::AVRO_RECORD) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": datum.type() is not record");
-  }
-  const auto& record = datum.value<avro::GenericRecord>();
+class DataFileDeserializer {
+ public:
+  DataFileDeserializer(const DataFileDeserializerConfig& config) : config_(config) {}
 
-  ManifestEntry entry;
-  entry.status = static_cast<ManifestEntry::Status>(Extract<int>(record, "status"));
-  entry.snapshot_id = Extract<std::optional<int64_t>>(record, "snapshot_id");
-  entry.sequence_number = Extract<std::optional<int64_t>>(record, "sequence_number");
-  entry.file_sequence_number = Extract<std::optional<int64_t>>(record, "file_sequence_number");
-  entry.data_file = Extract<DataFile>(record, "data_file");
-  return entry;
-}
+  DataFile Deserialize(const avro::GenericDatum& datum) {
+    if (datum.type() != avro::AVRO_RECORD) {
+      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": data.type() is not record");
+    }
+    const auto& record = datum.value<avro::GenericRecord>();
+
+    DataFile data_file{};
+    ExtractIf<std::string>(record, "file_path", data_file.file_path, config_.extract_file_path);
+
+    if (config_.extract_content) {
+      data_file.content = static_cast<DataFile::FileContent>(Extract<int>(record, "content"));
+    }
+    ExtractIf<std::string>(record, "file_format", data_file.file_format, config_.extract_file_format);
+    ExtractIf<int64_t>(record, "record_count", data_file.record_count, config_.extract_record_count);
+    ExtractIf<int64_t>(record, "file_size_in_bytes", data_file.file_size_in_bytes, config_.extract_file_size_in_bytes);
+    ExtractIf<std::optional<int32_t>>(record, "sort_order_id", data_file.sort_order_id, config_.extract_sort_order_id);
+    ExtractIf<std::optional<std::string>>(record, "referenced_data_file", data_file.referenced_data_file,
+                                          config_.extract_referenced_data_file);
+    ExtractIf<std::map<int32_t, int64_t>>(record, "column_sizes", data_file.column_sizes, config_.extract_column_sizes);
+    ExtractIf<std::map<int32_t, int64_t>>(record, "value_counts", data_file.value_counts, config_.extract_value_counts);
+    ExtractIf<std::vector<int64_t>>(record, "split_offsets", data_file.split_offsets, config_.extract_split_offsets);
+    ExtractIf<std::map<int32_t, int64_t>>(record, "null_value_counts", data_file.null_value_counts,
+                                          config_.extract_null_value_counts);
+    ExtractIf<std::map<int32_t, std::vector<uint8_t>>>(record, "lower_bounds", data_file.lower_bounds,
+                                                       config_.extract_lower_bounds);
+    ExtractIf<std::map<int32_t, std::vector<uint8_t>>>(record, "upper_bounds", data_file.upper_bounds,
+                                                       config_.extract_upper_bounds);
+    ExtractIf<DataFile::PartitionTuple>(record, "partition", data_file.partition_tuple,
+                                        config_.extract_partition_tuple);
+    ExtractIf<std::vector<int32_t>>(record, "equality_ids", data_file.equality_ids, config_.extract_equality_ids);
+    return data_file;
+  }
+
+ private:
+  DataFileDeserializerConfig config_;
+};
+
+class ManifestEntryDeserializer {
+ public:
+  ManifestEntryDeserializer(const ManifestEntryDeserializerConfig& config) : config_(config) {}
+
+  ManifestEntry Deserialize(const avro::GenericDatum& datum) {
+    if (datum.type() != avro::AVRO_RECORD) {
+      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": datum.type() is not record");
+    }
+    const auto& record = datum.value<avro::GenericRecord>();
+
+    ManifestEntry entry{};
+    if (config_.extract_status) {
+      entry.status = static_cast<ManifestEntry::Status>(Extract<int>(record, "status"));
+    }
+    ExtractIf<std::optional<int64_t>>(record, "snapshot_id", entry.snapshot_id, config_.extract_snapshot_id);
+    ExtractIf<std::optional<int64_t>>(record, "sequence_number", entry.sequence_number,
+                                      config_.extract_sequence_number);
+    ExtractIf<std::optional<int64_t>>(record, "file_sequence_number", entry.file_sequence_number,
+                                      config_.extract_file_sequence_number);
+    if (record.hasField("data_file")) {
+      const auto& field = record.field("data_file");
+      DataFileDeserializer deserializer(config_.datafile_config);
+      entry.data_file = deserializer.Deserialize(field);
+    }
+    return entry;
+  }
+
+ private:
+  ManifestEntryDeserializerConfig config_;
+};
 
 void AddField(avro::RecordSchema& result_schema, const std::string& field_name, const avro::ValidSchema& field_schema,
               const std::optional<std::string>& doc = std::nullopt) {
@@ -864,7 +901,7 @@ avro::GenericDatum SerializeManifestEntry(const std::vector<PartitionKeyField>& 
 
 }  // namespace
 
-Manifest ReadManifestEntries(std::istream& input) {
+Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserializerConfig& config) {
   if (!input) {
     throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": input is invalid");
   }
@@ -889,10 +926,11 @@ Manifest ReadManifestEntries(std::istream& input) {
       result.metadata["schema-id"] = schema_id_bytes;
     }
   }
+  ManifestEntryDeserializer deserializer(config);
   while (true) {
     avro::GenericDatum manifest_entry(data_file_reader.dataSchema());
     if (data_file_reader.read(manifest_entry)) {
-      ManifestEntry entry = Deserialize<ManifestEntry>(manifest_entry);
+      ManifestEntry entry = deserializer.Deserialize(manifest_entry);
       result.entries.emplace_back(std::move(entry));
     } else {
       break;
@@ -901,9 +939,9 @@ Manifest ReadManifestEntries(std::istream& input) {
   return result;
 }
 
-Manifest ReadManifestEntries(const std::string& data) {
+Manifest ReadManifestEntries(const std::string& data, const ManifestEntryDeserializerConfig& config) {
   std::stringstream ss(data);
-  return ReadManifestEntries(ss);
+  return ReadManifestEntries(ss, config);
 }
 
 std::string WriteManifestEntries(const Manifest& manifest, const std::vector<PartitionKeyField>& partition_spec) {
