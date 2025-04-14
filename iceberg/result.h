@@ -1,6 +1,15 @@
+#pragma once
+
 #include "arrow/result.h"
 
 namespace iceberg {
+
+// TODO(gmusya): consider throwing std::runtime_error instead of arrow::Status
+inline void Ensure(const arrow::Status& s) {
+  if (!s.ok()) {
+    throw s;
+  }
+}
 
 template <typename T>
 T& ValueSafe(arrow::Result<T>& value) {
