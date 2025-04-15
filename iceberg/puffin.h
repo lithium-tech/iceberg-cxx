@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -65,8 +66,9 @@ class PuffinFile {
     BlobMetadata GetBlobMetadata(size_t blob_number) const {
       auto footer = GetDeserializedFooter();
       if (blob_number >= footer.blobs.size()) {
-        throw arrow::Status::ExecutionError(std::string(__PRETTY_FUNCTION__), ": requested blob number (", blob_number,
-                                            ") does not exist (total blob count is ", footer.blobs.size(), ")");
+        throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": requested blob number (" +
+                                 std::to_string(blob_number) + ") does not exist (total blob count is " +
+                                 std::to_string(footer.blobs.size()) + ")");
       }
       return footer.blobs.at(blob_number);
     }
@@ -86,9 +88,9 @@ class PuffinFile {
     int64_t length = blob_meta.length;
 
     if (offset < 0 || length < 0 || static_cast<size_t>(offset + length) >= data_.size()) {
-      throw arrow::Status::ExecutionError(std::string(__PRETTY_FUNCTION__),
-                                          ": unexpected blob request (offset = ", offset, ", length = ", length,
-                                          ") for file with size ", data_.size());
+      throw std::runtime_error(
+          std::string(__PRETTY_FUNCTION__) + ": unexpected blob request (offset = " + std::to_string(offset) +
+          ", length = " + std::to_string(length) + ") for file with size " + std::to_string(data_.size()));
     }
 
     return data_.substr(offset, length);

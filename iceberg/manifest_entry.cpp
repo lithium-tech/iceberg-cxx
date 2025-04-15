@@ -64,7 +64,7 @@ std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::io
   reader_builder.memory_pool(arrow::default_memory_pool());
   auto maybe_arrow_reader = reader_builder.Build();
   if (!maybe_arrow_reader.ok()) {
-    throw maybe_arrow_reader.status();
+    throw std::runtime_error(maybe_arrow_reader.status().message());
   }
   auto arrow_reader = maybe_arrow_reader.MoveValueUnsafe();
   return arrow_reader->parquet_reader()->metadata();

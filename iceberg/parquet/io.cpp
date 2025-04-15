@@ -84,7 +84,7 @@ class ParquetWriter {
       : fs_(fs) {
     arrow::Result<std::shared_ptr<arrow::io::OutputStream>> maybe_outfile = fs_->OpenOutputStream(filename);
     if (!maybe_outfile.ok()) {
-      throw maybe_outfile.status();
+      throw std::runtime_error(maybe_outfile.status().message());
     }
     outfile_ = maybe_outfile.ValueOrDie();
     parquet::WriterProperties::Builder builder;

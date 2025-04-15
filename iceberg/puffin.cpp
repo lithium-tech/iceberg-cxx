@@ -287,13 +287,13 @@ PuffinFile::Footer::DeserializedFooter PuffinFile::Footer::GetDeserializedFooter
 
 PuffinFile PuffinFileBuilder::Build() && {
   if (blobs_.empty()) {
-    throw arrow::Status::ExecutionError("PuffinFileBuilder: building puffin file without blobs is not supported");
+    throw std::runtime_error("PuffinFileBuilder: building puffin file without blobs is not supported");
   }
   if (!sequence_number_.has_value()) {
-    throw arrow::Status::ExecutionError("PuffinFileBuilder: sequence_number is not set");
+    throw std::runtime_error("PuffinFileBuilder: sequence_number is not set");
   }
   if (!snapshot_id_.has_value()) {
-    throw arrow::Status::ExecutionError("PuffinFileBuilder: snapshot_id is not set");
+    throw std::runtime_error("PuffinFileBuilder: snapshot_id is not set");
   }
 
   std::vector<PuffinFile::Footer::BlobMetadata> blob_meta;
@@ -335,7 +335,7 @@ PuffinFile PuffinFileBuilder::Build() && {
 
   auto maybe_puffin_file = PuffinFile::Make(std::move(result));
   if (!maybe_puffin_file.ok()) {
-    throw maybe_puffin_file.status();
+    throw std::runtime_error(maybe_puffin_file.status().message());
   }
   return maybe_puffin_file.MoveValueUnsafe();
 }

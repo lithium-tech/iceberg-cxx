@@ -301,7 +301,7 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
                                                          std::shared_ptr<TableMetadataV2> table_metadata) {
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   if (!maybe_manifest_list_path.has_value()) {
-    throw arrow::Status::ExecutionError("MakeIcebergEntriesStream: manifest list path is not found");
+    throw std::runtime_error("MakeIcebergEntriesStream: manifest list path is not found");
   }
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
@@ -318,8 +318,8 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
         entry.sequence_number = current_manifest_file.sequence_number;
       }
       if (!entry.sequence_number.has_value()) {
-        throw arrow::Status::ExecutionError("No sequence_number in iceberg::ManifestEntry for data file " +
-                                            entry.data_file.file_path);
+        throw std::runtime_error("No sequence_number in iceberg::ManifestEntry for data file " +
+                                 entry.data_file.file_path);
       }
 
       if (entry.status == ManifestEntry::Status::kDeleted) {

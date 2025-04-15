@@ -1,5 +1,7 @@
 #include "iceberg/puffin.h"
 
+#include <stdexcept>
+
 #include "arrow/status.h"
 #include "gtest/gtest.h"
 
@@ -29,8 +31,8 @@ TEST(PuffinBuilder, NoSnapshot) {
   try {
     PuffinFile file = std::move(builder).Build();
     FAIL();
-  } catch (const arrow::Status& e) {
-    std::string error_message = e.message();
+  } catch (const std::runtime_error& e) {
+    std::string error_message = e.what();
     EXPECT_EQ(error_message, "PuffinFileBuilder: snapshot_id is not set");
   }
 }
@@ -46,8 +48,8 @@ TEST(PuffinBuilder, NoSequenceNumber) {
   try {
     PuffinFile file = std::move(builder).Build();
     FAIL();
-  } catch (const arrow::Status& e) {
-    std::string error_message = e.message();
+  } catch (const std::runtime_error& e) {
+    std::string error_message = e.what();
     EXPECT_EQ(error_message, "PuffinFileBuilder: sequence_number is not set");
   }
 }
@@ -60,8 +62,8 @@ TEST(PuffinBuilder, NoBlobs) {
   try {
     PuffinFile file = std::move(builder).Build();
     FAIL();
-  } catch (const arrow::Status& e) {
-    std::string error_message = e.message();
+  } catch (const std::runtime_error& e) {
+    std::string error_message = e.what();
     EXPECT_EQ(error_message, "PuffinFileBuilder: building puffin file without blobs is not supported");
   }
 }
