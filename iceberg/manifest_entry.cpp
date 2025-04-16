@@ -121,11 +121,19 @@ requires(std::is_same_v<std::vector<typename T::value_type>, T> ||
 
 template <typename T>
 T Extract(const avro::GenericRecord& datum, const std::string& name) {
-  if (!datum.hasField(name)) {
+  bool invalid_field_name = false;
+  try {
+    const auto& field = datum.field(name);
+    return Deserialize<T>(field);
+  } catch (const std::exception& e) {
+    if (std::string(e.what()).starts_with("Invalid field name:")) {
+      invalid_field_name = true;
+    }
+  }
+  if (invalid_field_name) {
     throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": field '" + name + "' is missing");
   }
-  const auto& field = datum.field(name);
-  return Deserialize<T>(field);
+  throw std::runtime_error("Undefined Avro error in " + std::string(__PRETTY_FUNCTION__));
 }
 
 // clang-format off
@@ -135,11 +143,19 @@ requires(std::is_same_v<std::vector<typename T::value_type>, T> ||
          std::is_same_v<std::optional<typename T::value_type>, T> ||
          std::is_same_v<std::map<typename T::key_type, typename T::value_type::second_type>, T>)
 {
-  if (!datum.hasField(name)) {
+  bool invalid_field_name = false;
+  try {
+    const auto& field = datum.field(name);
+  return Deserialize<T>(field);
+  } catch (const std::exception& e) {
+    if (std::string(e.what()).starts_with("Invalid field name:")) {
+      invalid_field_name = true;
+    }
+  }
+  if (invalid_field_name) {
     return T{};
   }
-  const auto& field = datum.field(name);
-  return Deserialize<T>(field);
+  throw std::runtime_error("Undefined Avro error in " + std::string(__PRETTY_FUNCTION__));
 }
 
 template <typename T>
