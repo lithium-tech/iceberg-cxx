@@ -48,6 +48,12 @@ endif()
 
 add_library(iceberg-cpp STATIC ${iceberg_cpp_files})
 
+add_subdirectory(common)
+add_subdirectory(equality_delete)
+add_subdirectory(positional_delete)
+add_subdirectory(test_utils)
+add_subdirectory(streams)
+
 # TODO(gmusya): use private linkage where possible
 target_link_libraries(iceberg-cpp PUBLIC rapidjson roaring _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static)
 if (USE_REST)
