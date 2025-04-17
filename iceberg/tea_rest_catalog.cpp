@@ -15,7 +15,7 @@ RESTClientImpl::RESTClientImpl(const std::string& host, int port)
     : base_url_("http://" + host + ":" + std::to_string(port) + "/api/v2/trees/main/") {}
 
 std::optional<rapidjson::Document> RESTClientImpl::GetTable(const std::string& db_name, const std::string& table_name) {
-  std::string url = base_url_ + "contents/" + table_name;
+  std::string url = base_url_ + "contents/" + db_name + "." + table_name;
 
   auto response = cpr::Get(cpr::Url{url});
 

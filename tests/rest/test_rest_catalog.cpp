@@ -9,8 +9,8 @@ namespace iceberg {
 TEST(Catalog, REST) {
   auto rest_catalog = ice_tea::RESTCatalog("127.0.0.1", 19120);
 
-  auto table_identifier = catalog::TableIdentifier{.db = "", .name = "test"};
-  auto fake_table_identifier = catalog::TableIdentifier{.db = "", .name = "fake"};
+  auto table_identifier = catalog::TableIdentifier{.db = "default", .name = "test"};
+  auto fake_table_identifier = catalog::TableIdentifier{.db = "default", .name = "fake"};
 
   EXPECT_TRUE(rest_catalog.TableExists(table_identifier));
   EXPECT_FALSE(rest_catalog.TableExists(fake_table_identifier));
