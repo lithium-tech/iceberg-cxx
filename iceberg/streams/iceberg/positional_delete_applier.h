@@ -40,7 +40,7 @@ struct PositionalDeletes {
 class PositionalDeleteApplier : public IcebergStream {
  public:
   explicit PositionalDeleteApplier(IcebergStreamPtr input, PositionalDeletes pos_del_infos,
-                                   std::shared_ptr<IFileReaderProvider> file_reader_provider)
+                                   std::shared_ptr<const IFileReaderProvider> file_reader_provider)
       : input_(input), pos_del_infos_(std::move(pos_del_infos)), file_reader_provider_(file_reader_provider) {
     Ensure(input_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": input is nullptr");
     Ensure(file_reader_provider_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
@@ -104,7 +104,7 @@ class PositionalDeleteApplier : public IcebergStream {
 
   std::shared_ptr<PositionalDeleteStream> positional_delete_;
 
-  std::shared_ptr<IFileReaderProvider> file_reader_provider_;
+  std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::optional<PartitionLayerFilePosition> current_state_;
 };
 

@@ -47,7 +47,7 @@ class EqualityDeleteApplier : public IcebergStream {
  public:
   explicit EqualityDeleteApplier(IcebergStreamPtr input, std::shared_ptr<const EqualityDeletes> equality_deletes,
                                  EqualityDeleteHandler::Config eq_del_config, std::shared_ptr<FieldIdMapper> mapper,
-                                 std::shared_ptr<IFileReaderProvider> file_reader_provider)
+                                 std::shared_ptr<const IFileReaderProvider> file_reader_provider)
       : input_(input),
         equality_deletes_(equality_deletes),
         eq_del_config_(eq_del_config),
@@ -146,7 +146,7 @@ class EqualityDeleteApplier : public IcebergStream {
   std::shared_ptr<const EqualityDeletes> equality_deletes_;
   const EqualityDeleteHandler::Config eq_del_config_;
   std::shared_ptr<FieldIdMapper> field_id_mapper_;
-  std::shared_ptr<IFileReaderProvider> file_reader_provider_;
+  std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
 
   std::optional<EqualityDeleteHandler> equality_delete_handler_;
   std::optional<PartitionLayer> current_state_;

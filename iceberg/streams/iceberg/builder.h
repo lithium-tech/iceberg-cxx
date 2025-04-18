@@ -30,7 +30,7 @@ class IcebergScanBuilder {
                                             std::optional<EqualityDeleteHandler::Config> cfg,
                                             std::shared_ptr<const IRowGroupFilter> rg_filter,
                                             const iceberg::Schema& schema, std::vector<int> field_ids_to_retrieve,
-                                            std::shared_ptr<IFileReaderProvider> file_reader_provider) {
+                                            std::shared_ptr<const IFileReaderProvider> file_reader_provider) {
     Ensure(file_reader_provider != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
 
     auto mapper = MakeMapper(schema);
