@@ -48,6 +48,10 @@ using RowCount = uint64_t;
 struct TableGeneratorInfo {
   std::vector<std::pair<Program, RowCount>> program;
   std::vector<std::shared_ptr<Table>> tables;
+
+  TableGeneratorInfo(std::vector<std::pair<Program, RowCount>>&& program_,
+                     const std::vector<std::shared_ptr<Table>>& tables_)
+      : program(std::move(program_)), tables(tables_) {}
 };
 
 arrow::Result<std::shared_ptr<IProcessor>> MakeEqualityDeleteProcessor(
