@@ -149,11 +149,13 @@ uint64_t DeletionVector::Cardinality(uint64_t l, uint64_t r) const {
 }
 
 std::vector<uint64_t> DeletionVector::GetElems(uint64_t l, uint64_t r) const {
-  uint64_t l_rank = bitmap_.rank(l) - bitmap_.contains(l);
-  uint64_t r_rank = bitmap_.rank(r);
-  std::vector<uint64_t> res(r_rank - l_rank);
-  for (uint64_t i = l_rank; i < r_rank; ++i) {
-    bitmap_.select(i, &res[i - l_rank]);
+  auto it = bitmap_.begin();
+  it.move(l);
+  std::vector<uint64_t> res;
+  res.reserve(Cardinality(l, r));
+  while (it != bitmap_.end() && *it <= r) {
+    res.push_back(*it);
+    ++it;
   }
   return res;
 }

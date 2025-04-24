@@ -33,6 +33,27 @@ TEST(DeletionVector, GetElemsCheck) {
   EXPECT_EQ(deletion_vector.GetElems(3, 5), std::vector<uint64_t>());
 }
 
+TEST(DeletionVector, GetElemsCheckEdgeCases) {
+  roaring::Roaring64Map roaring_map;
+  roaring_map.add((uint64_t)1);
+  roaring_map.add((uint64_t)7);
+  roaring_map.add((uint64_t)9);
+
+  DeletionVector deletion_vector(MakeBlobMetadata(roaring_map), roaring_map);
+
+  EXPECT_EQ(deletion_vector.Cardinality(1, 7), 2);
+  EXPECT_EQ(deletion_vector.GetElems(1, 7), std::vector<uint64_t>({1, 7}));
+
+  EXPECT_EQ(deletion_vector.Cardinality(2, 7), 1);
+  EXPECT_EQ(deletion_vector.GetElems(2, 7), std::vector<uint64_t>({7}));
+
+  EXPECT_EQ(deletion_vector.Cardinality(1, 6), 1);
+  EXPECT_EQ(deletion_vector.GetElems(1, 6), std::vector<uint64_t>({1}));
+
+  EXPECT_EQ(deletion_vector.Cardinality(2, 6), 0);
+  EXPECT_EQ(deletion_vector.GetElems(2, 6), std::vector<uint64_t>());
+}
+
 TEST(DeletionVector, DeletionVectorFromBlob) {
   roaring::Roaring64Map roaring_map;
   roaring_map.add((uint64_t)1);
