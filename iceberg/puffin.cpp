@@ -178,6 +178,19 @@ T Extract(const rapidjson::Value& document, std::string_view field_name) {
   return Deserialize<T>(document[c_str]);
 }
 
+// clang-format off
+template <typename T>
+T Extract(const rapidjson::Value& document, std::string_view field_name)
+requires(std::is_same_v<std::optional<typename T::value_type>, T>)
+{
+  const char* c_str = field_name.data();
+  if (!document.HasMember(c_str)) {
+    return std::nullopt;
+  }
+  return Deserialize<T>(document[c_str]);
+}
+// clang-format on
+
 template <>
 std::map<std::string, std::string> Deserialize(const rapidjson::Value& document) {
   Ensure(document.IsObject(), std::string(__PRETTY_FUNCTION__));
