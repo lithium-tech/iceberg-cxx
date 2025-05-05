@@ -188,6 +188,25 @@ TEST_F(EqualityDeleteHandlerTest, RowLimitExceeded) {
   }
 }
 
+TEST_F(EqualityDeleteHandlerTest, MultipleFiles) {
+  std::string del1_path = GetFileUrl("del1.parquet");
+  auto column1 = MakeInt32Column("f1", 1, OptionalVector<int32_t>{2, 3, 4, 5});
+  ASSERT_OK(WriteToFile({column1}, del1_path));
+
+  std::string del2_path = GetFileUrl("del2.parquet");
+  auto column2 = MakeInt32Column("f1", 1, OptionalVector<int32_t>{6, 7, 8, 9});
+  ASSERT_OK(WriteToFile({column2}, del2_path));
+
+  EqualityDeleteHandler handler = MakeHandler(6, false, std::nullopt, true);
+  ASSERT_EQ(handler.AppendDelete(del1_path, {1}), arrow::Status::OK());
+
+  auto status = handler.AppendDelete(del2_path, {1});
+  ASSERT_NE(status, arrow::Status::OK());
+
+  auto message = status.message();
+  EXPECT_EQ(message, "Equality delete rows limit exceeded (8/6)");
+}
+
 TEST_F(EqualityDeleteHandlerTest, MBSizeLimitExceeded) {
   std::string del1_path = GetFileUrl("del1.parquet");
   auto column1 = MakeInt32Column("f1", 1, OptionalVector<int32_t>{2, 3});

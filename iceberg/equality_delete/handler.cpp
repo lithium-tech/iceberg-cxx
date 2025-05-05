@@ -135,6 +135,13 @@ arrow::Status EqualityDeleteHandler::AppendDelete(const std::string &url, const 
   auto &eq_del_ptr = materialized_deletes_.at(field_ids);
 
   ARROW_RETURN_NOT_OK(ParseEqualityDeleteFile(record_batch_reader, eq_del_ptr));
+
+  current_rows_ = 0;
+  for (auto &[_, deletes] : materialized_deletes_) {
+    if (deletes) {
+      current_rows_ += deletes->Size();
+    }
+  }
   stats_.max_rows_materialized = std::max(stats_.max_rows_materialized, current_rows_);
   stats_.max_mb_size_materialized =
       std::max(stats_.max_mb_size_materialized, static_cast<double>(shared_state_->Allocated()) / (1024.0 * 1024.0));
