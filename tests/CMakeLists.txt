@@ -55,3 +55,5 @@ ADD_CUSTOM_TARGET(test_tables_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/tables" "${CMAKE_CURRENT_BINARY_DIR}/tables"
 )
 add_dependencies(iceberg_local_test test_tables_symlink)
+
+add_subdirectory(performance_gen)
