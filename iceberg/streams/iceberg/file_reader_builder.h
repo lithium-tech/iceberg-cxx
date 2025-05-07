@@ -13,6 +13,7 @@
 
 #include "iceberg/common/batch.h"
 #include "iceberg/common/fs/file_reader_provider.h"
+#include "iceberg/common/rg_metadata.h"
 #include "iceberg/common/selection_vector.h"
 #include "iceberg/streams/arrow/file_reader.h"
 #include "iceberg/streams/arrow/projection_stream.h"
@@ -209,7 +210,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
       auto rg_meta = metadata.RowGroup(i);
       Ensure(rg_meta != nullptr, std::string(__PRETTY_FUNCTION__) + ": rg_meta is nullptr");
 
-      int64_t file_offset = rg_meta->file_offset();
+      int64_t file_offset = RowGroupMetaToFileOffset(*rg_meta);
       while (last_not_mapped_part_id < segments.size()) {
         const auto seg_length = segments[last_not_mapped_part_id].length;  // 0 <=> to end
         const auto& seg_start = segments[last_not_mapped_part_id].offset;

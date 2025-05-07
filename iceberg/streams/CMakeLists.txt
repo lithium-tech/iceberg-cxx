@@ -1,7 +1,7 @@
 add_library(iceberg_streams INTERFACE)
 
 target_include_directories(iceberg_streams INTERFACE ${CMAKE_SOURCE_DIR})
-target_link_libraries(iceberg_streams INTERFACE Arrow::arrow_static Parquet::parquet_static iceberg iceberg_positional_delete iceberg_equality_delete)
+target_link_libraries(iceberg_streams INTERFACE Arrow::arrow_static Parquet::parquet_static iceberg iceberg_common iceberg_positional_delete iceberg_equality_delete)
 
 add_executable(iceberg_streams_ut
   # ut/builder_test.cpp # TODO(gmusya): cover
