@@ -32,8 +32,8 @@ struct EqualityDeletes {
     const auto& partition = partlayer_to_deletes.at(state.GetPartition());
     std::set<FieldId> result;
     for (const auto& [layer_id, deletes] : partition) {
-      if (layer_id > state.GetLayer()) {
-        break;
+      if (layer_id < state.GetLayer()) {
+        continue;
       }
       for (const auto& [delete_path, field_ids] : deletes) {
         result.insert(field_ids.begin(), field_ids.end());

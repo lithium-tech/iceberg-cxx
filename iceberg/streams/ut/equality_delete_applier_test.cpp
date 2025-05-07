@@ -1,5 +1,7 @@
 #include "iceberg/streams/iceberg/equality_delete_applier.h"
 
+#include <iceberg/streams/iceberg/plan.h>
+
 #include "arrow/status.h"
 #include "gtest/gtest.h"
 #include "iceberg/common/fs/file_reader_provider_impl.h"
@@ -116,6 +118,32 @@ TEST(EqualityDeleteApplier, Trivial) {
   } catch (arrow::Status& s) {
     std::cerr << s.ToString() << std::endl;
   }
+}
+
+TEST(EqualityDelete, GetFieldIds) {
+  std::map<PartitionId, std::map<LayerId, std::vector<iceberg::ice_tea::EqualityDeleteInfo>>> partlayer_to_deletes;
+
+  partlayer_to_deletes[0][1] = {iceberg::ice_tea::EqualityDeleteInfo("a", {1})};
+  partlayer_to_deletes[0][2] = {iceberg::ice_tea::EqualityDeleteInfo("b", {2})};
+  partlayer_to_deletes[0][3] = {iceberg::ice_tea::EqualityDeleteInfo("c", {3})};
+
+  partlayer_to_deletes[1][1] = {iceberg::ice_tea::EqualityDeleteInfo("d", {1, 2})};
+  partlayer_to_deletes[1][2] = {iceberg::ice_tea::EqualityDeleteInfo("e", {2, 3})};
+  partlayer_to_deletes[1][3] = {iceberg::ice_tea::EqualityDeleteInfo("f", {3, 4})};
+
+  EqualityDeletes deletes{.partlayer_to_deletes = std::move(partlayer_to_deletes)};
+
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(0, 0)), (std::vector<int32_t>{1, 2, 3}));
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(0, 1)), (std::vector<int32_t>{1, 2, 3}));
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(0, 2)), (std::vector<int32_t>{2, 3}));
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(0, 3)), (std::vector<int32_t>{3}));
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(0, 4)), (std::vector<int32_t>{}));
+
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(1, 0)), (std::vector<int32_t>{1, 2, 3, 4}));
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(1, 1)), (std::vector<int32_t>{1, 2, 3, 4}));
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(1, 2)), (std::vector<int32_t>{2, 3, 4}));
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(1, 3)), (std::vector<int32_t>{3, 4}));
+  EXPECT_EQ(deletes.GetFieldIds(PartitionLayer(1, 4)), (std::vector<int32_t>{}));
 }
 
 }  // namespace
