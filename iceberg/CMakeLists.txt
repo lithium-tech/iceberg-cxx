@@ -55,7 +55,7 @@ add_subdirectory(test_utils)
 add_subdirectory(streams)
 
 # TODO(gmusya): use private linkage where possible
-target_link_libraries(iceberg-cpp PUBLIC rapidjson roaring _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static)
+target_link_libraries(iceberg-cpp PUBLIC _rapidjson _croaring _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static)
 if (USE_REST)
   target_link_libraries(iceberg-cpp PUBLIC cpr)
 endif()

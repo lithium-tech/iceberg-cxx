@@ -15,11 +15,10 @@ Now we are happy to share results of our work with community to make the best Ap
 
 ### Build, Run Test and Install Core Libraries
 
-TODO: fix it according to opensource build
+TODO: build arrow & boost & abseil
 
 ```bash
-git submodule init && git submodule sync --recursive && git submodule update --recursive
-cmake -DGITLAB_URL=${GIT_URL_BASE} ${CMAKE_OPTS} -DCMAKE_CXX_FLAGS="${CXX_FLAGS}" -S . -B _build -GNinja
+cmake -S . -B _build -GNinja -DUSE_SMHASHER=ON
 cd _build && ninja
 cd tests/
 ../iceberg/iceberg-cpp-test

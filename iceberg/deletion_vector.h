@@ -3,7 +3,7 @@
 #include <iceberg/puffin.h>
 
 #include <span>
-#include <vendor/roaring/roaring.hh>
+#include <roaring.hh>
 
 namespace iceberg {
 

@@ -1,0 +1,12 @@
+diff --git a/lang/c++/api/Zigzag.hh b/lang/c++/api/Zigzag.hh
+index bf831d24..8842a05d 100644
+--- a/lang/c++/api/Zigzag.hh
++++ b/lang/c++/api/Zigzag.hh
+@@ -20,6 +20,7 @@
+ #define avro_Encoding_hh__
+ 
+ #include <stdint.h>
++#include <cstddef>
+ #include <array>
+ 
+ #include "Config.hh"

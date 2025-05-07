@@ -1,0 +1,81 @@
+diff --git a/lang/c++/api/DataFile.hh b/lang/c++/api/DataFile.hh
+index f452cab0..d2b9ca26 100644
+--- a/lang/c++/api/DataFile.hh
++++ b/lang/c++/api/DataFile.hh
+@@ -60,6 +60,9 @@ typedef std::array<uint8_t, SyncSize> DataFileSync;
+  *  this object.
+  */
+ class AVRO_DECL DataFileWriterBase : boost::noncopyable {
++public:
++    typedef std::map<std::string, std::vector<uint8_t> > Metadata;
++private:
+     const std::string filename_;
+     const ValidSchema schema_;
+     const EncoderPtr encoderPtr_;
+@@ -71,8 +74,6 @@ class AVRO_DECL DataFileWriterBase : boost::noncopyable {
+     const DataFileSync sync_;
+     int64_t objectCount_;
+ 
+-    typedef std::map<std::string, std::vector<uint8_t> > Metadata;
+-
+     Metadata metadata_;
+ 
+     static std::unique_ptr<OutputStream> makeStream(const char* filename);
+@@ -115,7 +116,8 @@ public:
+     DataFileWriterBase(const char* filename, const ValidSchema& schema,
+         size_t syncInterval, Codec codec = NULL_CODEC);
+     DataFileWriterBase(std::unique_ptr<OutputStream> outputStream,
+-                       const ValidSchema& schema, size_t syncInterval, Codec codec);
++                       const ValidSchema& schema, const Metadata &metadata,
++                       size_t syncInterval, Codec codec);
+ 
+     ~DataFileWriterBase();
+     /**
+@@ -150,8 +152,9 @@ public:
+         base_(new DataFileWriterBase(filename, schema, syncInterval, codec)) { }
+ 
+     DataFileWriter(std::unique_ptr<OutputStream> outputStream, const ValidSchema& schema,
+-        size_t syncInterval = 16 * 1024, Codec codec = NULL_CODEC) :
+-        base_(new DataFileWriterBase(std::move(outputStream), schema, syncInterval, codec)) { }
++        const DataFileWriterBase::Metadata &metadata = {}, size_t syncInterval = 16 * 1024,
++        Codec codec = NULL_CODEC) :
++        base_(new DataFileWriterBase(std::move(outputStream), schema, metadata, syncInterval, codec)) { }
+ 
+     /**
+      * Writes the given piece of data into the file.
+@@ -407,6 +410,11 @@ public:
+      * Return the last synchronization point before our current position.
+      */
+     int64_t previousSync() { return base_->previousSync(); }
++
++    /**
++     * Return file metadata.
++     */
++    const auto& metadata() const { return base_->metadata(); }
+ };
+ 
+ }   // namespace avro
+diff --git a/lang/c++/impl/DataFile.cc b/lang/c++/impl/DataFile.cc
+index fbba367e..96e1359f 100644
+--- a/lang/c++/impl/DataFile.cc
++++ b/lang/c++/impl/DataFile.cc
+@@ -81,7 +81,8 @@ DataFileWriterBase::DataFileWriterBase(const char* filename, const ValidSchema&
+ }
+ 
+ DataFileWriterBase::DataFileWriterBase(std::unique_ptr<OutputStream> outputStream,
+-    const ValidSchema& schema, size_t syncInterval, Codec codec) :
++    const ValidSchema& schema, const Metadata &metadata,
++    size_t syncInterval, Codec codec) :
+     filename_(),
+     schema_(schema),
+     encoderPtr_(binaryEncoder()),
+@@ -92,6 +93,9 @@ DataFileWriterBase::DataFileWriterBase(std::unique_ptr<OutputStream> outputStrea
+     sync_(makeSync()),
+     objectCount_(0)
+ {
++    for (const auto &[key, value] : metadata) {
++        metadata_[key] = value;
++    }
+     init(schema, syncInterval, codec);
+ }
+ 

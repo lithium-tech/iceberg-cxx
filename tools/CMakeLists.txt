@@ -17,7 +17,7 @@ endif()
 add_library(iceberg-tools ${LIB_SOURCES})
 target_include_directories(iceberg-tools PUBLIC "${PROJECT_SOURCE_DIR}")
 target_link_libraries(iceberg-tools PUBLIC _hivemetastore _thrift
-  iceberg-cpp rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Parquet::parquet_static
+  iceberg-cpp _rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Parquet::parquet_static
   OpenSSL::Crypto OpenSSL::SSL)
 if (USE_ARROW)
   target_link_libraries(iceberg-tools PUBLIC Arrow::arrow_static)

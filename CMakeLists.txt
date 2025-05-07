@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-project(iceberg-cpp)
+project(iceberg-cxx)
+cmake_policy(SET CMP0077 NEW)
 
 macro(option_v OPTION_NAME OPTION_TEXT OPTION_DEFAULT)
   option(${OPTION_NAME} ${OPTION_TEXT} ${OPTION_DEFAULT})
@@ -15,17 +16,13 @@ option_v(BUILD_TOOLS "build binaries" ON)
 option_v(ICEBERG_GEN "build generator" ON)
 option_v(USE_REST "enable rest building" ON)
 option_v(REST_TESTS "enable rest tests" ON)
-option_v(DISABLE_BROKEN_TESTS "disable some tests" OFF)
+option_v(BUILD_ABSEIL "build abseil (use system's one if not set)" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
-
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-macro-redefined")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20 -Wno-macro-redefined")
 
 # deps
 
 find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
-find_package(absl REQUIRED)
 find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
 
 # Fix up missing dependency declaration
@@ -33,21 +30,53 @@ set_property(TARGET Arrow::arrow_bundled_dependencies
   APPEND PROPERTY INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto;OpenSSL::SSL"
 )
 
-if (NOT GITLAB_URL)
-  set(GITLAB github.com)
-  if (GIT_HTTPS)
-    set(GITLAB_URL https://${GITLAB})
-  else()
-    set(GITLAB_URL ssh://git@${GITLAB}:7999)
-  endif()
-endif()
-set(GITHUB_MIRROR ${GITLAB_URL}/github-mirror)
+set_directory_properties(PROPERTIES COMPILE_OPTIONS -Wno-deprecated-declarations)
 
 add_subdirectory(vendor)
 
-set(INSTALL_GTEST OFF)
-set(INSTALL_GMOCK OFF)
+FetchContent_MakeAvailable(avro)
+
+set(ROARING_BUILD_STATIC OFF CACHE BOOL "")
+set(ENABLE_ROARING_TESTS OFF CACHE BOOL "")
+set(ROARING_USE_CPM OFF CACHE BOOL "")
+FetchContent_MakeAvailable(croaring)
+
+set(BUILD_TESTS OFF CACHE BOOL "")
+FetchContent_MakeAvailable(datasketches-cpp)
+
+FetchContent_MakeAvailable(hive-metastore)
+FetchContent_MakeAvailable(rapidjson)
+FetchContent_MakeAvailable(thrift)
+FetchContent_MakeAvailable(zstd)
+
+set(INSTALL_GTEST OFF CACHE BOOL "")
+set(INSTALL_GMOCK OFF CACHE BOOL "")
 FetchContent_MakeAvailable(googletest)
+
+set(SNAPPY_BUILD_TESTS OFF CACHE BOOL "")
+set(SNAPPY_BUILD_BENCHMARKS OFF CACHE BOOL "")
+FetchContent_MakeAvailable(snappy)
+
+set(ZLIB_ENABLE_TESTS OFF CACHE BOOL "")
+set(ZLIBNG_ENABLE_TESTS OFF CACHE BOOL "")
+set(WITH_GTEST OFF CACHE BOOL "")
+FetchContent_MakeAvailable(zlib-ng)
+
+if(BUILD_ABSEIL)
+  FetchContent_MakeAvailable(abseil)
+else()
+  find_package(absl REQUIRED)
+endif()
+
+if(USE_REST)
+  set(CARES_STATIC ON CACHE BOOL "")
+  set(CARES_SHARED OFF CACHE BOOL "")
+  set(CARES_BUILD_TOOLS OFF CACHE BOOL "")
+  FetchContent_MakeAvailable(c-ares)
+
+  FetchContent_MakeAvailable(cpr)
+  FetchContent_MakeAvailable(curl)
+endif()
 
 if(USE_SMHASHER)
   FetchContent_MakeAvailable(smhasher)
@@ -56,7 +85,6 @@ if(USE_SMHASHER)
     ${smhasher_SOURCE_DIR}/src/MurmurHash3.cpp
   )
   include_directories(${smhasher_SOURCE_DIR}/src)
-  add_definitions(-DUSE_SMHASHER)
 endif()
 
 # libs/bins

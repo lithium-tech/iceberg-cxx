@@ -1,9 +1,6 @@
 #include "iceberg/deletion_vector.h"
 
-// clang-format off
-#include <vendor/zlib-ng/zconf.h.in>
-#include <vendor/zlib-ng/zlib.h>
-// clang-format on
+#include <zlib.h>
 
 namespace iceberg {
 namespace {
