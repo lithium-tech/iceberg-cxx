@@ -2,7 +2,6 @@
 
 #include <cstdint>
 
-#include "hll.hpp"
 #include "theta_sketch.hpp"
 
 namespace stats {
@@ -20,6 +19,10 @@ class ThetaDistinctCounter {
 
   uint64_t GetDistinctValuesCount() const { return sketch_.get_estimate(); }
 
+  datasketches::update_theta_sketch& GetSketch() { return sketch_; }
+  const datasketches::update_theta_sketch& GetSketch() const { return sketch_; }
+
+ private:
   datasketches::update_theta_sketch sketch_;
 };
 

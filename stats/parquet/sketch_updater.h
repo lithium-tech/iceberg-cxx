@@ -9,12 +9,11 @@
 namespace stats {
 
 template <typename Sketch>
-class SketchWrapper {
+class SketchUpdater {
  public:
   using SketchType = Sketch;
 
-  template <typename... Args>
-  explicit SketchWrapper(Args... args) : sketch_(std::forward<Args>(args)...) {}
+  explicit SketchUpdater(Sketch& s) : sketch_(s) {}
 
   void SetFLBALength(int64_t length) { flba_length_ = length; }
 
@@ -53,13 +52,8 @@ class SketchWrapper {
     }
   }
 
-  template <typename Function>
-  auto Evaluate(Function&& foo) const {
-    return foo(sketch_);
-  }
-
  private:
-  Sketch sketch_;
+  Sketch& sketch_;
   int64_t flba_length_;
 };
 
