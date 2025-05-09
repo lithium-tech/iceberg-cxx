@@ -16,23 +16,66 @@ option_v(BUILD_TOOLS "build binaries" ON)
 option_v(ICEBERG_GEN "build generator" ON)
 option_v(USE_REST "enable rest building" ON)
 option_v(REST_TESTS "enable rest tests" ON)
+option_v(BUILD_ARROW "build Apache Arrow" ON)
 option_v(BUILD_ABSEIL "build abseil (use system's one if not set)" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 
 # deps
 
-find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
-find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
-
-# Fix up missing dependency declaration
-set_property(TARGET Arrow::arrow_bundled_dependencies
-  APPEND PROPERTY INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto;OpenSSL::SSL"
-)
-
 set_directory_properties(PROPERTIES COMPILE_OPTIONS -Wno-deprecated-declarations)
 
 add_subdirectory(vendor)
+
+find_package(OpenSSL REQUIRED)
+
+set(BOOST_ENABLE_CMAKE ON CACHE BOOL "")
+FetchContent_MakeAvailable(boost)
+
+if(BUILD_ARROW)
+  set(ARROW_DEPENDENCY_SOURCE BUNDLED CACHE STRING "")
+  set(ARROW_SIMD_LEVEL DEFAULT CACHE STRING "") # xsimd
+  set(ARROW_BUILD_STATIC ON CACHE BOOL "")
+  set(ARROW_BUILD_SHARED OFF CACHE BOOL "")
+  set(ARROW_NO_DEPRECATED_API ON CACHE BOOL "")
+  set(ARROW_LLVM_USE_SHARED OFF CACHE BOOL "")
+  set(ARROW_FILESYSTEM ON CACHE BOOL "")
+  set(ARROW_PARQUET ON CACHE BOOL "")
+  set(ARROW_IPC ON CACHE BOOL "")
+  set(ARROW_S3 ON CACHE BOOL "")
+  set(ARROW_WITH_SNAPPY ON CACHE BOOL "")
+  set(ARROW_WITH_LZ4 ON CACHE BOOL "")
+  set(ARROW_WITH_ZLIB ON CACHE BOOL "")
+  set(ARROW_WITH_ZSTD ON CACHE BOOL "")
+  set(ARROW_CSV ON CACHE BOOL "")
+  set(ARROW_WITH_RE2 ON CACHE BOOL "")
+  set(ARROW_WITH_RAPIDJSON ON CACHE BOOL "")
+  set(ARROW_WITH_UTF8PROC ON CACHE BOOL "")
+  set(ARROW_GANDIVA ON CACHE BOOL "")
+  set(ARROW_COMPUTE ON CACHE BOOL "")
+  FetchContent_MakeAvailable(arrow)
+
+  FetchContent_GetProperties(
+    arrow
+    SOURCE_DIR ARROW_SOURCE_DIR
+    BINARY_DIR ARROW_BINARY_DIR
+  )
+  include_directories(
+    ${ARROW_SOURCE_DIR}/cpp/src
+    ${ARROW_BINARY_DIR}/src
+  )
+
+  add_library(Arrow::arrow_static ALIAS arrow_static)
+  add_library(Parquet::parquet_static ALIAS parquet_static)
+else()
+  find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
+  find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
+
+  # Fix up missing dependency declaration
+  set_property(TARGET Arrow::arrow_bundled_dependencies
+    APPEND PROPERTY INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto;OpenSSL::SSL"
+  )
+endif()
 
 FetchContent_MakeAvailable(avro)
 

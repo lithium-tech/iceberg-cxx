@@ -1,0 +1,34 @@
+diff --git a/cpp/cmake_modules/ThirdpartyToolchain.cmake b/cpp/cmake_modules/ThirdpartyToolchain.cmake
+index a2627c190..17a3fd554 100644
+--- a/cpp/cmake_modules/ThirdpartyToolchain.cmake
++++ b/cpp/cmake_modules/ThirdpartyToolchain.cmake
+@@ -2385,6 +2385,10 @@ macro(build_xsimd)
+   # The include directory must exist before it is referenced by a target.
+   file(MAKE_DIRECTORY "${XSIMD_INCLUDE_DIR}")
+ 
++  add_library(xsimd INTERFACE IMPORTED)
++  target_include_directories(xsimd INTERFACE "${XSIMD_INCLUDE_DIR}")
++
++  add_dependencies(xsimd xsimd_ep)
+   add_dependencies(toolchain xsimd_ep)
+   add_dependencies(toolchain-tests xsimd_ep)
+ 
+@@ -2395,7 +2399,7 @@ if((NOT ARROW_SIMD_LEVEL STREQUAL "NONE") OR (NOT ARROW_RUNTIME_SIMD_LEVEL STREQ
+                                              ))
+   set(ARROW_USE_XSIMD TRUE)
+ else()
+-  set(ARROW_USE_XSIMD FALSE)
++  message(FATAL_ERROR "ARROW_USE_XSIMD must be TRUE")
+ endif()
+ 
+ if(ARROW_USE_XSIMD)
+@@ -2408,8 +2412,7 @@ if(ARROW_USE_XSIMD)
+                      "8.1.0")
+ 
+   if(xsimd_SOURCE STREQUAL "BUNDLED")
+-    add_library(arrow::xsimd INTERFACE IMPORTED)
+-    target_include_directories(arrow::xsimd INTERFACE "${XSIMD_INCLUDE_DIR}")
++    add_library(arrow::xsimd ALIAS xsimd)
+     set(ARROW_XSIMD arrow::xsimd)
+   else()
+     message(STATUS "xsimd found. Headers: ${xsimd_INCLUDE_DIRS}")

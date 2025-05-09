@@ -1,0 +1,14 @@
+diff --git a/cpp/src/arrow/util/compression_snappy.cc b/cpp/src/arrow/util/compression_snappy.cc
+index 731fdfd13..b862c6a24 100644
+--- a/cpp/src/arrow/util/compression_snappy.cc
++++ b/cpp/src/arrow/util/compression_snappy.cc
+@@ -43,6 +43,9 @@ class SnappyCodec : public Codec {
+  public:
+   Result<int64_t> Decompress(int64_t input_len, const uint8_t* input,
+                              int64_t output_buffer_len, uint8_t* output_buffer) override {
++    if (!input_len) {
++      return 0;
++    }
+     size_t decompressed_size;
+     if (!snappy::GetUncompressedLength(reinterpret_cast<const char*>(input),
+                                        static_cast<size_t>(input_len),

@@ -12,14 +12,19 @@ Now we are happy to share results of our work with community to make the best Ap
 
 - C++20 compliant compiler
 - CMake 3.20 or higher
+- OpenSSL
+- abseil
 
-### Build, Run Test and Install Core Libraries
+### Build, Run Test
 
-TODO: build arrow & boost & abseil
+NOTE: For now you have to [download Apache Arrow dependencies](https://arrow.apache.org/docs/15.0/developers/cpp/building.html#offline-builds) in $ARROW_DEPS directory first.
 
 ```bash
-cmake -S . -B _build -GNinja -DUSE_SMHASHER=ON
-cd _build && ninja
+mkdir _build
+ln -s $ARROW_DEPS _build/arrow-thirdparty
+cd _build
+cmake -GNinja -DUSE_SMHASHER=ON ../
+ninja
 cd tests/
 ../iceberg/iceberg-cpp-test
 ../iceberg/common/fs/iceberg_common_fs_test
