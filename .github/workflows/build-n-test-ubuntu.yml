@@ -15,8 +15,8 @@ jobs:
       run: |
         mkdir -p _build && cd _build
         git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
-        cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch
-        ./cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+        cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
+        ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
     - name: cmake
       run: |
         cd _build
