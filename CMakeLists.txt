@@ -94,7 +94,12 @@ FetchContent_MakeAvailable(datasketches-cpp)
 
 FetchContent_MakeAvailable(hive-metastore)
 FetchContent_MakeAvailable(rapidjson)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(OS_LINUX ON CACHE BOOL "")
+endif()
 FetchContent_MakeAvailable(thrift)
+
 FetchContent_MakeAvailable(zstd)
 
 set(INSTALL_GTEST OFF CACHE BOOL "")
