@@ -471,6 +471,34 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
       }
     }
 
+    if (settings_.evaluate_quantiles && settings_.use_precalculation_optimization) {
+      auto buffer = dictionary_buffer.GetGenericView();
+
+      for (int i = 0; i < buffer.dictionary_length; ++i) {
+        if (type == parquet::Type::FIXED_LEN_BYTE_ARRAY) {
+          auto value = reinterpret_cast<const parquet::FixedLenByteArray*>(buffer.dictionary)[i];
+          for (int j = 0; j < count_buffer[i]; ++j) {
+            column_result.quantile_sketch->AppendValue(value.ptr, descr->type_length());
+          }
+        } else if (type == parquet::Type::BYTE_ARRAY) {
+          auto value = reinterpret_cast<const parquet::ByteArray*>(buffer.dictionary)[i];
+          for (int j = 0; j < count_buffer[i]; ++j) {
+            column_result.quantile_sketch->AppendValue(value.ptr, value.len);
+          }
+        } else if (type == parquet::Type::INT64) {
+          auto value = reinterpret_cast<const int64_t*>(buffer.dictionary)[i];
+          for (int j = 0; j < count_buffer[i]; ++j) {
+            column_result.quantile_sketch->AppendValue(value);
+          }
+        } else if (type == parquet::Type::INT32) {
+          auto value = reinterpret_cast<const int32_t*>(buffer.dictionary)[i];
+          for (int j = 0; j < count_buffer[i]; ++j) {
+            column_result.quantile_sketch->AppendValue(static_cast<int64_t>(value));
+          }
+        }
+      }
+    }
+
 // TODO(gmusya): quantiles are incorrect because of incorrect comparison operator
 #if 0
     if (settings_.evaluate_quantiles) {
