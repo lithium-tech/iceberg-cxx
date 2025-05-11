@@ -23,10 +23,12 @@
 #include "stats/datasketch/distinct.h"
 #include "stats/datasketch/frequent_items.h"
 #include "stats/datasketch/quantiles.h"
+#include "stats/datasketch/string_view_serializer.h"
 #include "stats/measure.h"
 #include "stats/parquet/sketch_updater.h"
 #include "stats/parquet/values_provider.h"
 #include "stats/types.h"
+
 namespace stats {
 namespace {
 
@@ -477,26 +479,44 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
       iceberg::ScopedTimerClock quantile_timer(metrics_per_column_[col_name].quantile_);
       auto buffer = dictionary_buffer.GetGenericView();
 
-      for (int i = 0; i < buffer.dictionary_length; ++i) {
-        if (type == parquet::Type::FIXED_LEN_BYTE_ARRAY) {
-          auto value = reinterpret_cast<const parquet::FixedLenByteArray*>(buffer.dictionary)[i];
-          for (int j = 0; j < count_buffer[i]; ++j) {
-            column_result.quantile_sketch->AppendValue(value.ptr, descr->type_length());
+      if (type == parquet::Type::FIXED_LEN_BYTE_ARRAY || type == parquet::Type::BYTE_ARRAY) {
+        datasketches::quantiles_sketch<std::string_view> s;
+
+        for (int i = 0; i < buffer.dictionary_length; ++i) {
+          if (type == parquet::Type::FIXED_LEN_BYTE_ARRAY) {
+            auto value = reinterpret_cast<const parquet::FixedLenByteArray*>(buffer.dictionary)[i];
+            for (int j = 0; j < count_buffer[i]; ++j) {
+              s.update(std::string_view(reinterpret_cast<const char*>(value.ptr), descr->type_length()));
+            }
+          } else if (type == parquet::Type::BYTE_ARRAY) {
+            auto value = reinterpret_cast<const parquet::ByteArray*>(buffer.dictionary)[i];
+            for (int j = 0; j < count_buffer[i]; ++j) {
+              s.update(std::string_view(reinterpret_cast<const char*>(value.ptr), value.len));
+            }
           }
-        } else if (type == parquet::Type::BYTE_ARRAY) {
-          auto value = reinterpret_cast<const parquet::ByteArray*>(buffer.dictionary)[i];
-          for (int j = 0; j < count_buffer[i]; ++j) {
-            column_result.quantile_sketch->AppendValue(value.ptr, value.len);
-          }
-        } else if (type == parquet::Type::INT64) {
-          auto value = reinterpret_cast<const int64_t*>(buffer.dictionary)[i];
-          for (int j = 0; j < count_buffer[i]; ++j) {
-            column_result.quantile_sketch->AppendValue(value);
-          }
-        } else if (type == parquet::Type::INT32) {
-          auto value = reinterpret_cast<const int32_t*>(buffer.dictionary)[i];
-          for (int j = 0; j < count_buffer[i]; ++j) {
-            column_result.quantile_sketch->AppendValue(static_cast<int64_t>(value));
+        }
+
+        std::stringstream ss;
+        auto serialized_representation = s.serialize(0, StringViewSerializer());
+
+        GenericQuantileSketch generic_s(
+            QuantileSketch<std::string>(datasketches::quantiles_sketch<std::string>::deserialize(
+                serialized_representation.data(), serialized_representation.size())));
+
+        column_result.quantile_sketch->Merge(generic_s);
+
+      } else {
+        for (int i = 0; i < buffer.dictionary_length; ++i) {
+          if (type == parquet::Type::INT64) {
+            auto value = reinterpret_cast<const int64_t*>(buffer.dictionary)[i];
+            for (int j = 0; j < count_buffer[i]; ++j) {
+              column_result.quantile_sketch->AppendValue(value);
+            }
+          } else if (type == parquet::Type::INT32) {
+            auto value = reinterpret_cast<const int32_t*>(buffer.dictionary)[i];
+            for (int j = 0; j < count_buffer[i]; ++j) {
+              column_result.quantile_sketch->AppendValue(static_cast<int64_t>(value));
+            }
           }
         }
       }

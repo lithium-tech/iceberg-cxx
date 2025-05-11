@@ -92,6 +92,20 @@ class GenericQuantileSketch {
     return GenericQuantileSketch(QuantileSketch<DictionaryValue>(std::move(result)));
   }
 
+  void Merge(const GenericQuantileSketch& other) {
+    std::visit(
+        [&]<typename ValueType>(QuantileSketch<ValueType>& sketch) {
+          if (!std::holds_alternative<QuantileSketch<ValueType>>(other.sketch_)) {
+            throw std::runtime_error(std::string(__PRETTY_FUNCTION__) +
+                                     ": merging sketches with different types is impossible");
+          }
+          const auto& raw_sketch = std::get<QuantileSketch<ValueType>>(other.sketch_).GetSketch();
+
+          sketch.GetSketch().merge(raw_sketch);
+        },
+        sketch_);
+  }
+
  private:
   VariantType sketch_;
 };
