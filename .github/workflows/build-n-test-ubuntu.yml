@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Install apt deps
+      run: |
+        sudo apt install -y libabsl-dev libcurl4-openssl-dev
     - name: fetch-deps
       run: |
         mkdir -p _build && cd _build
@@ -20,7 +23,7 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja -DBUILD_ABSEIL=ON -DUSE_SMHASHER=ON ../
+        cmake -GNinja -DUSE_SMHASHER=ON ../
     - name: make
       run: |
         cd _build

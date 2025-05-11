@@ -119,7 +119,6 @@ FetchContent_Declare(
 
 FetchContent_Declare(
   curl
-  OVERRIDE_FIND_PACKAGE
   GIT_REPOSITORY ${GITHUB}/curl/curl.git
   GIT_TAG eebb1c1c15d24b8cf103499f7d96d9eb6994f837 # curl-8_12_1
   PATCH_COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/curl/CMakeLists.txt ./
