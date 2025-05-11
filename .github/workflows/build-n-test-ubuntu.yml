@@ -20,7 +20,7 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja -DUSE_SMHASHER=ON ../
+        cmake -GNinja -DBUILD_ABSEIL=ON -DUSE_SMHASHER=ON ../
     - name: make
       run: |
         cd _build
