@@ -309,7 +309,8 @@ bool Analyzer::EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& 
     const void* dict_data = ReadDictionary<parquet::Int32Type>(dictionary_page, descr, &dict_len, decoder);
 
     iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
-    counter_for_col.AppendValues(dict_data, dict_len, type);
+    SketchUpdater updater(counter_for_col);
+    updater.AppendValues(dict_data, dict_len, type);
   } else if (type == parquet::Type::INT64) {
     int32_t dict_len;
 
@@ -317,7 +318,8 @@ bool Analyzer::EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& 
     const void* dict_data = ReadDictionary<parquet::Int64Type>(dictionary_page, descr, &dict_len, decoder);
 
     iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
-    counter_for_col.AppendValues(dict_data, dict_len, type);
+    SketchUpdater updater(counter_for_col);
+    updater.AppendValues(dict_data, dict_len, type);
   } else if (type == parquet::Type::BYTE_ARRAY) {
     int32_t dict_len;
 
@@ -325,7 +327,8 @@ bool Analyzer::EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& 
     const void* dict_data = ReadDictionary<parquet::ByteArrayType>(dictionary_page, descr, &dict_len, decoder);
 
     iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
-    counter_for_col.AppendValues(dict_data, dict_len, type);
+    SketchUpdater updater(counter_for_col);
+    updater.AppendValues(dict_data, dict_len, type);
   } else {
     iceberg::Ensure(false,
                     "Unexpected type " + std::to_string(static_cast<int>(type)) + " for col " + std::to_string(col));
