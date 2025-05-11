@@ -135,6 +135,7 @@ FetchContent_Declare(
   PATCH_COMMAND git reset --hard HEAD
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/arrow-fix-snappy-empty-column.patch
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/arrow_ensure_xsimd.patch
+    && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/fix_c-ares_url.patch
     && export ARROW_ABSL_URL=${ARROW_DEPS_DIR}/absl-20211102.0.tar.gz
     && export ARROW_AWS_C_AUTH_URL=${ARROW_DEPS_DIR}/aws-c-auth-v0.6.22.tar.gz
     && export ARROW_AWS_C_CAL_URL=${ARROW_DEPS_DIR}/aws-c-cal-v0.5.20.tar.gz
