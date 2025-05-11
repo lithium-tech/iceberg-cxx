@@ -29,6 +29,8 @@ add_subdirectory(vendor)
 
 find_package(OpenSSL REQUIRED)
 
+FetchContent_MakeAvailable(curl)
+
 set(BOOST_ENABLE_CMAKE ON CACHE BOOL "")
 FetchContent_MakeAvailable(boost)
 
@@ -118,7 +120,6 @@ if(USE_REST)
   FetchContent_MakeAvailable(c-ares)
 
   FetchContent_MakeAvailable(cpr)
-  FetchContent_MakeAvailable(curl)
 endif()
 
 if(USE_SMHASHER)
