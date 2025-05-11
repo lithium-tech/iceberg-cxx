@@ -13,18 +13,18 @@ jobs:
     - uses: actions/checkout@v4
     - name: fetch-deps
       run: |
-        - mkdir -p _build && cd _build
-        - git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
-        - ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+        mkdir -p _build && cd _build
+        git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
+        ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
     - name: cmake
       run: |
-        - cd _build
-        - cmake -GNinja -DUSE_SMHASHER=ON ../
+        cd _build
+        cmake -GNinja -DUSE_SMHASHER=ON ../
     - name: make
       run: |
-        - cd _build
-        - ninja
+        cd _build
+        ninja
     - name: test
       run: |
-        - cd _build
-        - ctest
+        cd _build
+        ctest
