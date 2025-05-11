@@ -1,0 +1,57 @@
+name: Build and test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install apt deps
+      run: |
+        sudo apt install -y libabsl-dev libcurl4-openssl-dev
+    - name: fetch-deps
+      run: |
+        mkdir -p _build && cd _build
+        git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
+        cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
+        ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+    - name: cmake
+      run: |
+        cd _build
+        cmake -GNinja -DUSE_SMHASHER=ON ../
+    - name: make
+      run: |
+        cd _build
+        ninja
+    - name: test
+      run: |
+        cd _build
+        ctest
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: fetch-deps
+      run: |
+        mkdir -p _build && cd _build
+        git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
+        cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
+        ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+    - name: cmake
+      run: |
+        cd _build
+        cmake -GNinja -DUSE_SMHASHER=ON ../
+    - name: make
+      run: |
+        cd _build
+        ninja
+    - name: test
+      run: |
+        cd _build
+        ctest

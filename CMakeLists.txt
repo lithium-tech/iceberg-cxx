@@ -21,6 +21,11 @@ option_v(BUILD_ABSEIL "build abseil (use system's one if not set)" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 
+if(NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "None")
+  set(CMAKE_BUILD_TYPE "Release")
+  message(STATUS "CMAKE_BUILD_TYPE is not set, set to default = ${CMAKE_BUILD_TYPE}")
+endif()
+
 # deps
 
 set_directory_properties(PROPERTIES COMPILE_OPTIONS -Wno-deprecated-declarations)
@@ -89,7 +94,12 @@ FetchContent_MakeAvailable(datasketches-cpp)
 
 FetchContent_MakeAvailable(hive-metastore)
 FetchContent_MakeAvailable(rapidjson)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(OS_LINUX ON CACHE BOOL "")
+endif()
 FetchContent_MakeAvailable(thrift)
+
 FetchContent_MakeAvailable(zstd)
 
 set(INSTALL_GTEST OFF CACHE BOOL "")

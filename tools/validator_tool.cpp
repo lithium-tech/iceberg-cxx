@@ -5,6 +5,7 @@
 #include <arrow/status.h>
 
 #include <fstream>
+#include <iostream>
 
 #include "arrow/filesystem/s3fs.h"
 #include "iceberg/tea_scan.h"
