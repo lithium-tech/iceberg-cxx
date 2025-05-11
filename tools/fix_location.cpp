@@ -2,6 +2,7 @@
 #include <absl/flags/parse.h>
 
 #include <filesystem>
+#include <iostream>
 
 #include "tools/metadata_tree.h"
 
