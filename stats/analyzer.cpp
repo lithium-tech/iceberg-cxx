@@ -306,7 +306,7 @@ bool Analyzer::EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& 
     std::unique_ptr<parquet::DictDecoder<parquet::Int32Type>> decoder;
     const void* dict_data = ReadDictionary<parquet::Int32Type>(dictionary_page, descr, &dict_len, decoder);
 
-    iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].counter_);
+    iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
     counter_for_col.AppendValues(dict_data, dict_len, type);
   } else if (type == parquet::Type::INT64) {
     int32_t dict_len;
@@ -314,7 +314,7 @@ bool Analyzer::EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& 
     std::unique_ptr<parquet::DictDecoder<parquet::Int64Type>> decoder;
     const void* dict_data = ReadDictionary<parquet::Int64Type>(dictionary_page, descr, &dict_len, decoder);
 
-    iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].counter_);
+    iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
     counter_for_col.AppendValues(dict_data, dict_len, type);
   } else if (type == parquet::Type::BYTE_ARRAY) {
     int32_t dict_len;
@@ -322,7 +322,7 @@ bool Analyzer::EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& 
     std::unique_ptr<parquet::DictDecoder<parquet::ByteArrayType>> decoder;
     const void* dict_data = ReadDictionary<parquet::ByteArrayType>(dictionary_page, descr, &dict_len, decoder);
 
-    iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].counter_);
+    iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
     counter_for_col.AppendValues(dict_data, dict_len, type);
   } else {
     iceberg::Ensure(false,
@@ -336,7 +336,7 @@ bool Analyzer::EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& 
   auto* dict_data = record_reader->ReadDictionary(&dict_len);
   read_timer.reset();
 
-  iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].counter_);
+  iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
   SketchUpdater updater(counter_for_col);
   if (type == parquet::Type::FIXED_LEN_BYTE_ARRAY) {
     updater.SetFLBALength(descr->type_length());
@@ -393,6 +393,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
       // distinct is already evaluated from dictionary page
 
       if (settings_.use_precalculation_optimization) {
+        iceberg::ScopedTimerClock quantile_timer(metrics_per_column_[col_name].counting_);
         if (count_buffer.size() == 0) {
           count_buffer.resize(generic_buffer.dictionary_length, 0);
         }
@@ -422,7 +423,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
       auto& frequent_items_for_col = *column_result.frequent_items_sketch_dictionary;
       auto buffer = dictionary_buffer.GetGenericView();
       std::optional<GenericFrequentItemsSketch> materialized_sketch;
-
+      iceberg::ScopedTimerClock frequent_timer(metrics_per_column_[col_name].frequent_items_);
       if (type == parquet::Type::FIXED_LEN_BYTE_ARRAY) {
         ParquetStringProvider<int64_t> values_provider(
             reinterpret_cast<const parquet::FixedLenByteArray*>(buffer.dictionary), buffer.dictionary_length,
@@ -452,6 +453,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
     }
 
     if (settings_.evaluate_frequent_items && settings_.use_precalculation_optimization) {
+      iceberg::ScopedTimerClock frequent_timer(metrics_per_column_[col_name].frequent_items_);
       auto buffer = dictionary_buffer.GetGenericView();
 
       for (int i = 0; i < buffer.dictionary_length; ++i) {
@@ -472,6 +474,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
     }
 
     if (settings_.evaluate_quantiles && settings_.use_precalculation_optimization) {
+      iceberg::ScopedTimerClock quantile_timer(metrics_per_column_[col_name].quantile_);
       auto buffer = dictionary_buffer.GetGenericView();
 
       for (int i = 0; i < buffer.dictionary_length; ++i) {
@@ -540,7 +543,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
       auto generic_buffer = reader->ReadGeneric();
       read_timer.reset();
       if (settings_.evaluate_distinct) {
-        iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].counter_);
+        iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
         SketchUpdater updater(counter_for_col);
         if (type == parquet::Type::FIXED_LEN_BYTE_ARRAY) {
           updater.SetFLBALength(descr->type_length());
@@ -581,6 +584,7 @@ void Analyzer::Analyze(const std::string& filename) {
 
   parquet::ReaderProperties props;
   props.enable_buffered_stream();
+  props.set_buffer_size(2 * 1024 * 1024);
 
   auto file_reader = parquet::ParquetFileReader::Open(input_file, props);
   auto metadata = file_reader->metadata();
@@ -654,11 +658,15 @@ void Analyzer::Analyze(const std::string& filename) {
 
     std::cerr << std::string(80, '-') << std::endl;
     for (const auto& [name, metrics] : metrics_per_column_) {
-      auto total = metrics.counter_ + metrics.frequent_items_ + metrics.quantile_ + metrics.reading_;
+      auto total =
+          metrics.counting_ + metrics.distinct_ + metrics.frequent_items_ + metrics.quantile_ + metrics.reading_;
 
       std::cerr << "Column name: " << name << std::endl;
-      if (metrics.counter_.count() != 0) {
-        std::cerr << "counter: " << serialize_nanos(metrics.counter_) << std::endl;
+      if (metrics.counting_.count() != 0) {
+        std::cerr << "counting: " << serialize_nanos(metrics.counting_) << std::endl;
+      }
+      if (metrics.distinct_.count() != 0) {
+        std::cerr << "distinct: " << serialize_nanos(metrics.distinct_) << std::endl;
       }
       if (metrics.quantile_.count() != 0) {
         std::cerr << "quantile: " << serialize_nanos(metrics.quantile_) << std::endl;

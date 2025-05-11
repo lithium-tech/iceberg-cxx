@@ -1,8 +1,9 @@
 #pragma once
 
+#include <set>
+
 #include <stats/datasketch/distinct.h>
 
-#include <set>
 #include <string>
 
 #include "arrow/filesystem/filesystem.h"
@@ -58,9 +59,10 @@ struct AnalyzeResult {
 struct Metrics {
   iceberg::DurationClock reading_{};
 
-  iceberg::DurationClock counter_{};
+  iceberg::DurationClock distinct_{};
   iceberg::DurationClock quantile_{};
   iceberg::DurationClock frequent_items_{};
+  iceberg::DurationClock counting_{};
 };
 
 class Analyzer {
