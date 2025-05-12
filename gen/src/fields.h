@@ -72,21 +72,22 @@ inline std::shared_ptr<parquet::schema::Node> MakeDateNode(std::string_view name
                                               parquet::ConvertedType::DATE, -1, -1, -1, field_id);
 }
 
-inline std::shared_ptr<parquet::schema::Node> ParquetNodeFromArrowField(const std::shared_ptr<arrow::Field>& field) {
+inline std::shared_ptr<parquet::schema::Node> ParquetNodeFromArrowField(const std::shared_ptr<arrow::Field>& field,
+                                                                        int field_id = -1) {
   switch (field->type()->id()) {
     case arrow::Type::STRING:
-      return MakeStringNode(field->name());
+      return MakeStringNode(field->name(), field_id);
     case arrow::Type::INT16:
-      return MakePrimitiveInt16Node(field->name());
+      return MakePrimitiveInt16Node(field->name(), field_id);
     case arrow::Type::INT32:
-      return MakePrimitiveInt32Node(field->name());
+      return MakePrimitiveInt32Node(field->name(), field_id);
     case arrow::Type::INT64:
-      return MakePrimitiveInt64Node(field->name());
+      return MakePrimitiveInt64Node(field->name(), field_id);
     case arrow::Type::DATE32:
-      return MakeDateNode(field->name());
+      return MakeDateNode(field->name(), field_id);
     case arrow::Type::DECIMAL: {
       auto dec_field = std::static_pointer_cast<arrow::Decimal128Type>(field->type());
-      return MakeDecimalNode(field->name(), dec_field->precision(), dec_field->scale());
+      return MakeDecimalNode(field->name(), dec_field->precision(), dec_field->scale(), field_id);
     }
     default:
       throw std::runtime_error("Unexpected field: " + field->ToString());
@@ -97,8 +98,9 @@ inline std::shared_ptr<parquet::schema::Node> ParquetNodeFromArrowField(const st
 inline std::shared_ptr<parquet::schema::GroupNode> ParquetSchemaFromArrowSchema(
     std::shared_ptr<const arrow::Schema> arrow_schema) {
   parquet::schema::NodeVector node_vector;
-  for (const auto& field : arrow_schema->fields()) {
-    node_vector.emplace_back(ParquetNodeFromArrowField(field));
+  const auto& fields = arrow_schema->fields();
+  for (size_t i = 0; i < fields.size(); ++i) {
+    node_vector.emplace_back(ParquetNodeFromArrowField(fields[i], i + 1));
   }
   return std::static_pointer_cast<parquet::schema::GroupNode>(
       parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, node_vector));
