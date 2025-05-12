@@ -1,13 +1,6 @@
 set_property(DIRECTORY PROPERTY EXCLUDE_FROM_ALL 1)
 
-if(GITLAB_URL)
-  if (GIT_HTTPS)
-    set(GITLAB_URL https://${GITLAB})
-  else()
-    set(GITLAB_URL ssh://git@${GITLAB}:7999)
-  endif()
-  set(GITHUB ${GITLAB_URL}/github-mirror)
-else()
+if(NOT DEFINED GITHUB)
   set(GITHUB https://github.com)
 endif()
 
