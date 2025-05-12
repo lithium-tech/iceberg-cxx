@@ -412,7 +412,14 @@ class ManifestEntryDeserializer {
     }
     const auto& record = datum.value<avro::GenericRecord>();
 
-    ManifestEntry entry{};
+    ManifestEntry entry = [&]() {
+      if (record.hasField("data_file")) {
+        const auto& field = record.field("data_file");
+        DataFileDeserializer deserializer(config_.datafile_config);
+        return ManifestEntry{.data_file = deserializer.Deserialize(field)};
+      }
+      return ManifestEntry{};
+    }();
     if (config_.extract_status) {
       entry.status = static_cast<ManifestEntry::Status>(Extract<int>(record, "status"));
     }
@@ -421,11 +428,6 @@ class ManifestEntryDeserializer {
                                       config_.extract_sequence_number);
     ExtractIf<std::optional<int64_t>>(record, "file_sequence_number", entry.file_sequence_number,
                                       config_.extract_file_sequence_number);
-    if (record.hasField("data_file")) {
-      const auto& field = record.field("data_file");
-      DataFileDeserializer deserializer(config_.datafile_config);
-      entry.data_file = deserializer.Deserialize(field);
-    }
     return entry;
   }
 
