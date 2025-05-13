@@ -380,8 +380,11 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
         MakeGenericParquetDictionaryReaderFromType(dictionary_buffer, col_reader, settings_.batch_size, type);
     iceberg::Ensure(reader.has_value(), "Failed to constructor reader for column " + col_name);
 
-    while (col_reader->HasNext()) {
+    while (true) {
       std::optional<iceberg::ScopedTimerClock> read_timer(metrics_per_column_[col_name].reading_);
+      if (!col_reader->HasNext()) {
+        break;
+      }
       auto generic_buffer = reader->ReadGeneric();
       read_timer.reset();
 
@@ -541,8 +544,11 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
         MakeGenericParquetReaderFromType(buffer, col_reader, settings_.batch_size, type);
     iceberg::Ensure(reader.has_value(), "Failed to constructor reader for column " + col_name);
 
-    while (col_reader->HasNext()) {
+    while (true) {
       std::optional<iceberg::ScopedTimerClock> read_timer(metrics_per_column_[col_name].reading_);
+      if (!col_reader->HasNext()) {
+        break;
+      }
       auto generic_buffer = reader->ReadGeneric();
       read_timer.reset();
       if (settings_.evaluate_distinct) {
@@ -680,12 +686,29 @@ void Analyzer::Analyze(const std::string& filename) {
       return ss.str();
     };
 
-    std::cerr << std::string(80, '-') << std::endl;
+    iceberg::DurationClock complete_time{};
+
+    std::vector<std::pair<std::string, int64_t>> results;
     for (const auto& [name, metrics] : metrics_per_column_) {
       auto total =
+          (metrics.counting_ + metrics.distinct_ + metrics.frequent_items_ + metrics.quantile_ + metrics.reading_)
+              .count();
+
+      results.emplace_back(name, total);
+    }
+    std::sort(results.begin(), results.end(),
+              [&](const auto& lhs, const auto& rhs) { return lhs.second < rhs.second; });
+
+    std::cerr << std::string(80, '-') << std::endl;
+    for (const auto& [name, _] : results) {
+      const auto& metrics = metrics_per_column_.at(name);
+      auto total =
           metrics.counting_ + metrics.distinct_ + metrics.frequent_items_ + metrics.quantile_ + metrics.reading_;
+      complete_time += total;
 
       std::cerr << "Column name: " << name << std::endl;
+      std::cerr << "Dicitonary encoded: " << metrics.dictionary_encoded_count_ << "/"
+                << metrics.dictionary_encoded_count_ + metrics.not_dictionary_encoded_count << std::endl;
       if (metrics.counting_.count() != 0) {
         std::cerr << "counting: " << serialize_nanos(metrics.counting_) << std::endl;
       }
@@ -704,6 +727,8 @@ void Analyzer::Analyze(const std::string& filename) {
       std::cerr << "total: " << serialize_nanos(total) << std::endl;
       std::cerr << std::string(80, '-') << std::endl;
     }
+
+    std::cerr << "time for all columns: " << serialize_nanos(complete_time) << std::endl;
   }
 }
 

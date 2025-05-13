@@ -59,6 +59,9 @@ struct AnalyzeResult {
 };
 
 struct Metrics {
+  int64_t dictionary_encoded_count_{};
+  int64_t not_dictionary_encoded_count{};
+
   iceberg::DurationClock reading_{};
 
   iceberg::DurationClock distinct_{};
