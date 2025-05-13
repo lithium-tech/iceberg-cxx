@@ -66,7 +66,7 @@ FetchContent_Declare(
 FetchContent_Declare(
   abseil
   GIT_REPOSITORY ${GITHUB}/abseil/abseil-cpp.git
-  GIT_TAG 053d842fa6c55ee103057b3c325b1923fd5d67d2 # lts_2022_06_23
+  GIT_TAG 20211102.0
 )
 
 FetchContent_Declare(

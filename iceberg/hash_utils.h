@@ -22,7 +22,7 @@
 #include "arrow/util/value_parsing.h"
 #include "arrow/visit_scalar_inline.h"
 
-#ifdef USE_SMHASHER
+#ifdef ICECXX_USE_SMHASHER
 #include "MurmurHash3.h"
 #endif
 
@@ -46,7 +46,7 @@ struct MurMurHasher {
 
   template <typename T>
   int operator()(const T& src) const requires(std::is_same_v<T, std::string>) {
-#ifdef USE_SMHASHER
+#ifdef ICECXX_USE_SMHASHER
     int hash_result;
     MurmurHash3_x86_32(src.data(), src.size(), 0, &hash_result);
     return hash_result;
@@ -58,7 +58,7 @@ struct MurMurHasher {
 
   template <typename T>
   int operator()(const T& value) const requires(std::is_same_v<T, int> || std::is_same_v<T, int64_t>) {
-#ifdef USE_SMHASHER
+#ifdef ICECXX_USE_SMHASHER
     std::vector<uint8_t> buffer;
     PackLittleEndian(static_cast<int64_t>(value), buffer);
     int hash_result;
@@ -72,7 +72,7 @@ struct MurMurHasher {
 
   template <typename T>
   int operator()(const T& value) const requires(std::is_same_v<T, uint64_t> || std::is_same_v<T, unsigned int>) {
-#ifdef USE_SMHASHER
+#ifdef ICECXX_USE_SMHASHER
     std::vector<uint8_t> buffer;
     PackLittleEndian(static_cast<uint64_t>(value), buffer);
     int hash_result;
@@ -86,7 +86,7 @@ struct MurMurHasher {
 
   template <typename T>
   int operator()(double value) const requires(std::is_same_v<T, float> || std::is_same_v<T, double>) {
-#ifdef USE_SMHASHER
+#ifdef ICECXX_USE_SMHASHER
     std::vector<uint8_t> buffer;
     PackLittleEndian(value, buffer);
     int hash_result;

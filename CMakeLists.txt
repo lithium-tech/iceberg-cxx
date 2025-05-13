@@ -10,14 +10,14 @@ macro(option_v OPTION_NAME OPTION_TEXT OPTION_DEFAULT)
   message(STATUS "  ${OPTION_NAME}: ${${OPTION_NAME}}")
 endmacro()
 
-option_v(HAS_ARROW_CSV "Arrow built with csv" ON)
-option_v(USE_SMHASHER "Enable SMHasher" OFF)
-option_v(BUILD_TOOLS "build binaries" ON)
-option_v(ICEBERG_GEN "build generator" ON)
-option_v(USE_REST "enable rest building" ON)
-option_v(REST_TESTS "enable rest tests" ON)
-option_v(BUILD_ARROW "build Apache Arrow" ON)
-option_v(BUILD_ABSEIL "build abseil (use system's one if not set)" OFF)
+option_v(ICECXX_USE_SMHASHER "Enable SMHasher" ON)
+option_v(ICECXX_BUILD_TOOLS "build binaries" ON)
+option_v(ICECXX_GENERATOR "build generator" ON)
+option_v(ICECXX_USE_REST "enable rest building" ON)
+option_v(ICECXX_REST_TESTS "enable rest tests" ON)
+option_v(ICECXX_BUILD_ARROW "build Apache Arrow" ON)
+option_v(ICECXX_BUILD_ABSEIL "build abseil (use system's one if not set)" ON)
+option_v(ICECXX_STATISTICS "" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -37,7 +37,7 @@ find_package(OpenSSL REQUIRED)
 set(BOOST_ENABLE_CMAKE ON CACHE BOOL "")
 FetchContent_MakeAvailable(boost)
 
-if(BUILD_ARROW)
+if(ICECXX_BUILD_ARROW)
   set(ARROW_DEPENDENCY_SOURCE BUNDLED CACHE STRING "")
   set(ARROW_SIMD_LEVEL DEFAULT CACHE STRING "") # xsimd
   set(ARROW_BUILD_STATIC ON CACHE BOOL "")
@@ -115,13 +115,21 @@ set(ZLIBNG_ENABLE_TESTS OFF CACHE BOOL "")
 set(WITH_GTEST OFF CACHE BOOL "")
 FetchContent_MakeAvailable(zlib-ng)
 
-if(BUILD_ABSEIL)
+if(ICECXX_BUILD_ABSEIL)
+  set_property(
+    DIRECTORY ${abseil_SOURCE_DIR}
+    APPEND
+    PROPERTY COMPILE_OPTIONS -Wno-deprecated-builtins
+  )
+  set(ABSL_USE_EXTERNAL_GOOGLETEST ON CACHE BOOL "")
+  set(BUILD_TESTING OFF CACHE BOOL "")
+  set(ABSL_ENABLE_INSTALL OFF CACHE BOOL "")
   FetchContent_MakeAvailable(abseil)
 else()
   find_package(absl REQUIRED)
 endif()
 
-if(USE_REST)
+if(ICECXX_USE_REST)
   set(CARES_STATIC ON CACHE BOOL "")
   set(CARES_SHARED OFF CACHE BOOL "")
   set(CARES_BUILD_TOOLS OFF CACHE BOOL "")
@@ -131,7 +139,7 @@ if(USE_REST)
   FetchContent_MakeAvailable(curl)
 endif()
 
-if(USE_SMHASHER)
+if(ICECXX_USE_SMHASHER)
   FetchContent_MakeAvailable(smhasher)
   add_library(
     SMHasherMurmurHash3
@@ -151,13 +159,13 @@ include_directories(
 
 add_subdirectory(iceberg)
 
-if (BUILD_TOOLS)
+if (ICECXX_BUILD_TOOLS)
   add_subdirectory(tools)
 endif()
-if (ICEBERG_STATISTICS)
+if (ICECXX_STATISTICS)
   add_subdirectory(stats)
 endif()
-if (ICEBERG_GEN AND HAS_ARROW_CSV)
+if (ICECXX_GENERATOR)
   add_subdirectory(gen)
 endif()
 

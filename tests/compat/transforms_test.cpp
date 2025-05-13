@@ -29,7 +29,7 @@ TEST(Transforms, All) {
     EXPECT_EQ(transformed_value->value, 87654321);
   }
 
-#ifdef USE_SMHASHER
+#ifdef ICECXX_USE_SMHASHER
   {
     auto transform = BucketTransform(12345678);
     auto transformed_value = std::static_pointer_cast<arrow::Int32Scalar>(transform.Transform(num_scalar));
