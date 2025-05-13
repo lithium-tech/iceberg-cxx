@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iceberg/common/logger.h>
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -13,8 +15,8 @@ namespace iceberg {
 class ParquetFileReader : public IStream<ArrowBatchWithRowPosition> {
  public:
   ParquetFileReader(std::shared_ptr<parquet::arrow::FileReader> input_file, const std::vector<int>& row_groups,
-                    const std::vector<int>& columns)
-      : input_file_(input_file), row_groups_(row_groups), columns_(columns) {
+                    const std::vector<int>& columns, std::shared_ptr<ILogger> logger = nullptr)
+      : input_file_(input_file), row_groups_(row_groups), columns_(columns), logger_(logger) {
     Ensure(input_file != nullptr, std::string(__PRETTY_FUNCTION__) + ": batch is nullptr");
   }
 
@@ -27,6 +29,9 @@ class ParquetFileReader : public IStream<ArrowBatchWithRowPosition> {
         current_stream_ = std::make_shared<RowGroupReaderWithRowNumber>(
             input_file_, row_groups_.at(next_position_in_row_group_array_), columns_);
         ++next_position_in_row_group_array_;
+        if (logger_) {
+          logger_->Log(std::to_string(1), "metrics:row_groups:read");
+        }
       }
       auto batch = current_stream_->ReadNext();
       if (!batch) {
@@ -45,6 +50,7 @@ class ParquetFileReader : public IStream<ArrowBatchWithRowPosition> {
   size_t next_position_in_row_group_array_ = 0;
 
   StreamPtr<ArrowBatchWithRowPosition> current_stream_;
+  std::shared_ptr<ILogger> logger_;
 };
 
 }  // namespace iceberg

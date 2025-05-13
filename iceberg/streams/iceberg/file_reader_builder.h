@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/status.h>
+#include <iceberg/common/rg_metadata.h>
 #include <parquet/metadata.h>
 
 #include <algorithm>
@@ -13,6 +14,7 @@
 
 #include "iceberg/common/batch.h"
 #include "iceberg/common/fs/file_reader_provider.h"
+#include "iceberg/common/logger.h"
 #include "iceberg/common/rg_metadata.h"
 #include "iceberg/common/selection_vector.h"
 #include "iceberg/streams/arrow/file_reader.h"
@@ -59,12 +61,13 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   FileReaderBuilder(std::vector<int> field_ids_to_retrieve, std::shared_ptr<const EqualityDeletes> equality_deletes,
                     std::shared_ptr<const FieldIdMapper> mapper,
                     std::shared_ptr<const IFileReaderProvider> file_reader_provider,
-                    std::shared_ptr<const IRowGroupFilter> rg_filter)
+                    std::shared_ptr<const IRowGroupFilter> rg_filter, std::shared_ptr<ILogger> logger = nullptr)
       : field_ids_to_retrieve_(std::move(field_ids_to_retrieve)),
         equality_deletes_(equality_deletes),
         mapper_(mapper),
         file_reader_provider_(file_reader_provider),
-        rg_filter_(rg_filter) {
+        rg_filter_(rg_filter),
+        logger_(logger) {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
     Ensure(file_reader_provider_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
@@ -73,6 +76,10 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   IcebergStreamPtr Build(const AnnotatedDataPath& annotated_data_path) override {
     auto arrow_reader = MakeArrowReader(annotated_data_path.GetPath());
     Ensure(arrow_reader != nullptr, std::string(__PRETTY_FUNCTION__) + ": arrow_reader is nullptr");
+
+    if (logger_) {
+      logger_->Log(std::to_string(1), "metrics:data:files_read");
+    }
 
     auto parquet_reader = arrow_reader->parquet_reader();
     Ensure(parquet_reader != nullptr, std::string(__PRETTY_FUNCTION__) + ": parquet_reader is nullptr");
@@ -83,6 +90,10 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
     const std::vector<int> field_ids_required = [&]() {
       auto field_ids_for_equality_delete = equality_deletes_->GetFieldIds(annotated_data_path.GetPartitionLayer());
 
+      if (logger_) {
+        logger_->Log(std::to_string(field_ids_for_equality_delete.size()), "metrics:data:columns_equality_delete");
+      }
+
       std::vector<int> result = field_ids_to_retrieve_;
       for (const int f : field_ids_for_equality_delete) {
         result.emplace_back(f);
@@ -90,6 +101,12 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
 
       std::sort(result.begin(), result.end());
       result.erase(std::unique(result.begin(), result.end()), result.end());
+
+      if (logger_) {
+        logger_->Log(std::to_string(static_cast<int>(result.size()) - static_cast<int>(field_ids_to_retrieve_.size())),
+                     "metrics:data:columns_only_equality_delete");
+      }
+
       return result;
     }();
 
@@ -107,6 +124,8 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
 
     const std::vector<int> row_groups_matching_offsets =
         GetRowGroupsToRetrieve(*metadata, annotated_data_path.GetSegments());
+    int64_t planned_row_groups = row_groups_matching_offsets.size();
+    int64_t skipped_row_groups = 0;
 
     const std::vector<int> matching_row_groups = [&]() {
       if (!rg_filter_) {
@@ -120,14 +139,23 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
 
         if (!rg_filter_->CanSkipRowGroup(*rg_meta)) {
           result.emplace_back(rg_ind);
+        } else {
+          ++skipped_row_groups;
         }
       }
 
       return result;
     }();
 
+    if (logger_) {
+      logger_->Log(std::to_string(planned_row_groups), "metrics:row_groups:planned");
+      logger_->Log(std::to_string(skipped_row_groups), "metrics:row_groups:skipped");
+
+      logger_->Log(std::to_string(col_positions.size()), "metrics:data:columns_read");
+    }
+
     StreamPtr<ArrowBatchWithRowPosition> result = std::make_shared<ParquetFileReader>(
-        std::shared_ptr<parquet::arrow::FileReader>(arrow_reader), matching_row_groups, col_positions);
+        std::shared_ptr<parquet::arrow::FileReader>(arrow_reader), matching_row_groups, col_positions, logger_);
 
     const std::map<std::string, std::string> parquet_name_to_result_name = [&]() {
       std::map<std::string, std::string> result;
@@ -236,6 +264,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::shared_ptr<const FieldIdMapper> mapper_;
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::shared_ptr<const IRowGroupFilter> rg_filter_;
+  std::shared_ptr<ILogger> logger_;
 };
 
 }  // namespace iceberg

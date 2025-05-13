@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "iceberg/common/logger.h"
 #include "iceberg/equality_delete/handler.h"
 #include "iceberg/schema.h"
 #include "iceberg/streams/iceberg/data_entries_meta_stream.h"
@@ -30,7 +31,8 @@ class IcebergScanBuilder {
                                             std::optional<EqualityDeleteHandler::Config> cfg,
                                             std::shared_ptr<const IRowGroupFilter> rg_filter,
                                             const iceberg::Schema& schema, std::vector<int> field_ids_to_retrieve,
-                                            std::shared_ptr<const IFileReaderProvider> file_reader_provider) {
+                                            std::shared_ptr<const IFileReaderProvider> file_reader_provider,
+                                            std::shared_ptr<ILogger> logger = nullptr) {
     Ensure(file_reader_provider != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
 
     auto mapper = MakeMapper(schema);
@@ -38,7 +40,7 @@ class IcebergScanBuilder {
     // this class takes an AnnotatedDataPath as input and returns IcebergStream
     // (which reads some columns from row groups matching rg-filter of data file)
     auto stream_builder = std::make_shared<FileReaderBuilder>(field_ids_to_retrieve, equality_deletes, mapper,
-                                                              file_reader_provider, rg_filter);
+                                                              file_reader_provider, rg_filter, logger);
 
     // convert stream of AnnotatedDatapath into concatenation of streams created with FileReaderBuilder
     IcebergStreamPtr stream = std::make_shared<DataScanner>(meta_stream, stream_builder);
@@ -46,12 +48,13 @@ class IcebergScanBuilder {
     if (!equality_deletes->partlayer_to_deletes.empty()) {
       Ensure(cfg.has_value(), std::string(__PRETTY_FUNCTION__) +
                                   ": equality deletes are present, but config for equality deletes is not set");
-      stream =
-          std::make_shared<EqualityDeleteApplier>(stream, equality_deletes, cfg.value(), mapper, file_reader_provider);
+      stream = std::make_shared<EqualityDeleteApplier>(stream, equality_deletes, cfg.value(), mapper,
+                                                       file_reader_provider, logger);
     }
 
     if (!positional_deletes.delete_entries.empty()) {
-      stream = std::make_shared<PositionalDeleteApplier>(stream, std::move(positional_deletes), file_reader_provider);
+      stream = std::make_shared<PositionalDeleteApplier>(stream, std::move(positional_deletes), file_reader_provider,
+                                                         logger);
     }
 
     stream = MakeFinalProjection(*mapper, stream, field_ids_to_retrieve);

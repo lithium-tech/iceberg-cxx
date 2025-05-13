@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iceberg/common/logger.h>
+
 #include <functional>
 #include <map>
 #include <memory>
@@ -9,7 +11,6 @@
 #include <vector>
 
 #include "absl/container/flat_hash_set.h"
-#include "iceberg/positional_delete/stats.h"
 #include "parquet/arrow/reader.h"
 
 namespace iceberg {
@@ -28,9 +29,11 @@ class PositionalDeleteStream {
 
  public:
   PositionalDeleteStream(const std::set<std::string>& urls,
-                         const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb);
+                         const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
+                         std::shared_ptr<iceberg::ILogger> logger = nullptr);
 
-  explicit PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> file);
+  explicit PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> file,
+                                  std::shared_ptr<iceberg::ILogger> logger = nullptr);
 
   ~PositionalDeleteStream();
 
@@ -44,8 +47,6 @@ class PositionalDeleteStream {
    * @param end end of the requeted range
    */
   DeleteRows GetDeleted(const std::string& url, int64_t begin, int64_t end);
-
-  const PositionalDeleteStats stats() const { return stats_; }
 
  private:
   void EnqueueOrDelete(Reader*);
@@ -63,8 +64,9 @@ class PositionalDeleteStream {
 
   absl::flat_hash_set<Reader*> readers_;
   std::priority_queue<Reader*, std::vector<Reader*>, ReaderGreater> queue_;
-  PositionalDeleteStats stats_ = {};
   std::optional<Query> last_query_;
+
+  std::shared_ptr<iceberg::ILogger> logger_;
 };
 
 }  // namespace iceberg

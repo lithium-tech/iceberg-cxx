@@ -8,6 +8,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "arrow/record_batch.h"
 #include "arrow/status.h"
+#include "iceberg/common/logger.h"
 #include "iceberg/equality_delete/common.h"
 #include "iceberg/equality_delete/delete.h"
 #include "parquet/arrow/reader.h"
@@ -116,14 +117,18 @@ void EqualityDeleteHandler::PrepareDeletesForBatch(
 
 arrow::Status EqualityDeleteHandler::AppendDelete(const std::string &url, const std::vector<FieldId> &field_ids_vec) {
   ARROW_ASSIGN_OR_RAISE(auto reader, open_url_method_(url));
-  ++stats_.files_read;
+  if (logger_) {
+    logger_->Log(std::to_string(1), "metrics:equality:files_read");
+  }
 
   int64_t rows_in_file = reader->parquet_reader()->metadata()->num_rows();
   if (current_rows_ + rows_in_file > max_rows_) {
     return arrow::Status::ExecutionError("Equality delete rows limit exceeded (", current_rows_ + rows_in_file, "/",
                                          max_rows_, ")");
   }
-  stats_.rows_read += rows_in_file;
+  if (logger_) {
+    logger_->Log(std::to_string(rows_in_file), "metrics:equality:rows_read");
+  }
 
   std::set<FieldId> field_ids(field_ids_vec.begin(), field_ids_vec.end());
   ARROW_ASSIGN_OR_RAISE(auto record_batch_reader, PrepareRecordBatchReader(reader, field_ids));
@@ -142,9 +147,15 @@ arrow::Status EqualityDeleteHandler::AppendDelete(const std::string &url, const 
       current_rows_ += deletes->Size();
     }
   }
-  stats_.max_rows_materialized = std::max(stats_.max_rows_materialized, current_rows_);
-  stats_.max_mb_size_materialized =
-      std::max(stats_.max_mb_size_materialized, static_cast<double>(shared_state_->Allocated()) / (1024.0 * 1024.0));
+
+  if (logger_) {
+    logger_->Log(std::to_string(current_rows_), "metrics:equality:current_materialized_rows");
+  }
+  if (logger_) {
+    logger_->Log(std::to_string(static_cast<double>(shared_state_->Allocated()) / (1024.0 * 1024.0)),
+                 "metrics:equality:current_mb_materialized");
+  }
+
   return arrow::Status::OK();
 }
 
@@ -160,12 +171,14 @@ absl::flat_hash_set<int> EqualityDeleteHandler::GetEqualityDeleteFieldIds() cons
   return result;
 }
 
-EqualityDeleteHandler::EqualityDeleteHandler(ReaderMethodType get_reader_method, const Config &config)
+EqualityDeleteHandler::EqualityDeleteHandler(ReaderMethodType get_reader_method, const Config &config,
+                                             std::shared_ptr<iceberg::ILogger> logger)
     : max_rows_(config.max_rows),
       use_specialized_deletes_(config.use_specialized_deletes),
       open_url_method_(get_reader_method),
       shared_state_(std::make_shared<MemoryState>(1024 * 1024 * config.equality_delete_max_mb_size,
-                                                  config.throw_if_memory_limit_exceeded)) {}
+                                                  config.throw_if_memory_limit_exceeded)),
+      logger_(logger) {}
 
 bool EqualityDeleteHandler::IsDeleted(uint64_t row) const {
   for (const auto &[delete_ptr, arrow_arrays] : prepared_batches_) {

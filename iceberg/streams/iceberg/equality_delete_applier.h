@@ -2,6 +2,7 @@
 
 #include <arrow/array/array_base.h>
 #include <arrow/status.h>
+#include <iceberg/common/logger.h>
 
 #include <map>
 #include <memory>
@@ -10,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "iceberg/common/defer.h"
 #include "iceberg/common/fs/file_reader_provider.h"
 #include "iceberg/equality_delete/handler.h"
 #include "iceberg/result.h"
@@ -47,12 +49,14 @@ class EqualityDeleteApplier : public IcebergStream {
  public:
   explicit EqualityDeleteApplier(IcebergStreamPtr input, std::shared_ptr<const EqualityDeletes> equality_deletes,
                                  EqualityDeleteHandler::Config eq_del_config, std::shared_ptr<FieldIdMapper> mapper,
-                                 std::shared_ptr<const IFileReaderProvider> file_reader_provider)
+                                 std::shared_ptr<const IFileReaderProvider> file_reader_provider,
+                                 std::shared_ptr<ILogger> logger = nullptr)
       : input_(input),
         equality_deletes_(equality_deletes),
         eq_del_config_(eq_del_config),
         field_id_mapper_(mapper),
-        file_reader_provider_(file_reader_provider) {
+        file_reader_provider_(file_reader_provider),
+        logger_(logger) {
     Ensure(input_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": input is nullptr");
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(field_id_mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": field_id_mapper is nullptr");
@@ -65,6 +69,15 @@ class EqualityDeleteApplier : public IcebergStream {
       return nullptr;
     }
 
+    if (logger_) {
+      logger_->Log("", "events:equality:start_batch");
+    }
+    Defer defer([&]() {
+      if (logger_) {
+        logger_->Log("", "events:equality:end_batch");
+      }
+    });
+
     bool can_reuse_state = current_state_.has_value() && (current_state_->GetPartition() == batch->GetPartition()) &&
                            current_state_->GetLayer() >= batch->GetLayer();
 
@@ -74,7 +87,7 @@ class EqualityDeleteApplier : public IcebergStream {
         return file_reader_provider->Open(path);
       };
 
-      equality_delete_handler_.emplace(open_file_lambda, eq_del_config_);
+      equality_delete_handler_.emplace(open_file_lambda, eq_del_config_, logger_);
       UpdateDeletes(target_state, std::nullopt);
     } else {
       UpdateDeletes(target_state, current_state_->GetLayer());
@@ -96,7 +109,11 @@ class EqualityDeleteApplier : public IcebergStream {
     if (equality_delete_handler_->PrepareDeletesForFile()) {
       std::map<FieldId, std::shared_ptr<arrow::Array>> field_id_to_array = MakeFieldIdToArray(batch);
       equality_delete_handler_->PrepareDeletesForBatch(field_id_to_array);
-      batch->GetSelectionVector().EraseIf([this](int32_t row) { return equality_delete_handler_->IsDeleted(row); });
+      int32_t deleted_rows =
+          batch->GetSelectionVector().EraseIf([this](int32_t row) { return equality_delete_handler_->IsDeleted(row); });
+      if (logger_) {
+        logger_->Log(std::to_string(deleted_rows), "metrics:equality:deleted_rows");
+      }
     }
 
     return batch;
@@ -150,6 +167,7 @@ class EqualityDeleteApplier : public IcebergStream {
 
   std::optional<EqualityDeleteHandler> equality_delete_handler_;
   std::optional<PartitionLayer> current_state_;
+  std::shared_ptr<ILogger> logger_;
 };
 
 }  // namespace iceberg
