@@ -15,8 +15,6 @@ class SketchUpdater {
 
   explicit SketchUpdater(Sketch& s) : sketch_(s) {}
 
-  void SetFLBALength(int64_t length) { flba_length_ = length; }
-
   void AppendValues(const void* data, uint64_t num_values, parquet::Type::type type) {
     switch (type) {
       case parquet::Type::INT32: {
@@ -30,13 +28,6 @@ class SketchUpdater {
         const int64_t* values = reinterpret_cast<const int64_t*>(data);
         for (uint64_t i = 0; i < num_values; ++i) {
           sketch_.AppendValue(values[i]);
-        }
-        break;
-      }
-      case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
-        const parquet::FixedLenByteArray* values = reinterpret_cast<const parquet::FixedLenByteArray*>(data);
-        for (uint64_t i = 0; i < num_values; ++i) {
-          sketch_.AppendValue(values[i].ptr, flba_length_);
         }
         break;
       }
