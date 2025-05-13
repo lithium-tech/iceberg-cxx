@@ -547,9 +547,6 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
       read_timer.reset();
       if (settings_.evaluate_distinct) {
         iceberg::ScopedTimerClock counter_timer(metrics_per_column_[col_name].distinct_);
-
-        if (type == parquet::Type::BYTE_ARRAY && settings_.use_string_view_heuristic) {
-        }
         SketchUpdater updater(counter_for_col);
 
         updater.AppendValues(generic_buffer.data, generic_buffer.values_size, type);
@@ -557,9 +554,23 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
       if (settings_.evaluate_quantiles) {
         iceberg::ScopedTimerClock quantile_timer(metrics_per_column_[col_name].quantile_);
         auto& quantiles_for_col = *column_result.quantile_sketch;
-        SketchUpdater updater(quantiles_for_col);
 
-        updater.AppendValues(generic_buffer.data, generic_buffer.values_size, type);
+        if (type == parquet::Type::BYTE_ARRAY && settings_.use_string_view_heuristic) {
+          QuantileSketch<std::string_view> temp_sketch;
+          for (int i = 0; i < generic_buffer.values_size; ++i) {
+            auto value = reinterpret_cast<const parquet::ByteArray*>(generic_buffer.data)[i];
+            temp_sketch.AppendValue(std::string_view(reinterpret_cast<const char*>(value.ptr), value.len));
+          }
+          auto serialized_representation = temp_sketch.GetSketch().serialize(0, StringViewSerializer());
+          GenericQuantileSketch generic_s(
+              QuantileSketch<std::string>(datasketches::quantiles_sketch<std::string>::deserialize(
+                  serialized_representation.data(), serialized_representation.size())));
+          column_result.quantile_sketch->Merge(generic_s);
+        } else {
+          SketchUpdater updater(quantiles_for_col);
+
+          updater.AppendValues(generic_buffer.data, generic_buffer.values_size, type);
+        }
       }
 
       if (settings_.evaluate_frequent_items) {
