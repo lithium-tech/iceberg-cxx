@@ -37,7 +37,7 @@ FetchContent_Declare(
 
 FetchContent_Declare(
   hive-metastore
-  GIT_REPOSITORY ${GITHUB}/clickhouse/hive-metastore
+  GIT_REPOSITORY ${GITHUB}/clickhouse/hive-metastore.git
   GIT_TAG 809a77d435ce218d9b000733f19489c606fc567b
   PATCH_COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/hive-metastore/CMakeLists.txt ./
 )
@@ -46,6 +46,7 @@ FetchContent_Declare(
   snappy
   GIT_REPOSITORY ${GITHUB}/google/snappy.git
   GIT_TAG 6af9287fbdb913f0794d0148c6aa43b58e63c8e3 # 1.2.2
+  GIT_SUBMODULES ""
 )
 
 FetchContent_Declare(
