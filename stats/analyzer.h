@@ -25,6 +25,8 @@ enum class DistinctCounterImplType { kNaive, kTheta, kHyperLogLog };
 struct Settings {
   bool use_dictionary_optimization = false;
   bool use_precalculation_optimization = false;
+  bool use_string_view_heuristic = false;
+  std::optional<int> row_groups_limit = std::nullopt;
   DistinctCounterImplType distinct_counter_implementation = DistinctCounterImplType::kTheta;
   bool evaluate_distinct = false;
   bool evaluate_quantiles = false;

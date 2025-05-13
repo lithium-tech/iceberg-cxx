@@ -176,6 +176,8 @@ ABSL_FLAG(std::string, iceberg_metadata_location, "", "iceberg metadata location
 ABSL_FLAG(std::vector<std::string>, filenames, {}, "filenames to process");
 ABSL_FLAG(bool, use_dictionary_optimization, true, "read data only from dictionary page if possible");
 ABSL_FLAG(bool, use_precalculation_optimization, true, "");
+ABSL_FLAG(bool, use_string_view_heuristic, true, "");
+ABSL_FLAG(std::optional<int>, row_groups_limit, std::nullopt, "");
 ABSL_FLAG(std::string, distinct_counter_implementation, "theta", "naive/hll/theta");
 ABSL_FLAG(bool, evaluate_distinct, false, "evaluate distinct values");
 ABSL_FLAG(bool, evaluate_quantiles, false, "evaluate quantiles");
@@ -258,6 +260,8 @@ int main(int argc, char** argv) {
 
     settings.use_dictionary_optimization = absl::GetFlag(FLAGS_use_dictionary_optimization);
     settings.use_precalculation_optimization = absl::GetFlag(FLAGS_use_precalculation_optimization);
+    settings.use_string_view_heuristic = absl::GetFlag(FLAGS_use_string_view_heuristic);
+    settings.row_groups_limit = absl::GetFlag(FLAGS_row_groups_limit);
 
     const std::string distinct_counter_implementation_str = absl::GetFlag(FLAGS_distinct_counter_implementation);
     if (distinct_counter_implementation_str == "naive") {
