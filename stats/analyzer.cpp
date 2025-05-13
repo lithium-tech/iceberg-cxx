@@ -358,6 +358,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
   int64_t values_read = 0;
 
   if (settings_.use_dictionary_optimization && AllDataPagesAreEncodedWithDictionary(*col_metadata)) {
+    ++metrics_per_column_[col_name].dictionary_encoded_count_;
     bool distinct_is_evaluated = false;
     if (settings_.evaluate_distinct) {
       distinct_is_evaluated = EvaluateStatsFromDictionaryPage(rg_metadata, col, rg_reader);
@@ -537,6 +538,8 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
     }
 #endif
   } else {
+    ++metrics_per_column_[col_name].not_dictionary_encoded_count;
+
     auto col_reader = rg_reader.Column(col);
     const auto& buffer = buffers.at(col_name);
 
@@ -686,7 +689,19 @@ void Analyzer::Analyze(const std::string& filename) {
       return ss.str();
     };
 
-    iceberg::DurationClock complete_time{};
+    Metrics total_metrics{};
+
+    for (const auto& [name, metrics] : metrics_per_column_) {
+      total_metrics.counting_ += metrics.counting_;
+      total_metrics.distinct_ += metrics.distinct_;
+      total_metrics.frequent_items_ += metrics.frequent_items_;
+      total_metrics.quantile_ += metrics.quantile_;
+      total_metrics.reading_ += metrics.reading_;
+      total_metrics.dictionary_encoded_count_ += metrics.dictionary_encoded_count_;
+      total_metrics.not_dictionary_encoded_count += metrics.not_dictionary_encoded_count;
+    }
+
+    metrics_per_column_["::total_metrics"] = total_metrics;
 
     std::vector<std::pair<std::string, int64_t>> results;
     for (const auto& [name, metrics] : metrics_per_column_) {
@@ -704,7 +719,6 @@ void Analyzer::Analyze(const std::string& filename) {
       const auto& metrics = metrics_per_column_.at(name);
       auto total =
           metrics.counting_ + metrics.distinct_ + metrics.frequent_items_ + metrics.quantile_ + metrics.reading_;
-      complete_time += total;
 
       std::cerr << "Column name: " << name << std::endl;
       std::cerr << "Dicitonary encoded: " << metrics.dictionary_encoded_count_ << "/"
@@ -727,8 +741,6 @@ void Analyzer::Analyze(const std::string& filename) {
       std::cerr << "total: " << serialize_nanos(total) << std::endl;
       std::cerr << std::string(80, '-') << std::endl;
     }
-
-    std::cerr << "time for all columns: " << serialize_nanos(complete_time) << std::endl;
   }
 }
 
