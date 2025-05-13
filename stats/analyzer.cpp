@@ -480,15 +480,15 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
           for (int j = 0; j < count_buffer[i]; ++j) {
             s.update(std::string_view(reinterpret_cast<const char*>(value.ptr), value.len));
           }
-
-          auto serialized_representation = s.serialize(0, StringViewSerializer());
-
-          GenericQuantileSketch generic_s(
-              QuantileSketch<std::string>(datasketches::quantiles_sketch<std::string>::deserialize(
-                  serialized_representation.data(), serialized_representation.size())));
-
-          column_result.quantile_sketch->Merge(generic_s);
         }
+        auto serialized_representation = s.serialize(0, StringViewSerializer());
+
+        GenericQuantileSketch generic_s(
+            QuantileSketch<std::string>(datasketches::quantiles_sketch<std::string>::deserialize(
+                serialized_representation.data(), serialized_representation.size())));
+
+        column_result.quantile_sketch->Merge(generic_s);
+
       } else {
         for (int i = 0; i < buffer.dictionary_length; ++i) {
           if (type == parquet::Type::INT64) {
