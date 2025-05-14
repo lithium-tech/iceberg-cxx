@@ -23,15 +23,17 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja -DUSE_SMHASHER=ON ../
+        cmake -GNinja -DICECXX_BUILD_ABSEIL=OFF ../
     - name: make
       run: |
         cd _build
         ninja
     - name: test
       run: |
-        cd _build
-        ctest
+        cd _build/tests/
+        ../iceberg/iceberg-cpp-test
+        ../iceberg/common/fs/iceberg_common_fs_test
+        ./iceberg_local_test
 
   build-macos:
     runs-on: macos-latest
@@ -46,12 +48,14 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja -DUSE_SMHASHER=ON ../
+        cmake -GNinja ../
     - name: make
       run: |
         cd _build
         ninja
     - name: test
       run: |
-        cd _build
-        ctest
+        cd _build/tests/
+        ../iceberg/iceberg-cpp-test
+        ../iceberg/common/fs/iceberg_common_fs_test
+        ./iceberg_local_test

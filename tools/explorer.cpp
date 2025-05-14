@@ -12,7 +12,7 @@
 #include "iceberg/snapshot.h"
 #include "iceberg/table_metadata.h"
 
-#ifdef ICEBERG_STATISTICS
+#ifdef ICECXX_STATISTICS
 #include "arrow/util/compression.h"
 #include "theta_sketch.hpp"
 #endif
@@ -304,7 +304,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-#ifdef ICEBERG_STATISTICS
+#ifdef ICECXX_STATISTICS
   if (mode == "print-theta-sketch") {
     const std::string theta_sketch_location = absl::GetFlag(FLAGS_theta_sketch_location);
     const int64_t offset = absl::GetFlag(FLAGS_offset);

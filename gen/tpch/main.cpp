@@ -29,7 +29,7 @@ ABSL_FLAG(bool, use_positional_deletes, false, "either to generate positional de
 ABSL_FLAG(double, positional_deletes_rows_scale, 0, "row count ratio in equality delete files and in original table");
 ABSL_FLAG(int32_t, threads_to_use, 1, "number of threads to use");
 ABSL_FLAG(std::string, parquet_compression, std::string(gen::compression::kUncompressedStr), "compression to use");
-ABSL_FLAG(std::optional<int>, parquet_compression_level, std::nullopt, "compression level to use");
+ABSL_FLAG(int32_t, parquet_compression_level, 0, "compression level to use");
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
   auto parquet_compression = maybe_compression.value();
   auto parquet_compression_level = absl::GetFlag(FLAGS_parquet_compression_level);
 
-  if (parquet_compression_level.has_value() && parquet_compression == parquet::Compression::UNCOMPRESSED) {
+  if (parquet_compression_level && parquet_compression == parquet::Compression::UNCOMPRESSED) {
     std::cerr << "parquet_compression is UNCOMPRESSED, but compression level is set" << std::endl;
     return 1;
   }
@@ -81,11 +81,12 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  gen::WriteFlags write_flags{.output_dir = output_dir,
-                              .write_parquet = write_parquet,
-                              .write_csv = write_csv,
-                              .parquet_compression = parquet_compression,
-                              .compression_level = parquet_compression_level};
+  gen::WriteFlags write_flags{
+      .output_dir = output_dir,
+      .write_parquet = write_parquet,
+      .write_csv = write_csv,
+      .parquet_compression = parquet_compression,
+      .compression_level = parquet_compression_level ? std::optional<int>(parquet_compression_level) : std::nullopt};
   gen::GenerateFlags generate_flags{.scale_factor = scale_factor,
                                     .arrow_batch_size = arrow_batch_size,
                                     .seed = seed,

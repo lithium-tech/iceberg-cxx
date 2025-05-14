@@ -12,18 +12,18 @@ set(iceberg_local_test_files
     compat/partitions_test.cpp
 )
 
-if (USE_REST AND REST_TESTS)
+if (ICECXX_USE_REST AND ICECXX_REST_TESTS)
     list(APPEND iceberg_local_test_files rest/test_rest_catalog.cpp)
 endif()
 
 add_executable(iceberg_local_test ${iceberg_local_test_files})
 target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp iceberg-tools ${CMAKE_DL_LIBS})
-if (USE_REST)
+if (ICECXX_USE_REST)
     target_link_libraries(iceberg_local_test PUBLIC cpr)
 endif()
 target_include_directories(iceberg_local_test PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
-if (USE_SMHASHER)
+if (ICECXX_USE_SMHASHER)
     target_link_libraries(iceberg_local_test PUBLIC SMHasherMurmurHash3)
 endif()
 
