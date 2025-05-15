@@ -1,5 +1,6 @@
 #include <exception>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <variant>
@@ -147,6 +148,66 @@ void PrintAnalyzeResult(const AnalyzeResult& result, bool verbose = false) {
   }
 }
 
+struct Task {
+  std::string filename;
+  int row_group;
+};
+
+// TODO(g.perov): need interface actually
+struct TaskQueue {
+ public:
+  explicit TaskQueue(std::shared_ptr<arrow::fs::FileSystem> fs, std::vector<std::string> filenames) : fs_(fs) {
+    for (auto& f : filenames) {
+      files_.push(std::move(f));
+    }
+  }
+
+  std::optional<Task> Get() {
+    std::lock_guard lock(mutex_);
+    while (true) {
+      if (!tasks_for_current_file_.empty()) {
+        auto result = tasks_for_current_file_.front();
+        tasks_for_current_file_.pop();
+        return result;
+      }
+
+      if (!files_.empty()) {
+        auto filename = files_.front();
+        files_.pop();
+
+        InitTaskQueue(filename);
+        continue;
+      }
+
+      return std::nullopt;
+    }
+  }
+
+ private:
+  void InitTaskQueue(const std::string& filename) {
+    std::shared_ptr<arrow::io::RandomAccessFile> input_file;
+    if (filename.find("://") != std::string::npos) {
+      input_file = iceberg::ValueSafe(fs_->OpenInputFile(filename.substr(filename.find("://") + 3)));
+    } else {
+      input_file = iceberg::ValueSafe(fs_->OpenInputFile(filename));
+    }
+
+    auto file_reader = parquet::ParquetFileReader::Open(input_file);
+
+    auto num_row_groups = file_reader->metadata()->num_row_groups();
+    for (int rg = 0; rg < num_row_groups; ++rg) {
+      tasks_for_current_file_.push(Task{.filename = filename, .row_group = rg});
+    }
+  }
+
+  std::shared_ptr<arrow::fs::FileSystem> fs_;
+
+  std::mutex mutex_;
+  std::queue<std::string> files_;
+
+  std::queue<Task> tasks_for_current_file_;
+};
+
 }  // namespace stats
 
 struct S3FinalizerGuard {
@@ -189,6 +250,7 @@ ABSL_FLAG(std::string, output_puffin_file, "", "");
 ABSL_FLAG(int64_t, batch_size, 8192, "batch size");
 ABSL_FLAG(std::vector<std::string>, columns_to_ignore, {}, "columns to ignore");
 ABSL_FLAG(std::vector<std::string>, columns_to_process, {}, "columns to process");
+ABSL_FLAG(int32_t, num_threads, 1, "number of threads");
 
 int main(int argc, char** argv) {
   std::shared_ptr<Metrics> metrics = std::make_shared<Metrics>();
@@ -285,12 +347,20 @@ int main(int argc, char** argv) {
     settings.evaluate_distinct = absl::GetFlag(FLAGS_evaluate_distinct);
     settings.read_all_data = absl::GetFlag(FLAGS_read_all_data);
 
+    stats::TaskQueue queue(fs, filenames);
     stats::Analyzer analyzer(settings);
-    for (auto& name : filenames) {
-      analyzer.Analyze(name);
+    while (true) {
+      std::optional<stats::Task> maybe_task = queue.Get();
+      if (!maybe_task) {
+        break;
+      }
+      analyzer.Analyze(maybe_task->filename, maybe_task->row_group);
     }
-
     const auto& result = analyzer.Result();
+
+    if (settings.print_timings) {
+      analyzer.PrintTimings();
+    }
 
     PrintAnalyzeResult(result, settings.verbose);
 

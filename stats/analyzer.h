@@ -74,9 +74,11 @@ class Analyzer {
  public:
   Analyzer(Settings s) : settings_(std::move(s)) {}
 
-  void Analyze(const std::string& filename);
+  void Analyze(const std::string& filename, std::optional<int> row_group = std::nullopt);
 
   const AnalyzeResult& Result() { return result_; }
+
+  void PrintTimings();
 
  private:
   bool EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& rg_metadata, int col,
