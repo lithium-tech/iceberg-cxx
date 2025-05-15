@@ -16,6 +16,7 @@
 #include "stats/datasketch/frequent_items.h"
 #include "stats/datasketch/quantiles.h"
 #include "stats/measure.h"
+#include "theta_union.hpp"
 
 namespace stats {
 
@@ -43,12 +44,14 @@ struct Settings {
 };
 
 struct AnalyzeColumnResult {
-  std::optional<stats::GenericDistinctCounterSketch> counter;
+  std::optional<stats::GenericDistinctCounterSketch> distinct;
   std::optional<stats::GenericQuantileSketch> quantile_sketch;
   std::optional<stats::GenericFrequentItemsSketch> frequent_items_sketch;
 
   std::optional<stats::GenericQuantileSketch> quantile_sketch_dictionary;
   std::optional<stats::GenericFrequentItemsSketch> frequent_items_sketch_dictionary;
+
+  std::optional<datasketches::theta_union> distinct_theta;
 
   int32_t field_id;
   ParquetType type;
@@ -77,6 +80,7 @@ class Analyzer {
   void Analyze(const std::string& filename, std::optional<int> row_group = std::nullopt);
 
   const AnalyzeResult& Result() { return result_; }
+  AnalyzeResult ResultMoved() { return std::move(result_); }
 
   void PrintTimings();
 
