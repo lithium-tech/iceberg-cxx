@@ -616,7 +616,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
   }
 }
 
-void Analyzer::Analyze(const std::string& filename) {
+void Analyzer::Analyze(const std::string& filename, std::optional<int> row_group) {
   std::shared_ptr<arrow::io::RandomAccessFile> input_file;
   if (filename.find("://") != std::string::npos) {
     input_file = iceberg::ValueSafe(settings_.fs->OpenInputFile(filename.substr(filename.find("://") + 3)));
@@ -664,11 +664,19 @@ void Analyzer::Analyze(const std::string& filename) {
     result_.sketches.emplace(name, InitializeSketchesForColumn(*column_descriptor, settings_));
   }
 
-  std::cerr << filename << ": num_row_groups = " << num_row_groups << std::endl;
-  std::cerr << filename << ": num_columns = " << num_columns << std::endl;
-  std::cerr << filename << ": num_rows = " << num_rows << std::endl;
+  // std::cerr << filename << ": num_row_groups = " << num_row_groups << std::endl;
+  // std::cerr << filename << ": num_columns = " << num_columns << std::endl;
+  // std::cerr << filename << ": num_rows = " << num_rows << std::endl;
 
-  for (auto rg = 0; rg < num_row_groups && rg < settings_.row_groups_limit.value_or(num_row_groups); ++rg) {
+  std::vector<int> row_groups_to_process;
+  if (row_group.has_value()) {
+    row_groups_to_process = {row_group.value()};
+  } else {
+    row_groups_to_process.resize(std::min(num_row_groups, settings_.row_groups_limit.value_or(num_row_groups)));
+    std::iota(row_groups_to_process.begin(), row_groups_to_process.end(), 0);
+  }
+
+  for (int rg : row_groups_to_process) {
     auto rg_reader = file_reader->RowGroup(rg);
     iceberg::Ensure(rg_reader != nullptr, "No RowGroupReader for row group " + std::to_string(rg));
 
@@ -685,7 +693,9 @@ void Analyzer::Analyze(const std::string& filename) {
       AnalyzeColumn(*rg_metadata, col, *rg_reader.get());
     }
   }
+}
 
+void Analyzer::PrintTimings() {
   if (settings_.print_timings) {
     auto serialize_nanos = [](iceberg::DurationClock point) -> std::string {
       auto millis_total = std::chrono::duration_cast<std::chrono::milliseconds>(point);
