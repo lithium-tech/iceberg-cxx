@@ -5,6 +5,8 @@
 #include <string>
 #include <string_view>
 
+#define ENABLE_PRIVATE_PUBLIC_HACK
+
 #ifdef ENABLE_PRIVATE_PUBLIC_HACK
 #define private public
 #endif
@@ -406,6 +408,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
         iceberg::ScopedTimerClock frequent_timer(metrics_per_column_[col_name].frequent_items_);
         auto& frequent_items_for_col = *column_result.frequent_items_sketch_dictionary;
         SketchUpdater updater(frequent_items_for_col);
+        frequent_items_updates_ += generic_buffer.values_size;
         updater.AppendValues(generic_buffer.indices, generic_buffer.values_size, parquet::Type::INT32);
       }
       values_read += generic_buffer.values_size;
@@ -447,6 +450,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
         FrequentItemsSketch<std::string_view> temp_sketch;
         for (int i = 0; i < buffer.dictionary_length; ++i) {
           auto value = reinterpret_cast<const parquet::ByteArray*>(buffer.dictionary)[i];
+          ++frequent_items_updates_;
           temp_sketch.AppendValue(std::string_view(reinterpret_cast<const char*>(value.ptr), value.len),
                                   count_buffer[i]);
         }
@@ -460,12 +464,15 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
         for (int i = 0; i < buffer.dictionary_length; ++i) {
           if (type == parquet::Type::BYTE_ARRAY) {
             auto value = reinterpret_cast<const parquet::ByteArray*>(buffer.dictionary)[i];
+            ++frequent_items_updates_;
             column_result.frequent_items_sketch->AppendWeightedValue(value.ptr, value.len, count_buffer[i]);
           } else if (type == parquet::Type::INT64) {
             auto value = reinterpret_cast<const int64_t*>(buffer.dictionary)[i];
+            ++frequent_items_updates_;
             column_result.frequent_items_sketch->AppendWeightedValue(value, count_buffer[i]);
           } else if (type == parquet::Type::INT32) {
             auto value = reinterpret_cast<const int32_t*>(buffer.dictionary)[i];
+            ++frequent_items_updates_;
             column_result.frequent_items_sketch->AppendWeightedValue(static_cast<int64_t>(value), count_buffer[i]);
           }
         }
@@ -589,6 +596,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
         if (type == parquet::Type::BYTE_ARRAY && settings_.use_string_view_heuristic) {
           FrequentItemsSketch<std::string_view> temp_sketch;
           for (int i = 0; i < generic_buffer.values_size; ++i) {
+            ++frequent_items_updates_;
             auto value = reinterpret_cast<const parquet::ByteArray*>(generic_buffer.data)[i];
             temp_sketch.AppendValue(std::string_view(reinterpret_cast<const char*>(value.ptr), value.len));
           }
@@ -599,6 +607,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
           column_result.frequent_items_sketch->Merge(generic_s);
         } else {
           SketchUpdater updater(frequent_items_for_col);
+          frequent_items_updates_ += generic_buffer.values_size;
           updater.AppendValues(generic_buffer.data, generic_buffer.values_size, type);
         }
       }
@@ -617,7 +626,6 @@ void Analyzer::Analyze(const std::string& filename) {
 
   parquet::ReaderProperties props;
   props.enable_buffered_stream();
-  props.set_buffer_size(2 * 1024 * 1024);
 
   auto file_reader = parquet::ParquetFileReader::Open(input_file, props);
   auto metadata = file_reader->metadata();
@@ -742,6 +750,8 @@ void Analyzer::Analyze(const std::string& filename) {
       std::cerr << std::string(80, '-') << std::endl;
     }
   }
+
+  std::cerr << "frequent_items_updates: " << frequent_items_updates_ << std::endl;
 }
 
 }  // namespace stats

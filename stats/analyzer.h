@@ -92,6 +92,7 @@ class Analyzer {
   mutable std::map<std::string, Metrics> metrics_per_column_;
 
   const Settings settings_;
+  int64_t frequent_items_updates_ = 0;
 };
 
 }  // namespace stats
