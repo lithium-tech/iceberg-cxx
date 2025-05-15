@@ -7,10 +7,10 @@ namespace stats {
 
 void SketchesToPuffin(const stats::AnalyzeResult& result, iceberg::PuffinFileBuilder& puffin_file_builder) {
   for (const auto& [name, skethces] : result.sketches) {
-    if (!skethces.counter) {
+    if (!skethces.distinct) {
       continue;
     }
-    const auto& impl = skethces.counter->GetSketch();
+    const auto& impl = skethces.distinct->GetSketch();
     if (auto sketch = std::get_if<stats::ThetaDistinctCounter>(&impl)) {
       auto data = [sketch]() {
         const auto& raw_sketch = sketch->GetSketch();

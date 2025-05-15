@@ -3,6 +3,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <variant>
 
 #include "absl/flags/flag.h"
@@ -23,6 +24,7 @@
 #include "stats/datasketch/quantiles.h"
 #include "stats/puffin.h"
 #include "stats/types.h"
+#include "theta_union.hpp"
 
 template <typename T1, typename T2>
 std::ostream& operator<<(std::ostream& os, const std::pair<T1, T2>& p) {
@@ -122,17 +124,24 @@ void PrintFrequent(const std::string& name, const std::optional<GenericFrequentI
 }
 
 void PrintAnalyzeColumnResult(const std::string& name, const AnalyzeColumnResult& result, bool verbose = false) {
-  if (result.counter.has_value()) {
-    std::cerr << name << " has " << result.counter->GetDistinctValuesCount() << " distinct values" << std::endl;
+#if 0
+  if (result.distinct.has_value()) {
+    std::cerr << name << " has " << result.distinct->GetDistinctValuesCount() << " distinct values" << std::endl;
 
     if (verbose) {
-      const auto& impl = result.counter->GetSketch();
+      const auto& impl = result.distinct->GetSketch();
       if (auto ptr = std::get_if<stats::ThetaDistinctCounter>(&impl)) {
         std::cout << "Verbose state for column '" << name << "'" << std::endl;
         std::cout << ptr->GetSketch().to_string();
         std::cout << std::string(80, '-') << std::endl;
       }
     }
+  }
+#endif
+
+  if (result.distinct_theta.has_value()) {
+    const auto& r = result.distinct_theta->get_result();
+    std::cerr << name << " has " << r.get_estimate() << " distinct values" << std::endl;
   }
 
   PrintQuantile(name, result.quantile_sketch);
@@ -347,19 +356,82 @@ int main(int argc, char** argv) {
     settings.evaluate_distinct = absl::GetFlag(FLAGS_evaluate_distinct);
     settings.read_all_data = absl::GetFlag(FLAGS_read_all_data);
 
-    stats::TaskQueue queue(fs, filenames);
-    stats::Analyzer analyzer(settings);
-    while (true) {
-      std::optional<stats::Task> maybe_task = queue.Get();
-      if (!maybe_task) {
-        break;
-      }
-      analyzer.Analyze(maybe_task->filename, maybe_task->row_group);
-    }
-    const auto& result = analyzer.Result();
+    const int num_threads = absl::GetFlag(FLAGS_num_threads);
+    std::cerr << "num_threads = " << num_threads << std::endl;
 
-    if (settings.print_timings) {
-      analyzer.PrintTimings();
+    stats::TaskQueue queue(fs, filenames);
+    std::vector<stats::AnalyzeResult> analyze_results(num_threads);
+
+    std::map<std::string, datasketches::theta_union> theta_result;
+
+    auto evaluate_for_thread = [&analyze_results, settings, &queue, num_threads](int i) {
+      stats::Analyzer analyzer(settings);
+      while (true) {
+        std::optional<stats::Task> maybe_task = queue.Get();
+        if (!maybe_task) {
+          break;
+        }
+        analyzer.Analyze(maybe_task->filename, maybe_task->row_group);
+      }
+
+      analyze_results[i] = analyzer.ResultMoved();
+
+      if (num_threads == 1) {
+        analyzer.PrintTimings();
+      }
+    };
+
+    std::vector<std::thread> workers;
+    for (int i = 0; i < num_threads; ++i) {
+      workers.emplace_back(evaluate_for_thread, i);
+    }
+
+    for (int i = 0; i < num_threads; ++i) {
+      workers[i].join();
+    }
+
+    for (int i = 0; i < num_threads; ++i) {
+      for (auto& [name, sketch_to_update] : analyze_results[i].sketches) {
+        if (!sketch_to_update.distinct) {
+          continue;
+        }
+        const auto& s = sketch_to_update.distinct->GetSketch();
+        if (!std::holds_alternative<stats::ThetaDistinctCounter>(s)) {
+          continue;
+        }
+        const auto& theta_s = std::get<stats::ThetaDistinctCounter>(s);
+        if (!theta_result.contains(name)) {
+          datasketches::theta_union::builder b;
+          theta_result.emplace(name, b.build());
+        }
+        theta_result.at(name).update(theta_s.GetSketch().compact());
+      }
+    }
+
+    for (int i = 1; i < num_threads; ++i) {
+      for (auto& [name, sketch_to_update] : analyze_results[0].sketches) {
+        auto& this_thread_sketches = analyze_results[i].sketches;
+        if (!this_thread_sketches.contains(name)) {
+          continue;
+        }
+
+        auto& sketches_for_this_column = this_thread_sketches.at(name);
+
+        if (sketch_to_update.frequent_items_sketch && sketches_for_this_column.frequent_items_sketch) {
+          sketch_to_update.frequent_items_sketch->Merge(*sketches_for_this_column.frequent_items_sketch);
+        }
+
+        if (sketch_to_update.quantile_sketch && sketches_for_this_column.quantile_sketch) {
+          sketch_to_update.quantile_sketch->Merge(*sketches_for_this_column.quantile_sketch);
+        }
+      }
+    }
+
+    auto& result = analyze_results[0];
+    for (auto& [name, sketches] : result.sketches) {
+      if (theta_result.contains(name)) {
+        sketches.distinct_theta = std::move(theta_result.at(name));
+      }
     }
 
     PrintAnalyzeResult(result, settings.verbose);

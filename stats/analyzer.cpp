@@ -185,7 +185,7 @@ AnalyzeColumnResult InitializeSketchesForColumn(const parquet::ColumnDescriptor&
   column_result.type = type;
   column_result.field_id = descriptor.schema_node()->field_id();
   if (settings.evaluate_distinct) {
-    column_result.counter = MakeDistinctCounter(settings.distinct_counter_implementation);
+    column_result.distinct = MakeDistinctCounter(settings.distinct_counter_implementation);
   }
   if (settings.evaluate_quantiles) {
     column_result.quantile_sketch.emplace(MakeQuantileCounter(type));
@@ -278,7 +278,7 @@ bool Analyzer::EvaluateStatsFromDictionaryPage(const parquet::RowGroupMetaData& 
   auto col_name = rg_metadata.schema()->Column(col)->name();
 
   auto& column_result = result_.sketches.at(col_name);
-  auto& counter_for_col = *column_result.counter;
+  auto& counter_for_col = *column_result.distinct;
   auto type = col_metadata->type();
 
 #ifdef ENABLE_PRIVATE_PUBLIC_HACK
@@ -354,7 +354,7 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
 
   auto& column_result = result_.sketches.at(col_name);
 
-  auto& counter_for_col = *column_result.counter;
+  auto& counter_for_col = *column_result.distinct;
 
   int64_t total_values = col_metadata->num_values();
   int64_t values_read = 0;
@@ -677,6 +677,8 @@ void Analyzer::Analyze(const std::string& filename, std::optional<int> row_group
   }
 
   for (int rg : row_groups_to_process) {
+    std::cerr << "Processing row group " << rg << " in file " << filename << std::endl;
+
     auto rg_reader = file_reader->RowGroup(rg);
     iceberg::Ensure(rg_reader != nullptr, "No RowGroupReader for row group " + std::to_string(rg));
 
