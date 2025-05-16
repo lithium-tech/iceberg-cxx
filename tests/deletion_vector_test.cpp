@@ -1,5 +1,7 @@
 #include "iceberg/deletion_vector.h"
 
+#include <fstream>
+
 #include "gtest/gtest.h"
 
 namespace iceberg {
@@ -82,6 +84,31 @@ TEST(DeletionVector, AddManyVector) {
   deletion_vector.AddMany(a);
 
   EXPECT_EQ(deletion_vector.GetElems(0, std::numeric_limits<uint64_t>::max()), std::vector<uint64_t>({1, 7, 9}));
+}
+
+TEST(DeletionVector, Read) {
+  std::ifstream input(
+      "tables/deletion_vector/deletion_vector_sample/data/"
+      "00000-2-766d0c1d-4652-4a59-9721-58fb02898559-00001-deletes.puffin");
+  std::stringstream ss;
+  ss << input.rdbuf();
+  std::string data = ss.str();
+
+  auto puffin_file = PuffinFile::Make(data);
+  EXPECT_TRUE(puffin_file.ok());
+  EXPECT_EQ(puffin_file->GetFooter().GetBlobsCount(), 1);
+
+  auto blob_metadata = puffin_file->GetFooter().GetBlobMetadata(0);
+  auto blob = puffin_file->GetBlob(0);
+
+  auto deletion_vector = DeletionVector(blob_metadata, blob);
+  EXPECT_EQ(deletion_vector.Cardinality(0, std::numeric_limits<uint64_t>::max()), 5);
+
+  std::vector<uint64_t> res(5);
+  for (int i = 0; i < 5; ++i) {
+    res[i] = 2 * i + 1;
+  }
+  EXPECT_EQ(deletion_vector.GetElems(0, std::numeric_limits<uint64_t>::max()), res);
 }
 
 }  // namespace iceberg
