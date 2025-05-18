@@ -11,9 +11,6 @@ jobs:
     runs-on: own-linux
     steps:
     - uses: actions/checkout@v4
-    - name: Install apt deps
-      run: |
-        sudo apt install -y libcurl4-openssl-dev
     - name: fetch-deps
       run: |
         mkdir -p _build && cd _build
