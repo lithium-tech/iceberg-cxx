@@ -31,36 +31,15 @@ endif()
 
 set_directory_properties(PROPERTIES COMPILE_OPTIONS -Wno-deprecated-declarations)
 
-add_subdirectory(vendor)
-
 find_package(OpenSSL REQUIRED)
 
-set(BOOST_ENABLE_CMAKE ON CACHE BOOL "")
-FetchContent_MakeAvailable(boost)
+if(NOT ICECXX_BUILD_ABSEIL)
+  find_package(absl REQUIRED)
+endif()
+
+add_subdirectory(vendor)
 
 if(ICECXX_BUILD_ARROW)
-  set(ARROW_DEPENDENCY_SOURCE BUNDLED CACHE STRING "")
-  set(ARROW_SIMD_LEVEL DEFAULT CACHE STRING "") # xsimd
-  set(ARROW_BUILD_STATIC ON CACHE BOOL "")
-  set(ARROW_BUILD_SHARED OFF CACHE BOOL "")
-  set(ARROW_NO_DEPRECATED_API ON CACHE BOOL "")
-  set(ARROW_LLVM_USE_SHARED OFF CACHE BOOL "")
-  set(ARROW_FILESYSTEM ON CACHE BOOL "")
-  set(ARROW_PARQUET ON CACHE BOOL "")
-  set(ARROW_IPC ON CACHE BOOL "")
-  set(ARROW_S3 ON CACHE BOOL "")
-  set(ARROW_WITH_SNAPPY ON CACHE BOOL "")
-  set(ARROW_WITH_LZ4 ON CACHE BOOL "")
-  set(ARROW_WITH_ZLIB ON CACHE BOOL "")
-  set(ARROW_WITH_ZSTD ON CACHE BOOL "")
-  set(ARROW_CSV ON CACHE BOOL "")
-  set(ARROW_WITH_RE2 ON CACHE BOOL "")
-  set(ARROW_WITH_RAPIDJSON ON CACHE BOOL "")
-  set(ARROW_WITH_UTF8PROC ON CACHE BOOL "")
-  set(ARROW_GANDIVA ON CACHE BOOL "")
-  set(ARROW_COMPUTE ON CACHE BOOL "")
-  FetchContent_MakeAvailable(arrow)
-
   FetchContent_GetProperties(
     arrow
     SOURCE_DIR ARROW_SOURCE_DIR
@@ -70,9 +49,6 @@ if(ICECXX_BUILD_ARROW)
     ${ARROW_SOURCE_DIR}/cpp/src
     ${ARROW_BINARY_DIR}/src
   )
-
-  add_library(Arrow::arrow_static ALIAS arrow_static)
-  add_library(Parquet::parquet_static ALIAS parquet_static)
 else()
   find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
   find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
@@ -81,72 +57,6 @@ else()
   set_property(TARGET Arrow::arrow_bundled_dependencies
     APPEND PROPERTY INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto;OpenSSL::SSL"
   )
-endif()
-
-FetchContent_MakeAvailable(avro)
-
-set(ROARING_BUILD_STATIC OFF CACHE BOOL "")
-set(ENABLE_ROARING_TESTS OFF CACHE BOOL "")
-set(ROARING_USE_CPM OFF CACHE BOOL "")
-FetchContent_MakeAvailable(croaring)
-
-set(BUILD_TESTS OFF CACHE BOOL "")
-FetchContent_MakeAvailable(datasketches-cpp)
-
-FetchContent_MakeAvailable(hive-metastore)
-FetchContent_MakeAvailable(rapidjson)
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set(OS_LINUX ON CACHE BOOL "")
-endif()
-FetchContent_MakeAvailable(thrift)
-
-FetchContent_MakeAvailable(zstd)
-
-set(INSTALL_GTEST OFF CACHE BOOL "")
-set(INSTALL_GMOCK OFF CACHE BOOL "")
-FetchContent_MakeAvailable(googletest)
-
-set(SNAPPY_BUILD_TESTS OFF CACHE BOOL "")
-set(SNAPPY_BUILD_BENCHMARKS OFF CACHE BOOL "")
-FetchContent_MakeAvailable(snappy)
-
-set(ZLIB_ENABLE_TESTS OFF CACHE BOOL "")
-set(ZLIBNG_ENABLE_TESTS OFF CACHE BOOL "")
-set(WITH_GTEST OFF CACHE BOOL "")
-FetchContent_MakeAvailable(zlib-ng)
-
-if(ICECXX_BUILD_ABSEIL)
-  set_property(
-    DIRECTORY ${abseil_SOURCE_DIR}
-    APPEND
-    PROPERTY COMPILE_OPTIONS -Wno-deprecated-builtins
-  )
-  set(ABSL_USE_EXTERNAL_GOOGLETEST ON CACHE BOOL "")
-  set(BUILD_TESTING OFF CACHE BOOL "")
-  set(ABSL_ENABLE_INSTALL OFF CACHE BOOL "")
-  FetchContent_MakeAvailable(abseil)
-else()
-  find_package(absl REQUIRED)
-endif()
-
-if(ICECXX_USE_REST)
-  set(CARES_STATIC ON CACHE BOOL "")
-  set(CARES_SHARED OFF CACHE BOOL "")
-  set(CARES_BUILD_TOOLS OFF CACHE BOOL "")
-  FetchContent_MakeAvailable(c-ares)
-
-  FetchContent_MakeAvailable(cpr)
-  FetchContent_MakeAvailable(curl)
-endif()
-
-if(ICECXX_USE_SMHASHER)
-  FetchContent_MakeAvailable(smhasher)
-  add_library(
-    SMHasherMurmurHash3
-    ${smhasher_SOURCE_DIR}/src/MurmurHash3.cpp
-  )
-  include_directories(${smhasher_SOURCE_DIR}/src)
 endif()
 
 # libs/bins
