@@ -10,14 +10,15 @@ macro(option_v OPTION_NAME OPTION_TEXT OPTION_DEFAULT)
   message(STATUS "  ${OPTION_NAME}: ${${OPTION_NAME}}")
 endmacro()
 
-option_v(ICECXX_USE_SMHASHER "Enable SMHasher" ON)
-option_v(ICECXX_BUILD_TOOLS "build binaries" ON)
-option_v(ICECXX_GENERATOR "build generator" ON)
-option_v(ICECXX_USE_REST "enable rest building" ON)
-option_v(ICECXX_REST_TESTS "enable rest tests" ON)
-option_v(ICECXX_BUILD_ARROW "build Apache Arrow" ON)
-option_v(ICECXX_BUILD_ABSEIL "build abseil (use system's one if not set)" ON)
-option_v(ICECXX_STATISTICS "" OFF)
+# feature options
+option_v(ICECXX_BUILD_TOOLS "enable & build tools" ON)
+option_v(ICECXX_GENERATOR "enable & build generator" ON)
+option_v(ICECXX_USE_REST "enable rest catalog support" OFF)
+option_v(ICECXX_STATISTICS "enable datasketches based statistics" OFF)
+# deps options
+option_v(ICECXX_BUILD_ARROW "build Apache Arrow (use system's one otherwise)" ON)
+option_v(ICECXX_BUILD_ABSEIL "build abseil (use system's one otherwise)" ON)
+option_v(ICECXX_USE_SMHASHER "use MurmurHash3 from SMHasher" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 

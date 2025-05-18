@@ -8,11 +8,14 @@ set(iceberg_local_test_files
     snapshot_test.cpp
     referenced_data_file_test.cpp
     run_tests.cpp
-    compat/transforms_test.cpp
     compat/partitions_test.cpp
 )
 
-if (ICECXX_USE_REST AND ICECXX_REST_TESTS)
+if (ICECXX_WRITE)
+    list(APPEND iceberg_local_test_files compat/transforms_test.cpp)
+endif()
+
+if (ICECXX_USE_REST)
     list(APPEND iceberg_local_test_files rest/test_rest_catalog.cpp)
 endif()
 
