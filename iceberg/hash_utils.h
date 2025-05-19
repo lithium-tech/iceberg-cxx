@@ -26,8 +26,6 @@
 #include "MurmurHash3.h"
 #endif
 
-#include <iostream>
-
 
 namespace iceberg {
 
@@ -52,11 +50,9 @@ struct MurMurHasher {
 #ifdef ICECXX_USE_SMHASHER
     int hash_result;
     MurmurHash3_x86_32(src.data(), src.size(), 0, &hash_result);
-    std::cerr << "hash_result " << hash_result << '\n';
     return hash_result;
 #else
     std::hash<T> hasher;
-    std::cerr << "use std hash " << '\n';
     return hasher(src);
 #endif
   }
@@ -68,11 +64,9 @@ struct MurMurHasher {
     PackLittleEndian(static_cast<int64_t>(value), buffer);
     int hash_result;
     MurmurHash3_x86_32(buffer.data(), buffer.size(), 0, &hash_result);
-    std::cerr << "hash_result " << hash_result << '\n';
     return hash_result;
 #else
     std::hash<T> hasher;
-    std::cerr << "use std hash " << '\n';
     return hasher(value);
 #endif
   }
