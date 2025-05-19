@@ -9,6 +9,7 @@ set(iceberg_local_test_files
     referenced_data_file_test.cpp
     run_tests.cpp
     compat/partitions_test.cpp
+    compat/transforms_test.cpp
 )
 
 if (ICECXX_WRITE)

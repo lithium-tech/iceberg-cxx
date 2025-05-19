@@ -26,6 +26,7 @@
 #include "MurmurHash3.h"
 #endif
 
+
 namespace iceberg {
 
 namespace {
@@ -240,7 +241,7 @@ struct MurMurScalarHashImpl {
 
   arrow::Status ArrayHash(const arrow::ArraySpan& a) { return ArrayHash(a, a.offset, a.length); }
 
-  explicit MurMurScalarHashImpl(const arrow::Scalar& scalar) : hash_(scalar.type->Hash()) {
+  explicit MurMurScalarHashImpl(const arrow::Scalar& scalar) {
     AccumulateHashFrom(scalar);
   }
 
@@ -251,7 +252,7 @@ struct MurMurScalarHashImpl {
     }
   }
 
-  int64_t hash_;
+  int64_t hash_ = 0;
 };
 
 }  // namespace iceberg
