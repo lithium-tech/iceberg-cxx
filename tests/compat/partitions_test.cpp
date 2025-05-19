@@ -124,11 +124,7 @@ TEST(CompatPartitions, BucketPartitioning) {
                                    MakeIcebergSchemaFromArrow(0, parquet_table->schema()), table_metadata);
 
   table->AppendTable(parquet_table);
-#ifdef ICECXX_USE_SMHASHER
-  EXPECT_EQ(table->GetFilePathes().size(), 2);
-#else
   EXPECT_EQ(table->GetFilePathes().size(), 3);
-#endif
 }
 
 TEST(CompatPartitions, TruncateTransform) {
