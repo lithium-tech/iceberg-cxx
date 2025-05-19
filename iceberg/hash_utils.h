@@ -26,6 +26,9 @@
 #include "MurmurHash3.h"
 #endif
 
+#include <iostream>
+
+
 namespace iceberg {
 
 namespace {
