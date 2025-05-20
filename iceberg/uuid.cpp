@@ -1,6 +1,5 @@
 #include "iceberg/uuid.h"
 
-#include <algorithm>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
@@ -11,6 +10,7 @@
 #include <net/if_dl.h>
 #endif
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstring>
