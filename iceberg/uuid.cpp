@@ -1,11 +1,11 @@
 #include "iceberg/uuid.h"
 
+#include <algorithm>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <algorithm>
 
 #ifdef __APPLE__
 #include <net/if_dl.h>
