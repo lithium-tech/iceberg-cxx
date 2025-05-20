@@ -1,8 +1,9 @@
 #include <arrow/status.h>
-#include <iceberg/catalog.h>
-#include <iceberg/tea_scan.h>
 
 #include <chrono>
+
+#include <iceberg/catalog.h>
+#include <iceberg/tea_scan.h>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"

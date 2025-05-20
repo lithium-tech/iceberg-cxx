@@ -1,12 +1,14 @@
 #pragma once
 
 #include <arrow/filesystem/localfs.h>
-#include <parquet/type_fwd.h>
 
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
+
+#include <parquet/type_fwd.h>
+
 #include <stdexcept>
 #include <string>
 #include <utility>

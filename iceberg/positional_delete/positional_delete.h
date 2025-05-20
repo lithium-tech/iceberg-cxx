@@ -1,8 +1,9 @@
 #pragma once
 
+#include <functional>
+
 #include <iceberg/common/logger.h>
 
-#include <functional>
 #include <map>
 #include <memory>
 #include <queue>

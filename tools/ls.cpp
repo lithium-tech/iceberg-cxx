@@ -1,14 +1,15 @@
 #include <ThriftHiveMetastore.h>
 #include <absl/flags/flag.h>
 #include <absl/flags/parse.h>
-#include <hive_metastore_types.h>
-#include <thrift/protocol/TBinaryProtocol.h>
-#include <thrift/transport/TSocket.h>
-#include <thrift/transport/TTransportUtils.h>
 
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+
+#include <hive_metastore_types.h>
+#include <thrift/protocol/TBinaryProtocol.h>
+#include <thrift/transport/TSocket.h>
+#include <thrift/transport/TTransportUtils.h>
 
 #include "iceberg/nested_field.h"
 #include "iceberg/schema.h"

@@ -8,11 +8,13 @@
 #include <arrow/scalar.h>
 #include <arrow/table.h>
 #include <arrow/util/iterator.h>
+
+#include <optional>
+
 #include <parquet/arrow/schema.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/schema.h>
 
-#include <optional>
 #include <stdexcept>
 #include <string>
 

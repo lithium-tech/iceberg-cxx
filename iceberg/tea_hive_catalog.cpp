@@ -1,12 +1,14 @@
 #include "iceberg/tea_hive_catalog.h"
 
 #include <ThriftHiveMetastore.h>
+
+#include <memory>
+#include <stdexcept>
+
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/transport/TSocket.h>
 #include <thrift/transport/TTransportUtils.h>
 
-#include <memory>
-#include <stdexcept>
 #include <vector>
 
 #include "arrow/api.h"
