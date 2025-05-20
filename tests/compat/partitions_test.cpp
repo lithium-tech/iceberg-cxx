@@ -1,10 +1,12 @@
 #include <arrow/filesystem/localfs.h>
 #include <arrow/io/file.h>
-#include <parquet/api/reader.h>
-#include <parquet/arrow/reader.h>
 
 #include <limits>
 #include <memory>
+
+#include <parquet/api/reader.h>
+#include <parquet/arrow/reader.h>
+
 #include <stdexcept>
 
 #include "gtest/gtest.h"

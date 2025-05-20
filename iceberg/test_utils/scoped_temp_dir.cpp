@@ -1,12 +1,12 @@
 #include "iceberg/test_utils/scoped_temp_dir.h"
 
-#include <unistd.h>
-
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <random>
 #include <string>
+
+#include <unistd.h>
 
 #include "arrow/filesystem/s3fs.h"
 

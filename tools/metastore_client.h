@@ -2,12 +2,13 @@
 
 #include <ThriftHiveMetastore.h>
 #include <hive_metastore_types.h>
-#include <thrift/protocol/TBinaryProtocol.h>
-#include <thrift/transport/TSocket.h>
-#include <thrift/transport/TTransportUtils.h>
 
 #include <memory>
 #include <string>
+
+#include <thrift/protocol/TBinaryProtocol.h>
+#include <thrift/transport/TSocket.h>
+#include <thrift/transport/TTransportUtils.h>
 
 namespace ice_tea {
 

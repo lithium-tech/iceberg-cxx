@@ -3,12 +3,14 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/filesystem/localfs.h>
 #include <arrow/io/api.h>
-#include <parquet/type_fwd.h>
 
 #include <cinttypes>
 #include <filesystem>
 #include <map>
 #include <memory>
+
+#include <parquet/type_fwd.h>
+
 #include <string>
 #include <unordered_map>
 #include <vector>

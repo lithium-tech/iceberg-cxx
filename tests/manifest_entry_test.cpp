@@ -454,26 +454,25 @@ TEST(ManifestEntryTest, TestPartitionedManyTypes) {
   std::string data = ss.str();
 
   std::vector<ice_tea::PartitionKeyField> fields = {
-    ice_tea::PartitionKeyField("col_bool", std::make_shared<types::PrimitiveType>(TypeID::kBoolean)),
-    ice_tea::PartitionKeyField("col_int", std::make_shared<types::PrimitiveType>(TypeID::kInt)),
-    ice_tea::PartitionKeyField("col_long", std::make_shared<types::PrimitiveType>(TypeID::kLong)),
-    ice_tea::PartitionKeyField("col_float", std::make_shared<types::PrimitiveType>(TypeID::kFloat)),
-    ice_tea::PartitionKeyField("col_double", std::make_shared<types::PrimitiveType>(TypeID::kDouble)),
-    ice_tea::PartitionKeyField("col_decimal", std::make_shared<types::DecimalType>(9, 2)),
-    ice_tea::PartitionKeyField("col_date", std::make_shared<types::PrimitiveType>(TypeID::kDate)),
-    ice_tea::PartitionKeyField("col_time", std::make_shared<types::PrimitiveType>(TypeID::kTime)),
-    ice_tea::PartitionKeyField("col_timestamp", std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
-    ice_tea::PartitionKeyField("col_timestamptz", std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
-    ice_tea::PartitionKeyField("col_string", std::make_shared<types::PrimitiveType>(TypeID::kString)),
+      ice_tea::PartitionKeyField("col_bool", std::make_shared<types::PrimitiveType>(TypeID::kBoolean)),
+      ice_tea::PartitionKeyField("col_int", std::make_shared<types::PrimitiveType>(TypeID::kInt)),
+      ice_tea::PartitionKeyField("col_long", std::make_shared<types::PrimitiveType>(TypeID::kLong)),
+      ice_tea::PartitionKeyField("col_float", std::make_shared<types::PrimitiveType>(TypeID::kFloat)),
+      ice_tea::PartitionKeyField("col_double", std::make_shared<types::PrimitiveType>(TypeID::kDouble)),
+      ice_tea::PartitionKeyField("col_decimal", std::make_shared<types::DecimalType>(9, 2)),
+      ice_tea::PartitionKeyField("col_date", std::make_shared<types::PrimitiveType>(TypeID::kDate)),
+      ice_tea::PartitionKeyField("col_time", std::make_shared<types::PrimitiveType>(TypeID::kTime)),
+      ice_tea::PartitionKeyField("col_timestamp", std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
+      ice_tea::PartitionKeyField("col_timestamptz", std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
+      ice_tea::PartitionKeyField("col_string", std::make_shared<types::PrimitiveType>(TypeID::kString)),
 
 #if 0
     ice_tea::PartitionKeyField("col_uuid", std::make_shared<types::PrimitiveType>(TypeID::kUuid)),
 #else
-    ice_tea::PartitionKeyField("col_uuid", std::make_shared<types::FixedType>(16)),
+      ice_tea::PartitionKeyField("col_uuid", std::make_shared<types::FixedType>(16)),
 #endif
 
-    ice_tea::PartitionKeyField("col_varbinary", std::make_shared<types::PrimitiveType>(TypeID::kBinary))
-  };
+      ice_tea::PartitionKeyField("col_varbinary", std::make_shared<types::PrimitiveType>(TypeID::kBinary))};
 
   using PF = DataFile::PartitionKey;
 

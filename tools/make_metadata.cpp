@@ -1,9 +1,10 @@
 #include <absl/flags/flag.h>
 #include <absl/flags/parse.h>
-#include <parquet/metadata.h>
 
 #include <algorithm>
 #include <filesystem>
+
+#include <parquet/metadata.h>
 
 #include "tools/common.h"
 #include "tools/metadata_tree.h"
