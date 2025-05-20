@@ -10,6 +10,7 @@
 #include <net/if_dl.h>
 #endif
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstring>
