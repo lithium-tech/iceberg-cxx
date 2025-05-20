@@ -16,11 +16,17 @@ Now we are happy to share results of our work with community to make the best Ap
 
 ### Build, Run Test
 
-NOTE: For now you have to [download Apache Arrow dependencies](https://arrow.apache.org/docs/15.0/developers/cpp/building.html#offline-builds) in $ARROW_DEPS directory first.
+You have to [download Apache Arrow dependencies](https://arrow.apache.org/docs/15.0/developers/cpp/building.html#offline-builds) first.
+```bash
+mkdir _deps && cd _deps
+git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
+cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
+./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+```
 
 ```bash
 mkdir _build
-ln -s $ARROW_DEPS _build/arrow-thirdparty
+ln -s _deps/arrow-thirdparty _build/arrow-thirdparty
 cd _build
 cmake -GNinja ../
 ninja
