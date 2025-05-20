@@ -123,61 +123,67 @@ FetchContent_Declare(
     && cp ${CMAKE_CURRENT_SOURCE_DIR}/curl/curl_config.h ./
 )
 
-set(ARROW_DEPS_DIR ${CMAKE_BINARY_DIR}/arrow-thirdparty)
+if (DEFINED ENV{ARROW_DEPS})
+  set(ARROW_DEPS_DIR "$ENV{ARROW_DEPS}")
+else ()
+  set(ARROW_DEPS_DIR ${CMAKE_BINARY_DIR}/arrow-thirdparty)
+endif ()
+
+set(ENV{ARROW_ABSL_URL}                "${ARROW_DEPS_DIR}/absl-20211102.0.tar.gz")
+set(ENV{ARROW_AWS_C_AUTH_URL}          "${ARROW_DEPS_DIR}/aws-c-auth-v0.6.22.tar.gz")
+set(ENV{ARROW_AWS_C_CAL_URL}           "${ARROW_DEPS_DIR}/aws-c-cal-v0.5.20.tar.gz")
+set(ENV{ARROW_AWS_C_COMMON_URL}        "${ARROW_DEPS_DIR}/aws-c-common-v0.8.9.tar.gz")
+set(ENV{ARROW_AWS_C_COMPRESSION_URL}   "${ARROW_DEPS_DIR}/aws-c-compression-v0.2.16.tar.gz")
+set(ENV{ARROW_AWS_C_EVENT_STREAM_URL}  "${ARROW_DEPS_DIR}/aws-c-event-stream-v0.2.18.tar.gz")
+set(ENV{ARROW_AWS_C_HTTP_URL}          "${ARROW_DEPS_DIR}/aws-c-http-v0.7.3.tar.gz")
+set(ENV{ARROW_AWS_C_IO_URL}            "${ARROW_DEPS_DIR}/aws-c-io-v0.13.14.tar.gz")
+set(ENV{ARROW_AWS_C_MQTT_URL}          "${ARROW_DEPS_DIR}/aws-c-mqtt-v0.8.4.tar.gz")
+set(ENV{ARROW_AWS_C_S3_URL}            "${ARROW_DEPS_DIR}/aws-c-s3-v0.2.3.tar.gz")
+set(ENV{ARROW_AWS_C_SDKUTILS_URL}      "${ARROW_DEPS_DIR}/aws-c-sdkutils-v0.1.6.tar.gz")
+set(ENV{ARROW_AWS_CHECKSUMS_URL}       "${ARROW_DEPS_DIR}/aws-checksums-v0.1.13.tar.gz")
+set(ENV{ARROW_AWS_CRT_CPP_URL}         "${ARROW_DEPS_DIR}/aws-crt-cpp-v0.18.16.tar.gz")
+set(ENV{ARROW_AWS_LC_URL}              "${ARROW_DEPS_DIR}/aws-lc-v1.3.0.tar.gz")
+set(ENV{ARROW_AWSSDK_URL}              "${ARROW_DEPS_DIR}/aws-sdk-cpp-1.10.55.tar.gz")
+set(ENV{ARROW_BOOST_URL}               "${ARROW_DEPS_DIR}/boost-1.81.0.tar.gz")
+set(ENV{ARROW_BROTLI_URL}              "${ARROW_DEPS_DIR}/brotli-v1.0.9.tar.gz")
+set(ENV{ARROW_BZIP2_URL}               "${ARROW_DEPS_DIR}/bzip2-1.0.8.tar.gz")
+set(ENV{ARROW_CARES_URL}               "${ARROW_DEPS_DIR}/cares-1.17.2.tar.gz")
+set(ENV{ARROW_CRC32C_URL}              "${ARROW_DEPS_DIR}/crc32c-1.1.2.tar.gz")
+set(ENV{ARROW_GBENCHMARK_URL}          "${ARROW_DEPS_DIR}/gbenchmark-v1.7.1.tar.gz")
+set(ENV{ARROW_GFLAGS_URL}              "${ARROW_DEPS_DIR}/gflags-v2.2.2.tar.gz")
+set(ENV{ARROW_GLOG_URL}                "${ARROW_DEPS_DIR}/glog-v0.5.0.tar.gz")
+set(ENV{ARROW_GOOGLE_CLOUD_CPP_URL}    "${ARROW_DEPS_DIR}/google-cloud-cpp-v2.12.0.tar.gz")
+set(ENV{ARROW_GRPC_URL}                "${ARROW_DEPS_DIR}/grpc-v1.46.3.tar.gz")
+set(ENV{ARROW_GTEST_URL}               "${ARROW_DEPS_DIR}/gtest-1.11.0.tar.gz")
+set(ENV{ARROW_JEMALLOC_URL}            "${ARROW_DEPS_DIR}/jemalloc-5.3.0.tar.bz2")
+set(ENV{ARROW_LZ4_URL}                 "${ARROW_DEPS_DIR}/lz4-v1.9.4.tar.gz")
+set(ENV{ARROW_MIMALLOC_URL}            "${ARROW_DEPS_DIR}/mimalloc-v2.0.6.tar.gz")
+set(ENV{ARROW_NLOHMANN_JSON_URL}       "${ARROW_DEPS_DIR}/nlohmann-json-v3.10.5.tar.gz")
+set(ENV{ARROW_OPENTELEMETRY_URL}       "${ARROW_DEPS_DIR}/opentelemetry-cpp-v1.8.1.tar.gz")
+set(ENV{ARROW_OPENTELEMETRY_PROTO_URL} "${ARROW_DEPS_DIR}/opentelemetry-proto-v0.17.0.tar.gz")
+set(ENV{ARROW_ORC_URL}                 "${ARROW_DEPS_DIR}/orc-1.9.2.tar.gz")
+set(ENV{ARROW_PROTOBUF_URL}            "${ARROW_DEPS_DIR}/protobuf-v21.3.tar.gz")
+set(ENV{ARROW_RAPIDJSON_URL}           "${ARROW_DEPS_DIR}/rapidjson-232389d4f1012dddec4ef84861face2d2ba85709.tar.gz")
+set(ENV{ARROW_RE2_URL}                 "${ARROW_DEPS_DIR}/re2-2022-06-01.tar.gz")
+set(ENV{ARROW_S2N_TLS_URL}             "${ARROW_DEPS_DIR}/s2n-v1.3.35.tar.gz")
+set(ENV{ARROW_SNAPPY_URL}              "${ARROW_DEPS_DIR}/snappy-1.1.10.tar.gz")
+set(ENV{ARROW_THRIFT_URL}              "${ARROW_DEPS_DIR}/thrift-0.16.0.tar.gz")
+set(ENV{ARROW_UCX_URL}                 "${ARROW_DEPS_DIR}/ucx-1.12.1.tar.gz")
+set(ENV{ARROW_UTF8PROC_URL}            "${ARROW_DEPS_DIR}/utf8proc-v2.7.0.tar.gz")
+set(ENV{ARROW_XSIMD_URL}               "${ARROW_DEPS_DIR}/xsimd-9.0.1.tar.gz")
+set(ENV{ARROW_ZLIB_URL}                "${ARROW_DEPS_DIR}/zlib-1.3.1.tar.gz")
+set(ENV{ARROW_ZSTD_URL}                "${ARROW_DEPS_DIR}/zstd-1.5.5.tar.gz")
 
 FetchContent_Declare(
   arrow
   GIT_REPOSITORY ${GITHUB}/apache/arrow.git
   GIT_TAG e03105efc38edca4ca429bf967a17b4d0fbebe40 # maint-15.0.2
   SOURCE_SUBDIR cpp
+  GIT_SUBMODULES ""
   PATCH_COMMAND git reset --hard HEAD
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/arrow-fix-snappy-empty-column.patch
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/arrow_ensure_xsimd.patch
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/fix_c-ares_url.patch
-    && export ARROW_ABSL_URL=${ARROW_DEPS_DIR}/absl-20211102.0.tar.gz
-    && export ARROW_AWS_C_AUTH_URL=${ARROW_DEPS_DIR}/aws-c-auth-v0.6.22.tar.gz
-    && export ARROW_AWS_C_CAL_URL=${ARROW_DEPS_DIR}/aws-c-cal-v0.5.20.tar.gz
-    && export ARROW_AWS_C_COMMON_URL=${ARROW_DEPS_DIR}/aws-c-common-v0.8.9.tar.gz
-    && export ARROW_AWS_C_COMPRESSION_URL=${ARROW_DEPS_DIR}/aws-c-compression-v0.2.16.tar.gz
-    && export ARROW_AWS_C_EVENT_STREAM_URL=${ARROW_DEPS_DIR}/aws-c-event-stream-v0.2.18.tar.gz
-    && export ARROW_AWS_C_HTTP_URL=${ARROW_DEPS_DIR}/aws-c-http-v0.7.3.tar.gz
-    && export ARROW_AWS_C_IO_URL=${ARROW_DEPS_DIR}/aws-c-io-v0.13.14.tar.gz
-    && export ARROW_AWS_C_MQTT_URL=${ARROW_DEPS_DIR}/aws-c-mqtt-v0.8.4.tar.gz
-    && export ARROW_AWS_C_S3_URL=${ARROW_DEPS_DIR}/aws-c-s3-v0.2.3.tar.gz
-    && export ARROW_AWS_C_SDKUTILS_URL=${ARROW_DEPS_DIR}/aws-c-sdkutils-v0.1.6.tar.gz
-    && export ARROW_AWS_CHECKSUMS_URL=${ARROW_DEPS_DIR}/aws-checksums-v0.1.13.tar.gz
-    && export ARROW_AWS_CRT_CPP_URL=${ARROW_DEPS_DIR}/aws-crt-cpp-v0.18.16.tar.gz
-    && export ARROW_AWS_LC_URL=${ARROW_DEPS_DIR}/aws-lc-v1.3.0.tar.gz
-    && export ARROW_AWSSDK_URL=${ARROW_DEPS_DIR}/aws-sdk-cpp-1.10.55.tar.gz
-    && export ARROW_BOOST_URL=${ARROW_DEPS_DIR}/boost-1.81.0.tar.gz
-    && export ARROW_BROTLI_URL=${ARROW_DEPS_DIR}/brotli-v1.0.9.tar.gz
-    && export ARROW_BZIP2_URL=${ARROW_DEPS_DIR}/bzip2-1.0.8.tar.gz
-    && export ARROW_CARES_URL=${ARROW_DEPS_DIR}/cares-1.17.2.tar.gz
-    && export ARROW_CRC32C_URL=${ARROW_DEPS_DIR}/crc32c-1.1.2.tar.gz
-    && export ARROW_GBENCHMARK_URL=${ARROW_DEPS_DIR}/gbenchmark-v1.7.1.tar.gz
-    && export ARROW_GFLAGS_URL=${ARROW_DEPS_DIR}/gflags-v2.2.2.tar.gz
-    && export ARROW_GLOG_URL=${ARROW_DEPS_DIR}/glog-v0.5.0.tar.gz
-    && export ARROW_GOOGLE_CLOUD_CPP_URL=${ARROW_DEPS_DIR}/google-cloud-cpp-v2.12.0.tar.gz
-    && export ARROW_GRPC_URL=${ARROW_DEPS_DIR}/grpc-v1.46.3.tar.gz
-    && export ARROW_GTEST_URL=${ARROW_DEPS_DIR}/gtest-1.11.0.tar.gz
-    && export ARROW_JEMALLOC_URL=${ARROW_DEPS_DIR}/jemalloc-5.3.0.tar.bz2
-    && export ARROW_LZ4_URL=${ARROW_DEPS_DIR}/lz4-v1.9.4.tar.gz
-    && export ARROW_MIMALLOC_URL=${ARROW_DEPS_DIR}/mimalloc-v2.0.6.tar.gz
-    && export ARROW_NLOHMANN_JSON_URL=${ARROW_DEPS_DIR}/nlohmann-json-v3.10.5.tar.gz
-    && export ARROW_OPENTELEMETRY_URL=${ARROW_DEPS_DIR}/opentelemetry-cpp-v1.8.1.tar.gz
-    && export ARROW_OPENTELEMETRY_PROTO_URL=${ARROW_DEPS_DIR}/opentelemetry-proto-v0.17.0.tar.gz
-    && export ARROW_ORC_URL=${ARROW_DEPS_DIR}/orc-1.9.2.tar.gz
-    && export ARROW_PROTOBUF_URL=${ARROW_DEPS_DIR}/protobuf-v21.3.tar.gz
-    && export ARROW_RAPIDJSON_URL=${ARROW_DEPS_DIR}/rapidjson-232389d4f1012dddec4ef84861face2d2ba85709.tar.gz
-    && export ARROW_RE2_URL=${ARROW_DEPS_DIR}/re2-2022-06-01.tar.gz
-    && export ARROW_S2N_TLS_URL=${ARROW_DEPS_DIR}/s2n-v1.3.35.tar.gz
-    && export ARROW_SNAPPY_URL=${ARROW_DEPS_DIR}/snappy-1.1.10.tar.gz
-    && export ARROW_THRIFT_URL=${ARROW_DEPS_DIR}/thrift-0.16.0.tar.gz
-    && export ARROW_UCX_URL=${ARROW_DEPS_DIR}/ucx-1.12.1.tar.gz
-    && export ARROW_UTF8PROC_URL=${ARROW_DEPS_DIR}/utf8proc-v2.7.0.tar.gz
-    && export ARROW_XSIMD_URL=${ARROW_DEPS_DIR}/xsimd-9.0.1.tar.gz
-    && export ARROW_ZLIB_URL=${ARROW_DEPS_DIR}/zlib-1.3.1.tar.gz
-    && export ARROW_ZSTD_URL=${ARROW_DEPS_DIR}/zstd-1.5.5.tar.gz
 )
 
 FetchContent_Declare(
