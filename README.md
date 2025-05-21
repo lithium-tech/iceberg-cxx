@@ -26,8 +26,8 @@ cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
 
 ```bash
 mkdir _build
-ln -s _deps/arrow-thirdparty _build/arrow-thirdparty
 cd _build
+ln -s ../_deps/arrow-thirdparty arrow-thirdparty
 cmake -GNinja ../
 ninja
 cd tests/
