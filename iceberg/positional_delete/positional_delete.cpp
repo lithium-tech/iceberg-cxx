@@ -229,7 +229,7 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     }
     if (cmp == 0 && r->current_pos() >= begin) {
       if (r->current_pos() < end) {
-        if (rows.empty() || rows.back() != r->current_pos() && r->layer() >= data_layer) {
+        if ((rows.empty() || rows.back() != r->current_pos()) && r->layer() >= data_layer) {
           rows.push_back(r->current_pos());
         }
       } else {
