@@ -57,4 +57,4 @@ ADD_CUSTOM_TARGET(test_tables_symlink ALL
 )
 add_dependencies(iceberg_local_test test_tables_symlink)
 
-add_subdirectory(performance_gen)
+add_subdirectory(meta_perf)
