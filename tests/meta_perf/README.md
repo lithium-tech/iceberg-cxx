@@ -18,7 +18,7 @@ This is a test case where all supported column types were generated, after which
 
 ### Snapshots
 
-This is a test case where 1000 small changes took place, each of which generated a new snapshot. Also, 500 tags and 500 branches are created in the test, which somehow point to snapshots.  Generated using payspark
+This is a test case where 1000 small changes took place, each of which generated a new snapshot. Also, 500 tags and 500 branches are created in the test, which somehow point to snapshots.  Generated using pyspark
 
 # How to run
 
