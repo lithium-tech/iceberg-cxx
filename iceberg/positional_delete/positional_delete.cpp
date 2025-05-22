@@ -12,14 +12,16 @@
 #include "parquet/column_reader.h"
 #include "parquet/types.h"
 
-// #include "tea/observability/positional_delete_stats.h"
-
 namespace iceberg {
 
 class PositionalDeleteStream::Reader {
  public:
-  explicit Reader(std::shared_ptr<parquet::arrow::FileReader> file_reader, std::shared_ptr<iceberg::ILogger> logger)
-      : file_reader_(std::move(file_reader)), parquet_reader_(file_reader_->parquet_reader()), logger_(logger) {
+  explicit Reader(std::shared_ptr<parquet::arrow::FileReader> file_reader, Layer layer,
+                  std::shared_ptr<iceberg::ILogger> logger)
+      : file_reader_(std::move(file_reader)),
+        parquet_reader_(file_reader_->parquet_reader()),
+        layer_(layer),
+        logger_(logger) {
     auto file_metadata = parquet_reader_->metadata();
     auto num_columns = file_metadata->num_columns();
 
@@ -39,6 +41,8 @@ class PositionalDeleteStream::Reader {
   const std::string& current_file_path() const noexcept { return current_file_path_; }
 
   int64_t current_pos() const noexcept { return current_pos_; }
+
+  Layer layer() const noexcept { return layer_; }
 
   bool is_less(const Reader& other) const noexcept {
     return std::make_tuple(std::string_view(current_file_path_), current_pos_) <
@@ -140,6 +144,8 @@ class PositionalDeleteStream::Reader {
   int64_t current_pos_;
   int num_row_groups_;
   int next_row_group_{0};
+
+  const Layer layer_;
   std::shared_ptr<iceberg::ILogger> logger_;
 };
 
@@ -148,32 +154,34 @@ bool PositionalDeleteStream::ReaderGreater::operator()(const Reader* lhs, const 
 }
 
 PositionalDeleteStream::PositionalDeleteStream(
-    const std::set<std::string>& urls,
+    const std::map<Layer, std::vector<std::string>>& urls,
     const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
     std::shared_ptr<iceberg::ILogger> logger)
     : logger_(logger) {
   readers_.reserve(urls.size());
 
-  for (const auto& url : urls) {
-    if (logger) {
-      logger->Log(std::to_string(1), "metrics:positional:files_read");
-    }
-    auto reader = std::make_unique<Reader>(cb(url), logger);
+  for (const auto& [layer, urls_for_layer] : urls) {
+    for (const auto& url : urls_for_layer) {
+      if (logger) {
+        logger->Log(std::to_string(1), "metrics:positional:files_read");
+      }
+      auto reader = std::make_unique<Reader>(cb(url), layer, logger);
 
-    if (reader->Next()) {
-      queue_.push(reader.get());
-      readers_.insert(reader.release());
+      if (reader->Next()) {
+        queue_.push(reader.get());
+        readers_.insert(reader.release());
+      }
     }
   }
 }
 
-PositionalDeleteStream::PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> e,
+PositionalDeleteStream::PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> e, Layer layer,
                                                std::shared_ptr<iceberg::ILogger> logger)
     : logger_(logger) {
   if (logger) {
     logger->Log(std::to_string(1), "metrics:positional:files_read");
   }
-  auto reader = std::make_unique<Reader>(std::move(e), logger);
+  auto reader = std::make_unique<Reader>(std::move(e), layer, logger);
 
   if (reader->Next()) {
     queue_.push(reader.get());
@@ -187,10 +195,11 @@ PositionalDeleteStream::~PositionalDeleteStream() {
   }
 }
 
+// TODO(gmusya): get rid of this method
 void PositionalDeleteStream::Append(UrlDeleteRows& rows) {
   while (!queue_.empty()) {
     const std::string url = queue_.top()->current_file_path();
-    const auto& poses = GetDeleted(url, 0, INT64_MAX);
+    const auto& poses = GetDeleted(url, 0, INT64_MAX, 0);
     rows[url].insert(rows[url].end(), poses.begin(), poses.end());
   }
 
@@ -201,7 +210,7 @@ void PositionalDeleteStream::Append(UrlDeleteRows& rows) {
   }
 }
 
-DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t begin, int64_t end) {
+DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer) {
   if (last_query_.has_value()) {
     if (std::tie(last_query_->url, last_query_->end) > std::tie(url, begin)) {
       throw std::runtime_error("PositionalDeleteStream::GetDeleted: internal error in tea.");
@@ -220,7 +229,7 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     }
     if (cmp == 0 && r->current_pos() >= begin) {
       if (r->current_pos() < end) {
-        if (rows.empty() || rows.back() != r->current_pos()) {
+        if (rows.empty() || rows.back() != r->current_pos() && r->layer() >= data_layer) {
           rows.push_back(r->current_pos());
         }
       } else {

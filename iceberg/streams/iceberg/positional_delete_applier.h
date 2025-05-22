@@ -24,14 +24,11 @@ namespace iceberg {
 struct PositionalDeletes {
   std::map<PartitionId, std::map<LayerId, std::vector<iceberg::ice_tea::PositionalDeleteInfo>>> delete_entries;
 
-  std::set<std::string> GetDeleteUrls(PartitionLayer state) const {
-    std::set<std::string> urls;
-    for (const auto& [l, partition_delete_entries] : delete_entries.at(state.GetPartition())) {
-      if (l < state.GetLayer()) {
-        continue;
-      }
+  std::map<LayerId, std::vector<std::string>> GetDeleteUrls(PartitionId partition) const {
+    std::map<LayerId, std::vector<std::string>> urls;
+    for (const auto& [l, partition_delete_entries] : delete_entries.at(partition)) {
       for (const auto& del_entry : partition_delete_entries) {
-        urls.insert(del_entry.path);
+        urls[l].push_back(del_entry.path);
       }
     }
 
@@ -72,8 +69,8 @@ class PositionalDeleteApplier : public IcebergStream {
                                        (batch->GetPath() == current_state_->GetPath() &&
                                         batch->GetRowPosition() >= current_state_->GetRowPosition()));
 
-    bool can_reuse_state = current_state_.has_value() && (current_state_->GetPartition() == batch->GetPartition()) &&
-                           current_state_->GetLayer() == batch->GetLayer() && paths_are_increasing;
+    bool can_reuse_state =
+        current_state_.has_value() && (current_state_->GetPartition() == batch->GetPartition()) && paths_are_increasing;
 
     if (!can_reuse_state) {
       current_state_.reset();
@@ -89,13 +86,14 @@ class PositionalDeleteApplier : public IcebergStream {
         return result;
       };
 
-      positional_delete_ = std::make_shared<PositionalDeleteStream>(
-          pos_del_infos_.GetDeleteUrls(batch->GetPartitionLayerFile()), open_file_lambda, logger_);
+      positional_delete_ = std::make_shared<PositionalDeleteStream>(pos_del_infos_.GetDeleteUrls(batch->GetPartition()),
+                                                                    open_file_lambda, logger_);
     }
 
     if (positional_delete_) {
       DeleteRows delete_rows = positional_delete_->GetDeleted(
-          batch->GetPath(), batch->GetRowPosition(), batch->GetRowPosition() + batch->GetRecordBatch()->num_rows());
+          batch->GetPath(), batch->GetRowPosition(), batch->GetRowPosition() + batch->GetRecordBatch()->num_rows(),
+          batch->GetLayer());
       for (auto& row : delete_rows) {
         row -= batch->GetRowPosition();
       }

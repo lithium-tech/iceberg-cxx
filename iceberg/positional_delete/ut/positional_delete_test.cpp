@@ -153,7 +153,7 @@ Status ReadFile(std::shared_ptr<FileSystem> fs, const std::string& path, UrlDele
     std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
     ARROW_ASSIGN_OR_RAISE(arrow_reader, OpenUrl(fs, path));
 
-    PositionalDeleteStream(std::move(arrow_reader)).Append(rows);
+    PositionalDeleteStream(std::move(arrow_reader), 0).Append(rows);
 
     if (count) {
       *count = 0;
@@ -243,10 +243,10 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStream) {
 
   std::unique_ptr<parquet::arrow::FileReader> arrow_reader = OpenUrl(fs_, path_).ValueOrDie();
 
-  PositionalDeleteStream stream(std::move(arrow_reader));
-  ASSERT_EQ(stream.GetDeleted("path1", 1, 2), (DeleteRows{1}));
-  ASSERT_EQ(stream.GetDeleted("path1", 2, 3), (DeleteRows{}));
-  ASSERT_EQ(stream.GetDeleted("path1", 3, 5), (DeleteRows{{3, 4}}));
+  PositionalDeleteStream stream(std::move(arrow_reader), 0);
+  ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
+  ASSERT_EQ(stream.GetDeleted("path1", 2, 3, 0), (DeleteRows{}));
+  ASSERT_EQ(stream.GetDeleted("path1", 3, 5, 0), (DeleteRows{{3, 4}}));
 }
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStreamWithSkips) {
@@ -255,10 +255,10 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamWithSkips) {
 
   std::unique_ptr<parquet::arrow::FileReader> arrow_reader = OpenUrl(fs_, path_).ValueOrDie();
 
-  PositionalDeleteStream stream(std::move(arrow_reader));
-  ASSERT_EQ(stream.GetDeleted("path1", 1, 2), (DeleteRows{1}));
-  ASSERT_EQ(stream.GetDeleted("path1", 2, 3), (DeleteRows{}));
-  ASSERT_EQ(stream.GetDeleted("path2", 3, 5), (DeleteRows{4}));
+  PositionalDeleteStream stream(std::move(arrow_reader), 0);
+  ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
+  ASSERT_EQ(stream.GetDeleted("path1", 2, 3, 0), (DeleteRows{}));
+  ASSERT_EQ(stream.GetDeleted("path2", 3, 5, 0), (DeleteRows{4}));
 }
 
 TEST_F(PositionalDeleteTest, Count) {
