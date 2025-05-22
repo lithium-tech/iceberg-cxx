@@ -19,7 +19,54 @@
 namespace iceberg {
 namespace {
 
-TEST(PositionalDeleteApplier, OnePartitionOneLayerSortedOrder) {
+class PositionalDeleteApplierTest : public ::testing::Test {
+ public:
+  IcebergBatch MakeSimpleIcebergBatch(std::string column_name, const OptionalVector<int16_t>& values,
+                                      PartitionId partition, LayerId layer, std::string path, int row_position) {
+    PartitionLayerFilePosition state(PartitionLayerFile(PartitionLayer(partition, layer), path), row_position);
+    auto col = MakeInt16ArrowColumn(values);
+    auto batch = MakeBatch({col}, {column_name});
+    auto iceberg_batch = IcebergBatch(BatchWithSelectionVector(batch, SelectionVector<int32_t>(values.size())), state);
+
+    return iceberg_batch;
+  }
+
+  arrow::Result<std::string> PreparePositionalDeleteFile(std::vector<std::string*> filenames,
+                                                         OptionalVector<int64_t> row_positions) {
+    auto column1 = MakeStringColumn("file_path", 1, filenames);
+    auto column2 = MakeInt64Column("pos", 2, row_positions);
+
+    std::string del_path =
+        "file://" + (dir_.path() / ("del" + std::to_string(written_deletes_++) + ".parquet")).generic_string();
+    ARROW_RETURN_NOT_OK(WriteToFile({column1, column2}, del_path));
+
+    return del_path;
+  }
+
+  std::vector<std::shared_ptr<IcebergBatch>> GetResult(IcebergStreamPtr input_stream, PositionalDeletes info) {
+    auto fs_provider = std::make_shared<FileSystemProvider>(
+        std::map<std::string, std::shared_ptr<IFileSystemGetter>>{{"file", std::make_shared<LocalFileSystemGetter>()}});
+    auto positional_delete_applier = std::make_shared<PositionalDeleteApplier>(
+        input_stream, std::move(info), std::make_shared<FileReaderProvider>(fs_provider));
+
+    std::vector<std::shared_ptr<IcebergBatch>> result_batches;
+    while (true) {
+      auto batch = positional_delete_applier->ReadNext();
+      if (!batch) {
+        break;
+      }
+      result_batches.emplace_back(batch);
+    }
+
+    return result_batches;
+  }
+
+ private:
+  int written_deletes_ = 0;
+  ScopedTempDir dir_;
+};
+
+TEST_F(PositionalDeleteApplierTest, OnePartitionOneLayerSortedOrder) {
   IcebergStreamPtr input_stream;
 
   std::string data_path1 = "file://path1";
@@ -27,31 +74,11 @@ TEST(PositionalDeleteApplier, OnePartitionOneLayerSortedOrder) {
 
   std::vector<std::shared_ptr<arrow::RecordBatch>> arrow_input_batches;
   {
-    PartitionLayerFilePosition state1(PartitionLayerFile(PartitionLayer(0, 0), data_path1), 0);
-    auto col1 = MakeInt16ArrowColumn({0, 1, 2, 3, 4});
-    auto batch1 = MakeBatch({col1}, {"col1"});
-    auto iceberg_batch1 = IcebergBatch(BatchWithSelectionVector(batch1, SelectionVector<int32_t>(5)), state1);
-
-    PartitionLayerFilePosition state2(PartitionLayerFile(PartitionLayer(0, 0), data_path1), 10);
-    auto col2 = MakeInt16ArrowColumn({10, 11, 12, 13, 14});
-    auto batch2 = MakeBatch({col2}, {"col2"});
-    auto iceberg_batch2 = IcebergBatch(BatchWithSelectionVector(batch2, SelectionVector<int32_t>(5)), state2);
-
-    PartitionLayerFilePosition state3(PartitionLayerFile(PartitionLayer(0, 0), data_path2), 5);
-    auto col3 = MakeInt16ArrowColumn({20, 21, 22, 23, 24});
-    auto batch3 = MakeBatch({col3}, {"col3"});
-    auto iceberg_batch3 = IcebergBatch(BatchWithSelectionVector(batch3, SelectionVector<int32_t>(5)), state3);
-
-    PartitionLayerFilePosition state4(PartitionLayerFile(PartitionLayer(0, 0), data_path2), 15);
-    auto col4 = MakeInt16ArrowColumn({30, 31, 32, 33, 34});
-    auto batch4 = MakeBatch({col4}, {"col4"});
-    auto iceberg_batch4 = IcebergBatch(BatchWithSelectionVector(batch4, SelectionVector<int32_t>(5)), state4);
-
     std::vector<IcebergBatch> input_batches;
-    input_batches.emplace_back(std::move(iceberg_batch1));
-    input_batches.emplace_back(std::move(iceberg_batch2));
-    input_batches.emplace_back(std::move(iceberg_batch3));
-    input_batches.emplace_back(std::move(iceberg_batch4));
+    input_batches.emplace_back(MakeSimpleIcebergBatch("col1", {0, 1, 2, 3, 4}, 0, 0, data_path1, 0));
+    input_batches.emplace_back(MakeSimpleIcebergBatch("col2", {10, 11, 12, 13, 14}, 0, 0, data_path1, 10));
+    input_batches.emplace_back(MakeSimpleIcebergBatch("col3", {20, 21, 22, 23, 24}, 0, 0, data_path2, 5));
+    input_batches.emplace_back(MakeSimpleIcebergBatch("col4", {30, 31, 32, 33, 34}, 0, 0, data_path2, 15));
 
     for (const auto& input_batch : input_batches) {
       arrow_input_batches.emplace_back(input_batch.GetRecordBatch());
@@ -59,9 +86,6 @@ TEST(PositionalDeleteApplier, OnePartitionOneLayerSortedOrder) {
 
     input_stream = std::make_shared<MockStream<IcebergBatch>>(std::move(input_batches));
   }
-
-  ScopedTempDir dir;
-  std::string del_path1 = "file://" + (dir.path() / "del1.parquet").generic_string();
 
   std::vector<SelectionVector<int32_t>> expected_selection_vectors = {
       SelectionVector<int32_t>(std::vector<int32_t>{0, 1, 3}),
@@ -75,26 +99,11 @@ TEST(PositionalDeleteApplier, OnePartitionOneLayerSortedOrder) {
                                              &data_path2, &data_path2, &data_path2};
   auto col2_data = OptionalVector<int64_t>{2, 4, 7, 12, 15, 3, 5, 10, 15, 16, 17, 18, 120};
 
-  auto column1 = MakeStringColumn("file_path", 1, col1_data);
-  auto column2 = MakeInt64Column("pos", 2, col2_data);
-  ASSERT_OK(WriteToFile({column1, column2}, del_path1));
+  ASSIGN_OR_FAIL(auto delete_path, PreparePositionalDeleteFile(col1_data, col2_data));
 
   PositionalDeletes info;
-  info.delete_entries[0][0] = {iceberg::ice_tea::PositionalDeleteInfo{del_path1}};
-
-  auto fs_provider = std::make_shared<FileSystemProvider>(
-      std::map<std::string, std::shared_ptr<IFileSystemGetter>>{{"file", std::make_shared<LocalFileSystemGetter>()}});
-  auto positional_delete_applier = std::make_shared<PositionalDeleteApplier>(
-      input_stream, std::move(info), std::make_shared<FileReaderProvider>(fs_provider));
-
-  std::vector<std::shared_ptr<IcebergBatch>> result_batches;
-  while (true) {
-    auto batch = positional_delete_applier->ReadNext();
-    if (!batch) {
-      break;
-    }
-    result_batches.emplace_back(batch);
-  }
+  info.delete_entries[0][0] = {iceberg::ice_tea::PositionalDeleteInfo{delete_path}};
+  std::vector<std::shared_ptr<IcebergBatch>> result_batches = GetResult(std::move(input_stream), std::move(info));
 
   ASSERT_EQ(result_batches.size(), arrow_input_batches.size());
   for (size_t i = 0; i < result_batches.size(); ++i) {
