@@ -249,6 +249,30 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStream) {
   ASSERT_EQ(stream.GetDeleted("path1", 3, 5, 0), (DeleteRows{{3, 4}}));
 }
 
+TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerGreater) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
+
+  std::unique_ptr<parquet::arrow::FileReader> arrow_reader = OpenUrl(fs_, path_).ValueOrDie();
+
+  PositionalDeleteStream stream(std::move(arrow_reader), 1);
+  ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
+  ASSERT_EQ(stream.GetDeleted("path1", 2, 3, 0), (DeleteRows{}));
+  ASSERT_EQ(stream.GetDeleted("path1", 3, 5, 0), (DeleteRows{{3, 4}}));
+}
+
+TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerLess) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
+
+  std::unique_ptr<parquet::arrow::FileReader> arrow_reader = OpenUrl(fs_, path_).ValueOrDie();
+
+  PositionalDeleteStream stream(std::move(arrow_reader), 0);
+  ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 1), (DeleteRows{}));
+  ASSERT_EQ(stream.GetDeleted("path1", 2, 3, 1), (DeleteRows{}));
+  ASSERT_EQ(stream.GetDeleted("path1", 3, 5, 1), (DeleteRows{}));
+}
+
 TEST_F(PositionalDeleteTest, GetDeletedFromStreamWithSkips) {
   using Container = std::vector<std::vector<DataStringInt64>>;
   ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path2", 4}}}), Status::OK());
