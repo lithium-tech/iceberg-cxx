@@ -28,7 +28,7 @@ Run ./meta_perf_test with the corresponding flags, for example:
 
 # Usability
 
-You can use this tool for profiling CPU usage during GetScanMetadata function. Here is a short guide how you can do this on Linux:
+You can use this tool for profiling CPU usage during GetScanMetadata function. Here is a short guide how to do this on Linux:
 
 1. Download linux-common-tools, which contains perf util
 
