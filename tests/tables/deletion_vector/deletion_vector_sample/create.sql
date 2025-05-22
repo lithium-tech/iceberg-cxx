@@ -1,5 +1,7 @@
 -- Engine: Spark 3.5.2
 
+CREATE DATABASE IF NOT EXISTS my_catalog
+
 CREATE TABLE my_catalog.deletion_vector.deletion_vector_sample (
         id BIGINT,
         name STRING,
