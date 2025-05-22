@@ -28,4 +28,28 @@ Run ./meta_perf_test with the corresponding flags, for example:
 
 # Usability
 
-You can use this tool for creating FlameGraphs, or for simply measuring average run time. You can use ministat Linux util for comparing different GetScanMetadata realizations' run times. 
+You can use this tool for profiling CPU usage during GetScanMetadata function. Here is a short guide how you can do this on Linux:
+
+1. Download linux-common-tools, which contains perf util
+
+2. Build the project, go to tests/meta_perf and run:
+
+```
+sudo perf record -F 200 -g --call-graph fp -o path_to_perf_data/perf.data ./meta_perf_test --manifest_entries=200 --full=false
+```
+
+where _path_to_perf_data_ is a path, where you want to save perf.data file.
+
+3. Get stackcollapse-perf.pl and flamegraph.pl scripts from https://github.com/brendangregg/FlameGraph. 
+
+4. Go to _path_to_perf_data_ and run:
+
+```
+sudo perf script | path_to_scripts/stackcollapse-perf.pl | path_to_scripts/flamegraph.pl > flamegraph.svg
+```
+
+where _path_to_scripts_ is a path to stackcollapse-perf.pl and flamegraph.pl scripts. 
+
+5. You will see the result in flamegraph.svg.
+
+One more thing this tool can be helpful for is simply measuring average run time. You can compare different GetScanMetadata realizations' run times with ministat Linux util. 
