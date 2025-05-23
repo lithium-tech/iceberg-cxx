@@ -204,12 +204,12 @@ class FlatHashMap {
 };
 
 template <typename Key, typename Value>
-void UpdateMax(FlatHashMap<Key, Value>& map, Key key, Value value) {
+void UpdateMax(FlatHashMap<Key, Value>& map, const Key& key, const Value& value) {
   auto old_value = map.Get(key);
   if (!old_value) {
-    map.Set(std::move(key), value);
+    map.Set(key, value);
   } else {
-    map.Set(std::move(key), std::max(*old_value, value));
+    map.Set(key, std::max(*old_value, value));
   }
 }
 
