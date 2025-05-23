@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-#include "absl/container/flat_hash_set.h"
+#include "absl/container/flat_hash_map.h"
 #include "arrow/array.h"
 
 namespace iceberg {
@@ -161,13 +161,15 @@ class ExceptionFlagGuard {
 };
 
 // exception safe wrapper for absl::flat_hash_set
-template <typename T>
-class FlatHashSet {
+template <typename Key, typename Value>
+class FlatHashMap {
  public:
-  explicit FlatHashSet(const std::shared_ptr<MemoryState>& shared_state)
+  using T = std::pair<const Key, Value>;
+
+  explicit FlatHashMap(const std::shared_ptr<MemoryState>& shared_state)
       : values_(LimitedAllocator<T>(shared_state)), shared_state_(shared_state) {}
 
-  void Insert(T key) {
+  void Set(Key key, Value value) {
     size_t predicted_realloc_size = sizeof(T);
     if (values_.size() + 1 > values_.max_load_factor() * values_.capacity()) {
       predicted_realloc_size = 2 * values_.capacity() * sizeof(T);
@@ -176,24 +178,40 @@ class FlatHashSet {
     shared_state_->CheckLimitsBeforeAllocation(predicted_realloc_size);
     {
       ExceptionFlagGuard guard(shared_state_, false);
-      values_.insert(std::move(key));
+      values_[std::move(key)] = value;
     }
   }
 
-  bool Contains(const T& key) const { return values_.contains(key); }
+  std::optional<Value> Get(const Key& key) const {
+    auto it = values_.find(key);
+    if (it == values_.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  }
 
   size_t Size() const { return values_.size(); }
 
   void Reserve(size_t size) { values_.reserve(size); }
 
  private:
-  using DefaultHasher = absl::container_internal::hash_default_hash<T>;
-  using DefaultComparator = absl::container_internal::hash_default_eq<T>;
+  using DefaultHasher = absl::container_internal::hash_default_hash<Key>;
+  using DefaultComparator = absl::container_internal::hash_default_eq<Key>;
 
-  absl::flat_hash_set<T, DefaultHasher, DefaultComparator, LimitedAllocator<T>> values_;
+  absl::flat_hash_map<Key, Value, DefaultHasher, DefaultComparator, LimitedAllocator<T>> values_;
 
   std::shared_ptr<MemoryState> shared_state_;
 };
+
+template <typename Key, typename Value>
+void UpdateMax(FlatHashMap<Key, Value>& map, Key key, Value value) {
+  auto old_value = map.Get(key);
+  if (!old_value) {
+    map.Set(std::move(key), value);
+  } else {
+    map.Set(std::move(key), std::max(*old_value, value));
+  }
+}
 
 }  // namespace safe
 

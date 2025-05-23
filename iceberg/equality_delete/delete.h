@@ -13,13 +13,17 @@ namespace iceberg {
 
 class EqualityDelete {
  public:
+  using Layer = int;
+
   virtual ~EqualityDelete() = default;
 
-  virtual arrow::Status Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count) = 0;
+  virtual arrow::Status Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count,
+                            Layer delete_layer) = 0;
 
   virtual size_t Size() const = 0;
 
-  virtual bool IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row) const = 0;
+  virtual bool IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row,
+                         Layer data_layer) const = 0;
 };
 
 using EqualityDeletePtr = std::unique_ptr<EqualityDelete>;

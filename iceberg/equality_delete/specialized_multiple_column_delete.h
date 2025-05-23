@@ -9,6 +9,7 @@
 #include "arrow/status.h"
 #include "iceberg/equality_delete/common.h"
 #include "iceberg/equality_delete/delete.h"
+#include "iceberg/equality_delete/utils.h"
 
 namespace iceberg {
 
@@ -31,7 +32,8 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
 
   inline void Reserve(uint64_t rows) { values_.Reserve(rows); }
 
-  arrow::Status Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count) override {
+  arrow::Status Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count,
+                    Layer delete_layer) override {
     if (arrays.size() != types_.size()) {
       return arrow::Status::ExecutionError(
           "SpecializedDeleteMultipleColumn (Add): unexpected number of "
@@ -52,7 +54,7 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
           return allocation_status;
         }
         ++allocated_;
-        values_.Insert(ConstructRow(arrays, row));
+        safe::UpdateMax(values_, ConstructRow(arrays, row), delete_layer);
       }
     } else {
       if (arrays.size() >= 9) {
@@ -71,14 +73,14 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
           return allocation_status;
         }
         ++allocated_;
-        ValueType value = ConstructRowIgnoreNulls(arrays, row);
+        ValueType key = ConstructRowIgnoreNulls(arrays, row);
         if (nulls_mask == 0) {
-          values_.Insert(value);
+          safe::UpdateMax(values_, std::move(key), delete_layer);
         } else {
           if (!values_with_nulls_.contains(nulls_mask)) {
-            values_with_nulls_.emplace(nulls_mask, safe::FlatHashSet<ValueType>(shared_state_));
+            values_with_nulls_.emplace(nulls_mask, safe::FlatHashMap<ValueType, Layer>(shared_state_));
           }
-          values_with_nulls_.at(nulls_mask).Insert(value);
+          safe::UpdateMax(values_with_nulls_.at(nulls_mask), std::move(key), delete_layer);
         }
       }
     }
@@ -93,7 +95,8 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
     return result;
   }
 
-  bool IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row) const override {
+  bool IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row,
+                 Layer data_layer) const override {
     bool with_null = false;
     for (const auto& array : arrays) {
       if (array->IsNull(row)) {
@@ -103,7 +106,8 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
     }
     if (!with_null) {
       ValueType value = ConstructRow(arrays, row);
-      return values_.Contains(value);
+      std::optional<Layer> delete_layer = values_.Get(value);
+      return delete_layer && *delete_layer >= data_layer;
     } else {
       uint8_t nulls_mask = 0;
       for (int id : order_) {
@@ -116,7 +120,8 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
         return false;
       }
       ValueType value = ConstructRowIgnoreNulls(arrays, row);
-      return it->second.Contains(value);
+      std::optional<Layer> delete_layer = it->second.Get(value);
+      return delete_layer && *delete_layer >= data_layer;
     }
   }
 
@@ -206,10 +211,10 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
   const std::vector<int> bit_width_;
   mutable size_t allocated_ = 0;
 
-  safe::FlatHashSet<ValueType> values_;
+  safe::FlatHashMap<ValueType, Layer> values_;
 
   std::shared_ptr<MemoryState> shared_state_;
-  std::map<uint8_t, safe::FlatHashSet<ValueType>> values_with_nulls_;
+  std::map<uint8_t, safe::FlatHashMap<ValueType, Layer>> values_with_nulls_;
 };
 
 }  // namespace iceberg

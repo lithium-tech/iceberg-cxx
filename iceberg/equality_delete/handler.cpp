@@ -11,6 +11,7 @@
 #include "iceberg/common/logger.h"
 #include "iceberg/equality_delete/common.h"
 #include "iceberg/equality_delete/delete.h"
+#include "iceberg/streams/arrow/error.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_reader.h"
 #include "parquet/file_reader.h"
@@ -71,7 +72,8 @@ arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> PrepareRecordBatchReade
 }
 
 arrow::Status ParseEqualityDeleteFile(std::shared_ptr<arrow::RecordBatchReader> record_batch_reader,
-                                      std::unique_ptr<EqualityDelete> &equality_delete) {
+                                      std::unique_ptr<EqualityDelete> &equality_delete,
+                                      EqualityDeleteHandler::Layer delete_layer) {
   while (true) {
     std::shared_ptr<arrow::RecordBatch> record_batch;
     ARROW_RETURN_NOT_OK(record_batch_reader->ReadNext(&record_batch));
@@ -82,13 +84,15 @@ arrow::Status ParseEqualityDeleteFile(std::shared_ptr<arrow::RecordBatchReader> 
     for (int i = 0; i < record_batch->num_columns(); ++i) {
       arrays.push_back(record_batch->column(i));
     }
-    ARROW_RETURN_NOT_OK(equality_delete->Add(arrays, record_batch->num_rows()));
+    ARROW_RETURN_NOT_OK(equality_delete->Add(arrays, record_batch->num_rows(), delete_layer));
   }
   return arrow::Status::OK();
 }
 }  // namespace
 
-bool EqualityDeleteHandler::PrepareDeletesForFile() {
+bool EqualityDeleteHandler::PrepareDeletesForFile(Layer data_layer) {
+  current_data_layer_ = data_layer;
+
   deletes_for_current_row_group_.clear();
   deletes_for_current_row_group_.reserve(materialized_deletes_.size());
 
@@ -115,7 +119,8 @@ void EqualityDeleteHandler::PrepareDeletesForBatch(
   }
 }
 
-arrow::Status EqualityDeleteHandler::AppendDelete(const std::string &url, const std::vector<FieldId> &field_ids_vec) {
+arrow::Status EqualityDeleteHandler::AppendDelete(const std::string &url, const std::vector<FieldId> &field_ids_vec,
+                                                  Layer delete_layer) {
   ARROW_ASSIGN_OR_RAISE(auto reader, open_url_method_(url));
   if (logger_) {
     logger_->Log(std::to_string(1), "metrics:equality:files_read");
@@ -139,7 +144,7 @@ arrow::Status EqualityDeleteHandler::AppendDelete(const std::string &url, const 
   }
   auto &eq_del_ptr = materialized_deletes_.at(field_ids);
 
-  ARROW_RETURN_NOT_OK(ParseEqualityDeleteFile(record_batch_reader, eq_del_ptr));
+  ARROW_RETURN_NOT_OK(ParseEqualityDeleteFile(record_batch_reader, eq_del_ptr, delete_layer));
 
   current_rows_ = 0;
   for (auto &[_, deletes] : materialized_deletes_) {
@@ -181,8 +186,11 @@ EqualityDeleteHandler::EqualityDeleteHandler(ReaderMethodType get_reader_method,
       logger_(logger) {}
 
 bool EqualityDeleteHandler::IsDeleted(uint64_t row) const {
+  iceberg::Ensure(current_data_layer_.has_value(),
+                  std::string(__PRETTY_FUNCTION__) + ": current_data_layer is not set");
+
   for (const auto &[delete_ptr, arrow_arrays] : prepared_batches_) {
-    if (delete_ptr->IsDeleted(arrow_arrays, row)) {
+    if (delete_ptr->IsDeleted(arrow_arrays, row, *current_data_layer_)) {
       return true;
     }
   }
