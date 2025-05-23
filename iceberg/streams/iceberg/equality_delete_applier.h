@@ -78,19 +78,14 @@ class EqualityDeleteApplier : public IcebergStream {
       }
     });
 
-    bool can_reuse_state = current_state_.has_value() && (current_state_->GetPartition() == batch->GetPartition()) &&
-                           current_state_->GetLayer() >= batch->GetLayer();
-
-    PartitionLayer target_state = batch->GetPartitionLayer();
+    bool can_reuse_state = current_state_.has_value() && (*current_state_ == batch->GetPartition());
     if (!can_reuse_state) {
       auto open_file_lambda = [file_reader_provider = this->file_reader_provider_](const std::string& path) {
         return file_reader_provider->Open(path);
       };
 
       equality_delete_handler_.emplace(open_file_lambda, eq_del_config_, logger_);
-      UpdateDeletes(target_state, std::nullopt);
-    } else {
-      UpdateDeletes(target_state, current_state_->GetLayer());
+      SetDeletes(batch->GetPartition());
     }
     return ApplyDeletes(batch);
   }
@@ -101,12 +96,11 @@ class EqualityDeleteApplier : public IcebergStream {
       return nullptr;
     }
 
-    Ensure(batch->GetPartitionLayer() == current_state_->GetPartitionLayer(),
+    Ensure(batch->GetPartition() == *current_state_,
            std::string(__PRETTY_FUNCTION__) + ": internal error. batch_state is " +
-               batch->GetPartitionLayer().DebugString() + ", current_state is " +
-               current_state_->GetPartitionLayer().DebugString());
+               std::to_string(batch->GetPartition()) + ", current_state is " + std::to_string(*current_state_));
 
-    if (equality_delete_handler_->PrepareDeletesForFile()) {
+    if (equality_delete_handler_->PrepareDeletesForFile(batch->GetLayer())) {
       std::map<FieldId, std::shared_ptr<arrow::Array>> field_id_to_array = MakeFieldIdToArray(batch);
       equality_delete_handler_->PrepareDeletesForBatch(field_id_to_array);
       int32_t deleted_rows =
@@ -136,27 +130,18 @@ class EqualityDeleteApplier : public IcebergStream {
     return field_id_to_array;
   }
 
-  void UpdateDeletes(PartitionLayer target_state, std::optional<LayerId> current_layer_id) {
-    if (!equality_deletes_->partlayer_to_deletes.contains(target_state.GetPartition())) {
-      current_state_ = target_state;
+  void SetDeletes(PartitionId partition) {
+    current_state_ = partition;
+    if (!equality_deletes_->partlayer_to_deletes.contains(partition)) {
       return;
     }
-    const auto& partition_deletes = equality_deletes_->partlayer_to_deletes.at(target_state.GetPartition());
+    const auto& partition_deletes = equality_deletes_->partlayer_to_deletes.at(partition);
 
-    auto last_applied_deletes = current_layer_id.has_value() ? partition_deletes.lower_bound(current_layer_id.value())
-                                                             : partition_deletes.end();
-    while (last_applied_deletes != partition_deletes.begin()) {
-      auto non_applied_deletes = --last_applied_deletes;
-      const auto& [layer_id, deletes] = *non_applied_deletes;
-      if (layer_id < target_state.GetLayer()) {
-        break;
-      }
+    for (const auto& [layer_id, deletes] : partition_deletes) {
       for (const auto& del : deletes) {
-        iceberg::Ensure(equality_delete_handler_->AppendDelete(del.path, del.field_ids));
+        iceberg::Ensure(equality_delete_handler_->AppendDelete(del.path, del.field_ids, layer_id));
       }
     }
-
-    current_state_ = target_state;
   }
 
   IcebergStreamPtr input_;
@@ -166,7 +151,7 @@ class EqualityDeleteApplier : public IcebergStream {
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
 
   std::optional<EqualityDeleteHandler> equality_delete_handler_;
-  std::optional<PartitionLayer> current_state_;
+  std::optional<PartitionId> current_state_;
   std::shared_ptr<ILogger> logger_;
 };
 

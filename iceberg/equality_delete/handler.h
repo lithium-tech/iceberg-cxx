@@ -23,6 +23,8 @@ namespace iceberg {
 // TODO(gmusya): make interface with different implementations
 class EqualityDeleteHandler {
  public:
+  using Layer = int;
+
   struct Config {
     uint64_t max_rows;
     bool use_specialized_deletes;
@@ -33,9 +35,9 @@ class EqualityDeleteHandler {
   explicit EqualityDeleteHandler(ReaderMethodType get_reader_method, const Config& config,
                                  std::shared_ptr<iceberg::ILogger> logger = nullptr);
 
-  arrow::Status AppendDelete(const std::string& url, const std::vector<FieldId>& field_ids);
+  arrow::Status AppendDelete(const std::string& url, const std::vector<FieldId>& field_ids, Layer delete_layer);
 
-  bool PrepareDeletesForFile();
+  bool PrepareDeletesForFile(Layer data_layer);
   absl::flat_hash_set<FieldId> GetEqualityDeleteFieldIds() const;
 
   void PrepareDeletesForBatch(const std::map<FieldId, std::shared_ptr<arrow::Array>>& field_id_to_array);
@@ -61,6 +63,7 @@ class EqualityDeleteHandler {
 
   std::shared_ptr<MemoryState> shared_state_;
   std::shared_ptr<iceberg::ILogger> logger_;
+  std::optional<Layer> current_data_layer_;
 };
 
 }  // namespace iceberg

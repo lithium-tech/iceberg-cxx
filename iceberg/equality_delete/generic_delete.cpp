@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "arrow/array.h"
+#include "iceberg/equality_delete/utils.h"
 
 namespace iceberg {
 
@@ -124,20 +125,22 @@ GenericDeleteKey::GenericDeleteKey(const std::vector<std::shared_ptr<arrow::Arra
   sized_ptr_ = SizedPtr(data, size);
 }
 
-arrow::Status GenericEqualityDelete::Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays,
-                                         uint64_t rows_count) {
+arrow::Status GenericEqualityDelete::Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count,
+                                         Layer delete_layer) {
   if (arrays.size() > 64) {
     throw arrow::Status::NotImplemented("GenericEqualityDelete is not implemented for more than 64 columns");
   }
   for (uint64_t row = 0; row < rows_count; ++row) {
-    auto value = GenericDeleteKey(arrays, row, shared_state_);
-    values_.Insert(std::move(value));
+    safe::UpdateMax(values_, GenericDeleteKey(arrays, row, shared_state_), delete_layer);
   }
   return arrow::Status::OK();
 }
 
-bool GenericEqualityDelete::IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row) const {
-  return values_.Contains(GenericDeleteKey(arrays, row, shared_state_));
+bool GenericEqualityDelete::IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row,
+                                      Layer data_layer) const {
+  auto key = GenericDeleteKey(arrays, row, shared_state_);
+  std::optional<Layer> delete_layer = values_.Get(key);
+  return delete_layer && *delete_layer >= data_layer;
 }
 
 size_t GenericEqualityDelete::Size() const { return values_.Size(); }

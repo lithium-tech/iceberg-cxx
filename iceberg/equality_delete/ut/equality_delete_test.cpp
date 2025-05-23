@@ -92,10 +92,50 @@ TEST_F(EqualityDeleteHandlerTest, SanityCheck) {
 
   EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
 
-  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}));
+  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}, 0));
 
   for (int i = 0; i < 3; ++i) {
-    ASSERT_TRUE(handler.PrepareDeletesForFile());
+    ASSERT_TRUE(handler.PrepareDeletesForFile(0));
+    std::shared_ptr<arrow::Array> array = CreateInt32Array({1, 2, 3, 4});
+    handler.PrepareDeletesForBatch(std::map<FieldId, std::shared_ptr<arrow::Array>>{{1, array}});
+    EXPECT_EQ(handler.IsDeleted(0), false);
+    EXPECT_EQ(handler.IsDeleted(1), true);
+    EXPECT_EQ(handler.IsDeleted(2), true);
+    EXPECT_EQ(handler.IsDeleted(3), false);
+  }
+}
+
+TEST_F(EqualityDeleteHandlerTest, SanityCheckDataLayerGreater) {
+  std::string del_f1_path = GetFileUrl("del_f1.parquet");
+  auto column = MakeInt32Column("f1", 1, OptionalVector<int32_t>{2, 3});
+  ASSERT_OK(WriteToFile({column}, del_f1_path));
+
+  EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
+
+  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}, 0));
+
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(handler.PrepareDeletesForFile(1));
+    std::shared_ptr<arrow::Array> array = CreateInt32Array({1, 2, 3, 4});
+    handler.PrepareDeletesForBatch(std::map<FieldId, std::shared_ptr<arrow::Array>>{{1, array}});
+    EXPECT_EQ(handler.IsDeleted(0), false);
+    EXPECT_EQ(handler.IsDeleted(1), false);
+    EXPECT_EQ(handler.IsDeleted(2), false);
+    EXPECT_EQ(handler.IsDeleted(3), false);
+  }
+}
+
+TEST_F(EqualityDeleteHandlerTest, SanityCheckDataLayerLess) {
+  std::string del_f1_path = GetFileUrl("del_f1.parquet");
+  auto column = MakeInt32Column("f1", 1, OptionalVector<int32_t>{2, 3});
+  ASSERT_OK(WriteToFile({column}, del_f1_path));
+
+  EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
+
+  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}, 1));
+
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(handler.PrepareDeletesForFile(0));
     std::shared_ptr<arrow::Array> array = CreateInt32Array({1, 2, 3, 4});
     handler.PrepareDeletesForBatch(std::map<FieldId, std::shared_ptr<arrow::Array>>{{1, array}});
     EXPECT_EQ(handler.IsDeleted(0), false);
@@ -112,10 +152,10 @@ TEST_F(EqualityDeleteHandlerTest, NullInDelete) {
 
   EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
 
-  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}));
+  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}, 0));
 
   for (int i = 0; i < 3; ++i) {
-    ASSERT_TRUE(handler.PrepareDeletesForFile());
+    ASSERT_TRUE(handler.PrepareDeletesForFile(0));
     std::shared_ptr<arrow::Array> array = CreateInt32Array({1, std::nullopt, 3, 4});
     handler.PrepareDeletesForBatch(std::map<FieldId, std::shared_ptr<arrow::Array>>{{1, array}});
     EXPECT_EQ(handler.IsDeleted(0), false);
@@ -133,9 +173,9 @@ TEST_F(EqualityDeleteHandlerTest, NullInDeleteMultipleColumns) {
 
   EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
 
-  ASSERT_OK(handler.AppendDelete(del_f1_path, {1, 2}));
+  ASSERT_OK(handler.AppendDelete(del_f1_path, {1, 2}, 0));
 
-  ASSERT_TRUE(handler.PrepareDeletesForFile());
+  ASSERT_TRUE(handler.PrepareDeletesForFile(0));
   std::shared_ptr<arrow::Array> array1 = CreateInt32Array({std::nullopt, 3, 2, std::nullopt, std::nullopt, 2, 3});
   std::shared_ptr<arrow::Array> array2 = CreateInt32Array({2, 3, std::nullopt, std::nullopt, 3, 2, std::nullopt});
   handler.PrepareDeletesForBatch(std::map<FieldId, std::shared_ptr<arrow::Array>>{{1, array1}, {2, array2}});
@@ -161,10 +201,10 @@ TEST_F(EqualityDeleteHandlerTest, OneFragmentMultipleDeletes) {
 
   EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
 
-  ASSERT_OK(handler.AppendDelete(del1_path, {1, 2}));
-  ASSERT_OK(handler.AppendDelete(del2_path, {2, 3}));
+  ASSERT_OK(handler.AppendDelete(del1_path, {1, 2}, 0));
+  ASSERT_OK(handler.AppendDelete(del2_path, {2, 3}, 0));
 
-  ASSERT_TRUE(handler.PrepareDeletesForFile());
+  ASSERT_TRUE(handler.PrepareDeletesForFile(0));
   std::shared_ptr<arrow::Array> array1 = CreateInt32Array({2, 3, 0, 0, 0});
   std::shared_ptr<arrow::Array> array2 = CreateInt32Array({5, 6, 1, 4, 0});
   std::shared_ptr<arrow::Array> array3 = CreateInt32Array({0, 0, 7, 8, 0});
@@ -184,7 +224,7 @@ TEST_F(EqualityDeleteHandlerTest, RowLimitExceeded) {
 
   for (int lim : {0, 1}) {
     EqualityDeleteHandler handler = MakeHandler(lim, false, std::nullopt, true);
-    ASSERT_NE(handler.AppendDelete(del1_path, {1}), arrow::Status::OK());
+    ASSERT_NE(handler.AppendDelete(del1_path, {1}, 0), arrow::Status::OK());
   }
 }
 
@@ -198,9 +238,9 @@ TEST_F(EqualityDeleteHandlerTest, MultipleFiles) {
   ASSERT_OK(WriteToFile({column2}, del2_path));
 
   EqualityDeleteHandler handler = MakeHandler(6, false, std::nullopt, true);
-  ASSERT_EQ(handler.AppendDelete(del1_path, {1}), arrow::Status::OK());
+  ASSERT_EQ(handler.AppendDelete(del1_path, {1}, 0), arrow::Status::OK());
 
-  auto status = handler.AppendDelete(del2_path, {1});
+  auto status = handler.AppendDelete(del2_path, {1}, 0);
   ASSERT_NE(status, arrow::Status::OK());
 
   auto message = status.message();
@@ -214,7 +254,7 @@ TEST_F(EqualityDeleteHandlerTest, MBSizeLimitExceeded) {
 
   for (int lim : {0}) {
     EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, lim, true);
-    EXPECT_ANY_THROW((void)handler.AppendDelete(del1_path, {1}));
+    EXPECT_ANY_THROW((void)handler.AppendDelete(del1_path, {1}, 0));
   }
 }
 
@@ -228,10 +268,10 @@ TEST_F(EqualityDeleteHandlerTest, Grouping) {
   ASSERT_OK(WriteToFile({column3}, del2_path));
 
   EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
-  ASSERT_OK(handler.AppendDelete(del1_path, {1}));
-  ASSERT_OK(handler.AppendDelete(del2_path, {1}));
+  ASSERT_OK(handler.AppendDelete(del1_path, {1}, 0));
+  ASSERT_OK(handler.AppendDelete(del2_path, {1}, 0));
 
-  handler.PrepareDeletesForFile();
+  handler.PrepareDeletesForFile(0);
 
   std::shared_ptr<arrow::Array> array = CreateInt32Array({1, 2, 3, 4});
   handler.PrepareDeletesForBatch(std::map<FieldId, std::shared_ptr<arrow::Array>>{{1, array}});
@@ -247,9 +287,9 @@ TEST_F(EqualityDeleteHandlerTest, Empty) {
   ASSERT_OK(WriteToFile({column2}, del_f1_path));
 
   EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
-  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}));
+  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}, 0));
 
-  ASSERT_FALSE(handler.PrepareDeletesForFile());
+  ASSERT_FALSE(handler.PrepareDeletesForFile(0));
 }
 
 }  // namespace
