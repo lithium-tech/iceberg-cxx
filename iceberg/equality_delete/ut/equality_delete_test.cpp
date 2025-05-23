@@ -105,6 +105,46 @@ TEST_F(EqualityDeleteHandlerTest, SanityCheck) {
   }
 }
 
+TEST_F(EqualityDeleteHandlerTest, SanityCheckDataLayerGreater) {
+  std::string del_f1_path = GetFileUrl("del_f1.parquet");
+  auto column = MakeInt32Column("f1", 1, OptionalVector<int32_t>{2, 3});
+  ASSERT_OK(WriteToFile({column}, del_f1_path));
+
+  EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
+
+  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}, 0));
+
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(handler.PrepareDeletesForFile(1));
+    std::shared_ptr<arrow::Array> array = CreateInt32Array({1, 2, 3, 4});
+    handler.PrepareDeletesForBatch(std::map<FieldId, std::shared_ptr<arrow::Array>>{{1, array}});
+    EXPECT_EQ(handler.IsDeleted(0), false);
+    EXPECT_EQ(handler.IsDeleted(1), false);
+    EXPECT_EQ(handler.IsDeleted(2), false);
+    EXPECT_EQ(handler.IsDeleted(3), false);
+  }
+}
+
+TEST_F(EqualityDeleteHandlerTest, SanityCheckDataLayerLess) {
+  std::string del_f1_path = GetFileUrl("del_f1.parquet");
+  auto column = MakeInt32Column("f1", 1, OptionalVector<int32_t>{2, 3});
+  ASSERT_OK(WriteToFile({column}, del_f1_path));
+
+  EqualityDeleteHandler handler = MakeHandler(std::nullopt, false, std::nullopt, true);
+
+  ASSERT_OK(handler.AppendDelete(del_f1_path, {1}, 1));
+
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(handler.PrepareDeletesForFile(0));
+    std::shared_ptr<arrow::Array> array = CreateInt32Array({1, 2, 3, 4});
+    handler.PrepareDeletesForBatch(std::map<FieldId, std::shared_ptr<arrow::Array>>{{1, array}});
+    EXPECT_EQ(handler.IsDeleted(0), false);
+    EXPECT_EQ(handler.IsDeleted(1), true);
+    EXPECT_EQ(handler.IsDeleted(2), true);
+    EXPECT_EQ(handler.IsDeleted(3), false);
+  }
+}
+
 TEST_F(EqualityDeleteHandlerTest, NullInDelete) {
   std::string del_f1_path = GetFileUrl("del_f1.parquet");
   auto column = MakeInt32Column("f1", 1, OptionalVector<int32_t>{std::nullopt, 3});
