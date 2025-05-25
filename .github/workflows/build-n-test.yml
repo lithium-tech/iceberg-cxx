@@ -62,3 +62,42 @@ jobs:
         ../iceberg/iceberg-cpp-test
         ../iceberg/common/fs/iceberg_common_fs_test
         ./iceberg_local_test
+
+  build-ubuntu-debug-coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: install apt deps
+      run: |
+        sudo apt install -y libcurl4-openssl-dev
+        #wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 18
+    - name: fetch-deps
+      run: |
+        mkdir -p _build && cd _build
+        git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
+        cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
+        ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+    - name: cmake
+      run: |
+        cd _build
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping" ../
+    - name: make
+      run: |
+        cd _build
+        ninja
+    - name: coverage
+      run:
+        cd _build/tests/
+        LLVM_PROFILE_FILE="out.profraw" ./iceberg_local_test
+        llvm-profdata-18 merge -output=out.profdata out.profraw
+        llvm-cov-18 export -format=lcov -instr-profile=out.profile -ignore-filename-regexp="\/_build\/" \
+          -ignore-filename-regexp="\/vendor\/" ./iceberg_local_test > coverage.lcov
+        llvm-cov-18 show -format=html -instr-profile=out.profile -ignore-filename-regexp="\/_build\/" \
+          -ignore-filename-regexp="\/vendor\/" ./iceberg_local_test -output-dir=cov_html
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-coverage
+        path: |
+          coverage.lcov
+          cov_html
