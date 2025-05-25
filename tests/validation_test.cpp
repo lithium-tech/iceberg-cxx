@@ -7,7 +7,7 @@
 namespace iceberg {
 
 namespace {
-Manifest ReadManifest(const std::string &path) {
+Manifest ReadManifest(const std::string& path) {
   std::ifstream input(path);
   std::stringstream ss;
   ss << input.rdbuf();
