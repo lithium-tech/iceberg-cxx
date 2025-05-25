@@ -91,15 +91,15 @@ jobs:
       run: |
         cd _build/tests/
         LLVM_PROFILE_FILE="out.profraw" ./iceberg_local_test
-        llvm-profdata-18 merge -output=out.profdata out.profraw
-        llvm-cov-18 export -format=lcov -instr-profile=out.profile -ignore-filename-regexp="\/_build\/" \
-          -ignore-filename-regexp="\/vendor\/" ./iceberg_local_test > coverage.lcov
-        llvm-cov-18 show -format=html -instr-profile=out.profile -ignore-filename-regexp="\/_build\/" \
-          -ignore-filename-regexp="\/vendor\/" ./iceberg_local_test -output-dir=cov_html
+        llvm-profdata-18 merge --output=out.profdata out.profraw
+        llvm-cov-18 export --format=lcov --instr-profile=out.profdata --ignore-filename-regex="\/_build\/" \
+          --ignore-filename-regex="\/vendor\/" ./iceberg_local_test > coverage.lcov
+        llvm-cov-18 show --format=html --instr-profile=out.profdata --ignore-filename-regex="\/_build\/" \
+          --ignore-filename-regex="\/vendor\/" ./iceberg_local_test --output-dir=cov_html
     - name: Archive production artifacts
       uses: actions/upload-artifact@v4
       with:
         name: code-coverage
         path: |
-          coverage.lcov
-          cov_html
+          _build/tests/coverage.lcov
+          _build/tests/cov_html
