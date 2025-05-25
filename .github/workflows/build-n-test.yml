@@ -80,7 +80,9 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping" ../
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_C_COMPILER="clang-18" -DCMAKE_CXX_COMPILER="clang++-18" \
+          -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping" ../
     - name: make
       run: |
         cd _build
