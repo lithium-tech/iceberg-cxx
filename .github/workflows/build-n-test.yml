@@ -88,7 +88,7 @@ jobs:
         cd _build
         ninja
     - name: coverage
-      run:
+      run: |
         cd _build/tests/
         LLVM_PROFILE_FILE="out.profraw" ./iceberg_local_test
         llvm-profdata-18 merge -output=out.profdata out.profraw
