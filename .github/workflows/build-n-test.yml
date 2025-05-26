@@ -63,14 +63,13 @@ jobs:
         ../iceberg/common/fs/iceberg_common_fs_test
         ./iceberg_local_test
 
-  build-ubuntu-debug-coverage:
+  build-ubuntu-clang-debug:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: install apt deps
       run: |
         sudo apt install -y libcurl4-openssl-dev
-        #wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 18
     - name: fetch-deps
       run: |
         mkdir -p _build && cd _build
@@ -80,26 +79,14 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_C_COMPILER="clang-18" -DCMAKE_CXX_COMPILER="clang++-18" \
-          -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping" ../
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Debug ../
     - name: make
       run: |
         cd _build
         ninja
-    - name: coverage
+    - name: test
       run: |
         cd _build/tests/
-        LLVM_PROFILE_FILE="out.profraw" ./iceberg_local_test
-        llvm-profdata-18 merge --output=out.profdata out.profraw
-        llvm-cov-18 export --format=lcov --instr-profile=out.profdata --ignore-filename-regex="\/_build\/" \
-          --ignore-filename-regex="\/vendor\/" ./iceberg_local_test > coverage.lcov
-        llvm-cov-18 show --format=html --instr-profile=out.profdata --ignore-filename-regex="\/_build\/" \
-          --ignore-filename-regex="\/vendor\/" ./iceberg_local_test --output-dir=cov_html
-    - name: Archive production artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: code-coverage
-        path: |
-          _build/tests/coverage.lcov
-          _build/tests/cov_html
+        ../iceberg/iceberg-cpp-test
+        ../iceberg/common/fs/iceberg_common_fs_test
+        ./iceberg_local_test
