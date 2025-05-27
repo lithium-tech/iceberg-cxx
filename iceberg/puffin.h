@@ -31,7 +31,7 @@ class PuffinFile {
     return PuffinFile(std::move(data), std::move(footer));
   }
 
-  const std::string& GetPayload() { return data_; }
+  const std::string& GetPayload() const { return data_; }
 
   // Footer: <Magic> <FooterPayload> <FooterPayloadSize> <Flags> <Magic>
   class Footer {
@@ -80,7 +80,7 @@ class PuffinFile {
     mutable std::optional<DeserializedFooter> deserialized_footer_cache_;
   };
 
-  const Footer& GetFooter() { return footer_; }
+  const Footer& GetFooter() const { return footer_; }
 
   std::string GetBlob(size_t blob_number) const {
     auto blob_meta = footer_.GetBlobMetadata(blob_number);

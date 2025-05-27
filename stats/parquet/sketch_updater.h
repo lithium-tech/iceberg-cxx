@@ -9,14 +9,11 @@
 namespace stats {
 
 template <typename Sketch>
-class SketchWrapper {
+class SketchUpdater {
  public:
   using SketchType = Sketch;
 
-  template <typename... Args>
-  explicit SketchWrapper(Args... args) : sketch_(std::forward<Args>(args)...) {}
-
-  void SetFLBALength(int64_t length) { flba_length_ = length; }
+  explicit SketchUpdater(Sketch& s) : sketch_(s) {}
 
   void AppendValues(const void* data, uint64_t num_values, parquet::Type::type type) {
     switch (type) {
@@ -34,13 +31,6 @@ class SketchWrapper {
         }
         break;
       }
-      case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
-        const parquet::FixedLenByteArray* values = reinterpret_cast<const parquet::FixedLenByteArray*>(data);
-        for (uint64_t i = 0; i < num_values; ++i) {
-          sketch_.AppendValue(values[i].ptr, flba_length_);
-        }
-        break;
-      }
       case parquet::Type::BYTE_ARRAY: {
         const parquet::ByteArray* values = reinterpret_cast<const parquet::ByteArray*>(data);
         for (uint64_t i = 0; i < num_values; ++i) {
@@ -53,13 +43,8 @@ class SketchWrapper {
     }
   }
 
-  template <typename Function>
-  auto Evaluate(Function&& foo) const {
-    return foo(sketch_);
-  }
-
  private:
-  Sketch sketch_;
+  Sketch& sketch_;
   int64_t flba_length_;
 };
 
