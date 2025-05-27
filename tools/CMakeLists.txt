@@ -36,6 +36,18 @@ target_link_libraries(ice_validator iceberg-tools ${CMAKE_DL_LIBS})
 set_target_properties(ice_validator PROPERTIES LINK_FLAGS_RELEASE -s)
 set_target_properties(ice_validator PROPERTIES LINK_FLAGS_RELWITHDEBINFO -s)
 
+add_executable(hive_metastore_client hive_metastore_client.cpp)
+target_link_libraries(hive_metastore_client PUBLIC _hivemetastore _thrift)
+target_include_directories(hive_metastore_client PUBLIC ${PROJECT_SOURCE_DIR})
+
+add_executable(hive_metastore_server hive_metastore_server.cpp)
+target_link_libraries(hive_metastore_server PUBLIC _hivemetastore _thrift)
+target_include_directories(hive_metastore_server PUBLIC ${PROJECT_SOURCE_DIR})
+
+if(NOT APPLE)
+  target_link_libraries(hive_metastore_server PUBLIC pthread)
+endif()
+
 if(TOOLS_USE_ARROW)
   if (ICECXX_STATISTICS)
     add_executable(ice_explorer explorer.cpp)
