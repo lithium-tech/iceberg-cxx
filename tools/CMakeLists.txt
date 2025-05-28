@@ -63,7 +63,7 @@ if(TOOLS_USE_ARROW)
 
   add_executable(ice_make make_metadata.cpp)
   target_include_directories(ice_make PUBLIC "${PROJECT_SOURCE_DIR}")
-  target_link_libraries(ice_make iceberg-tools ${CMAKE_DL_LIBS})
+  target_link_libraries(ice_make iceberg-tools iceberg_common_fs ${CMAKE_DL_LIBS})
   set_target_properties(ice_make PROPERTIES LINK_FLAGS_RELEASE -s)
   set_target_properties(ice_make PROPERTIES LINK_FLAGS_RELWITHDEBINFO -s)
 endif()
