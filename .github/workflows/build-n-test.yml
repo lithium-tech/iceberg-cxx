@@ -24,6 +24,11 @@ jobs:
       run: |
         cd _build
         cmake -GNinja ../
+    - name: run rest
+      run: |
+        bash ../tests/rest/setup/init_nessie.sh
+        cat nessie.log
+        python3 ../tests/rest/setup/upload_table.py
     - name: make
       run: |
         cd _build
@@ -49,6 +54,11 @@ jobs:
       run: |
         cd _build
         cmake -GNinja ../
+    - name: run rest
+      run: |
+        bash ../tests/rest/setup/init_nessie.sh
+        cat nessie.log
+        python3 ../tests/rest/setup/upload_table.py
     - name: make
       run: |
         cd _build
