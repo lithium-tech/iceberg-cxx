@@ -14,10 +14,11 @@ class SizedPtr {
  public:
   SizedPtr() = default;
   SizedPtr(uint8_t* data, uint64_t size)
-      : data_with_size_(std::bit_cast<uint8_t*>(std::bit_cast<uint64_t>(data) + (size << kDataBits))) {}
+      : data_with_size_(std::bit_cast<uint8_t*>(std::bit_cast<uint64_t>(data) + (size << kDataBits)),
+                        SizedPtrDeleter()) {}
 
-  SizedPtr(const SizedPtr&) = delete;
-  SizedPtr& operator=(const SizedPtr&) = delete;
+  SizedPtr(const SizedPtr&) = default;
+  SizedPtr& operator=(const SizedPtr&) = default;
 
   SizedPtr(SizedPtr&&) = default;
   SizedPtr& operator=(SizedPtr&&) = default;
@@ -39,15 +40,13 @@ class SizedPtr {
   static constexpr uint64_t kDataBits = 48;
   static constexpr uint64_t kDataMask = ((1ull << kDataBits) - 1);
 
-  std::unique_ptr<uint8_t[], SizedPtrDeleter> data_with_size_ = nullptr;
+  std::shared_ptr<uint8_t[]> data_with_size_ = nullptr;
 };
 
 class GenericDeleteKey {
  public:
   GenericDeleteKey(const std::vector<std::shared_ptr<arrow::Array>>& arrays, int row,
                    const std::shared_ptr<MemoryState>& shared_state);
-
-  GenericDeleteKey(GenericDeleteKey&&) = default;
 
   inline bool operator==(const GenericDeleteKey& other) const {
     return sized_ptr_.Size() == other.sized_ptr_.Size() &&
@@ -79,15 +78,16 @@ class GenericEqualityDelete : public EqualityDelete {
   explicit GenericEqualityDelete(const std::shared_ptr<MemoryState>& shared_state)
       : values_(shared_state), shared_state_(shared_state) {}
 
-  arrow::Status Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count) override;
+  arrow::Status Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count,
+                    Layer delete_layer) override;
 
   size_t Size() const override;
 
-  bool IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row) const override;
+  bool IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row,
+                 Layer data_layer) const override;
 
  private:
-  safe::FlatHashSet<GenericDeleteKey> values_;
-
+  safe::FlatHashMap<GenericDeleteKey, Layer> values_;
   std::shared_ptr<MemoryState> shared_state_;
 };
 

@@ -1,0 +1,79 @@
+{
+  "format-version" : 2,
+  "table-uuid" : "5d2d2349-e24a-4931-a37f-4f9ebaaf3ccd",
+  "location" : "s3://warehouse/performance/manifest_entries",
+  "last-sequence-number" : 1,
+  "last-updated-ms" : 1742834784262,
+  "last-column-id" : 2,
+  "current-schema-id" : 0,
+  "schemas" : [ {
+    "type" : "struct",
+    "schema-id" : 0,
+    "fields" : [ {
+      "id" : 1,
+      "name" : "id",
+      "required" : false,
+      "type" : "long"
+    }, {
+      "id" : 2,
+      "name" : "data",
+      "required" : false,
+      "type" : "string"
+    } ]
+  } ],
+  "default-spec-id" : 0,
+  "partition-specs" : [ {
+    "spec-id" : 0,
+    "fields" : [ ]
+  } ],
+  "last-partition-id" : 999,
+  "default-sort-order-id" : 0,
+  "sort-orders" : [ {
+    "order-id" : 0,
+    "fields" : [ ]
+  } ],
+  "properties" : {
+    "owner" : "root",
+    "write.target-file-size-bytes" : "1024",
+    "commit.manifest-merge.enabled" : "false",
+    "write.parquet.compression-codec" : "zstd"
+  },
+  "current-snapshot-id" : 2349672351566884055,
+  "refs" : {
+    "main" : {
+      "snapshot-id" : 2349672351566884055,
+      "type" : "branch"
+    }
+  },
+  "snapshots" : [ {
+    "sequence-number" : 1,
+    "snapshot-id" : 2349672351566884055,
+    "timestamp-ms" : 1742834784262,
+    "summary" : {
+      "operation" : "append",
+      "spark.app.id" : "local-1742834752951",
+      "added-data-files" : "10000",
+      "added-records" : "10000000",
+      "added-files-size" : "17976569",
+      "changed-partition-count" : "1",
+      "total-records" : "10000000",
+      "total-files-size" : "17976569",
+      "total-data-files" : "10000",
+      "total-delete-files" : "0",
+      "total-position-deletes" : "0",
+      "total-equality-deletes" : "0"
+    },
+    "manifest-list" : "s3://warehouse/performance/manifest_entries/metadata/snap-2349672351566884055-1-850b6bca-3496-42ce-9ec0-753e8c496baf.avro",
+    "schema-id" : 0
+  } ],
+  "statistics" : [ ],
+  "partition-statistics" : [ ],
+  "snapshot-log" : [ {
+    "timestamp-ms" : 1742834784262,
+    "snapshot-id" : 2349672351566884055
+  } ],
+  "metadata-log" : [ {
+    "timestamp-ms" : 1742834754716,
+    "metadata-file" : "s3://warehouse/performance/manifest_entries/metadata/00000-1b339191-c739-4e4d-a2ff-6b5a8cd92882.metadata.json"
+  } ]
+}

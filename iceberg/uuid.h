@@ -1,9 +1,10 @@
 #pragma once
 
-#include <stdint.h>
-
 #include <mutex>
 #include <random>
+
+#include <stdint.h>
+
 #include <string>
 #include <utility>
 

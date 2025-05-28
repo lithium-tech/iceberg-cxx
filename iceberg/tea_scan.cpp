@@ -286,7 +286,8 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
 using SequenceNumber = int64_t;
 
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                         const std::string& manifest_list_path) {
+                                                         const std::string& manifest_list_path,
+                                                         const ManifestEntryDeserializerConfig& config) {
   const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
 
   std::stringstream ss(manifest_metadatas_content);
@@ -294,18 +295,19 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
   std::queue<ManifestFile> manifest_files_queue(std::deque<ManifestFile>(
       std::make_move_iterator(manifest_metadatas.begin()), std::make_move_iterator(manifest_metadatas.end())));
 
-  return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue));
+  return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue), config);
 }
 
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                         std::shared_ptr<TableMetadataV2> table_metadata) {
+                                                         std::shared_ptr<TableMetadataV2> table_metadata,
+                                                         const ManifestEntryDeserializerConfig& config) {
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   if (!maybe_manifest_list_path.has_value()) {
     throw std::runtime_error("MakeIcebergEntriesStream: manifest list path is not found");
   }
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
-  return AllEntriesStream::Make(fs, manifest_list_path);
+  return AllEntriesStream::Make(fs, manifest_list_path, config);
 }
 
 std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
@@ -338,7 +340,7 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
 
     const std::string manifest_path = current_manifest_file.path;
     const std::string entries_content = ValueSafe(ReadFile(fs_, manifest_path));
-    Manifest manifest = ice_tea::ReadManifestEntries(entries_content);
+    Manifest manifest = ice_tea::ReadManifestEntries(entries_content, config_);
 
     // it is impossible to construct queue from iterators before C++23
     entries_for_current_manifest_file_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(
@@ -347,13 +349,13 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
 }
 
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                            const std::string& metadata_location) {
+                                            const std::string& metadata_location, const GetScanMetadataConfig& config) {
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
     return arrow::Status::ExecutionError("GetScanMetadata: failed to parse metadata " + metadata_location);
   }
-  auto entries_stream = AllEntriesStream::Make(fs, table_metadata);
+  auto entries_stream = AllEntriesStream::Make(fs, table_metadata, config.manifest_entry_deserializer_config);
   return GetScanMetadata(*entries_stream, *table_metadata);
 }
 

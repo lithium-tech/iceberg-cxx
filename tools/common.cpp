@@ -1,11 +1,12 @@
 #include "tools/common.h"
 
+#include <algorithm>
+#include <map>
+
 #include <parquet/arrow/reader.h>
 #include <parquet/metadata.h>
 #include <parquet/statistics.h>
 
-#include <algorithm>
-#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>

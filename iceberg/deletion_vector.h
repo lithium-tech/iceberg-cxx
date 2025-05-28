@@ -2,8 +2,8 @@
 
 #include <iceberg/puffin.h>
 
-#include <span>
 #include <roaring.hh>
+#include <span>
 
 namespace iceberg {
 

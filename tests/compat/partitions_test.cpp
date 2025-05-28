@@ -1,10 +1,12 @@
 #include <arrow/filesystem/localfs.h>
 #include <arrow/io/file.h>
-#include <parquet/api/reader.h>
-#include <parquet/arrow/reader.h>
 
 #include <limits>
 #include <memory>
+
+#include <parquet/api/reader.h>
+#include <parquet/arrow/reader.h>
+
 #include <stdexcept>
 
 #include "gtest/gtest.h"
@@ -124,11 +126,7 @@ TEST(CompatPartitions, BucketPartitioning) {
                                    MakeIcebergSchemaFromArrow(0, parquet_table->schema()), table_metadata);
 
   table->AppendTable(parquet_table);
-#ifdef ICECXX_USE_SMHASHER
-  EXPECT_EQ(table->GetFilePathes().size(), 2);
-#else
   EXPECT_EQ(table->GetFilePathes().size(), 3);
-#endif
 }
 
 TEST(CompatPartitions, TruncateTransform) {

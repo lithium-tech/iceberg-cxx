@@ -1,13 +1,18 @@
 #pragma once
 
-#include <arrow/status.h>
-#include <iceberg/common/rg_metadata.h>
-#include <parquet/metadata.h>
-
 #include <algorithm>
+
+#include <arrow/status.h>
+
 #include <cstdint>
+
+#include <iceberg/common/rg_metadata.h>
+
 #include <map>
 #include <memory>
+
+#include <parquet/metadata.h>
+
 #include <string>
 #include <utility>
 #include <vector>

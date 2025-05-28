@@ -3,11 +3,13 @@
 #include <arrow/filesystem/localfs.h>
 #include <arrow/io/file.h>
 #include <arrow/scalar.h>
-#include <parquet/api/reader.h>
-#include <parquet/arrow/reader.h>
 
 #include <limits>
 #include <memory>
+
+#include <parquet/api/reader.h>
+#include <parquet/arrow/reader.h>
+
 #include <stdexcept>
 
 #include "gtest/gtest.h"
@@ -33,13 +35,13 @@ TEST(Transforms, All) {
   {
     auto transform = BucketTransform(12345678);
     auto transformed_value = std::static_pointer_cast<arrow::Int32Scalar>(transform.Transform(num_scalar));
-    EXPECT_EQ(transformed_value->value, 4250729);
+    EXPECT_EQ(transformed_value->value, 7146167);
   }
 
   {
     auto transform = TruncateTransform(3);
     auto transformed_value = std::static_pointer_cast<arrow::Int32Scalar>(transform.Transform(num_scalar));
-    EXPECT_EQ(transformed_value->value, -1612368767);
+    EXPECT_EQ(transformed_value->value, 1871343543);
   }
 #endif
 

@@ -87,8 +87,13 @@ struct ScanMetadata {
 
 arrow::Result<std::string> ReadFile(std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& url);
 
+struct GetScanMetadataConfig {
+  ManifestEntryDeserializerConfig manifest_entry_deserializer_config;
+};
+
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                            const std::string& metadata_location);
+                                            const std::string& metadata_location,
+                                            const GetScanMetadataConfig& config = {});
 
 class IcebergEntriesStream {
  public:
@@ -99,14 +104,17 @@ class IcebergEntriesStream {
 
 class AllEntriesStream : public IcebergEntriesStream {
  public:
-  AllEntriesStream(std::shared_ptr<arrow::fs::FileSystem> fs, std::queue<ManifestFile> manifest_files)
-      : fs_(fs), manifest_files_(std::move(manifest_files)) {}
+  AllEntriesStream(std::shared_ptr<arrow::fs::FileSystem> fs, std::queue<ManifestFile> manifest_files,
+                   const ManifestEntryDeserializerConfig& config = {})
+      : fs_(fs), manifest_files_(std::move(manifest_files)), config_(config) {}
 
   static std::shared_ptr<AllEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                const std::string& manifest_list_path);
+                                                const std::string& manifest_list_path,
+                                                const ManifestEntryDeserializerConfig& config = {});
 
   static std::shared_ptr<AllEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                std::shared_ptr<TableMetadataV2> table_metadata);
+                                                std::shared_ptr<TableMetadataV2> table_metadata,
+                                                const ManifestEntryDeserializerConfig& config = {});
 
   std::optional<ManifestEntry> ReadNext();
 
@@ -117,6 +125,8 @@ class AllEntriesStream : public IcebergEntriesStream {
 
   ManifestFile current_manifest_file;
   std::queue<ManifestEntry> entries_for_current_manifest_file_;
+
+  ManifestEntryDeserializerConfig config_;
 };
 
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,

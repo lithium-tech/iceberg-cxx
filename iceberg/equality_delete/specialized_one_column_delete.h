@@ -19,7 +19,8 @@ class SpecializedDeleteOneColumn final : public EqualityDelete {
 
   inline void Reserve(uint64_t rows) { values_.Reserve(rows); }
 
-  arrow::Status Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count) override {
+  arrow::Status Add(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t rows_count,
+                    Layer delete_layer) override {
     if (arrays.size() != 1) {
       throw arrow::Status::ExecutionError("SpecializedDeleteOneColumn (Add): unexpected number of columns");
     }
@@ -33,7 +34,7 @@ class SpecializedDeleteOneColumn final : public EqualityDelete {
       } else {
         safe::ExceptionFlagGuard guard(shared_state_, true);
 
-        values_.Insert(static_cast<const ArrayType*>(array.get())->GetView(row));
+        safe::UpdateMax(values_, static_cast<const ArrayType*>(array.get())->GetView(row), delete_layer);
       }
     }
     return arrow::Status::OK();
@@ -41,17 +42,20 @@ class SpecializedDeleteOneColumn final : public EqualityDelete {
 
   size_t Size() const override { return values_.Size() + (contains_null_ ? 1 : 0); }
 
-  bool IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row) const override {
+  bool IsDeleted(const std::vector<std::shared_ptr<arrow::Array>>& arrays, uint64_t row,
+                 Layer data_layer) const override {
     if (arrays[0]->IsNull(row)) {
       return contains_null_;
     }
-    return values_.Contains(static_cast<const ArrayType*>(arrays[0].get())->GetView(row));
+    auto key = static_cast<const ArrayType*>(arrays[0].get())->GetView(row);
+    std::optional<Layer> delete_layer = values_.Get(key);
+    return delete_layer && *delete_layer >= data_layer;
   }
 
  private:
   arrow::Type::type type_;
   bool contains_null_ = false;
-  safe::FlatHashSet<ValueType> values_;
+  safe::FlatHashMap<ValueType, Layer> values_;
   std::shared_ptr<MemoryState> shared_state_;
 };
 

@@ -45,7 +45,9 @@ struct MurMurHasher {
   }
 
   template <typename T>
-  int operator()(const T& src) const requires(std::is_same_v<T, std::string>) {
+  int operator()(const T& src) const
+  requires(std::is_same_v<T, std::string>)
+  {
 #ifdef ICECXX_USE_SMHASHER
     int hash_result;
     MurmurHash3_x86_32(src.data(), src.size(), 0, &hash_result);
@@ -57,7 +59,9 @@ struct MurMurHasher {
   }
 
   template <typename T>
-  int operator()(const T& value) const requires(std::is_same_v<T, int> || std::is_same_v<T, int64_t>) {
+  int operator()(const T& value) const
+  requires(std::is_same_v<T, int> || std::is_same_v<T, int64_t>)
+  {
 #ifdef ICECXX_USE_SMHASHER
     std::vector<uint8_t> buffer;
     PackLittleEndian(static_cast<int64_t>(value), buffer);
@@ -71,7 +75,9 @@ struct MurMurHasher {
   }
 
   template <typename T>
-  int operator()(const T& value) const requires(std::is_same_v<T, uint64_t> || std::is_same_v<T, unsigned int>) {
+  int operator()(const T& value) const
+  requires(std::is_same_v<T, uint64_t> || std::is_same_v<T, unsigned int>)
+  {
 #ifdef ICECXX_USE_SMHASHER
     std::vector<uint8_t> buffer;
     PackLittleEndian(static_cast<uint64_t>(value), buffer);
@@ -85,7 +91,9 @@ struct MurMurHasher {
   }
 
   template <typename T>
-  int operator()(double value) const requires(std::is_same_v<T, float> || std::is_same_v<T, double>) {
+  int operator()(double value) const
+  requires(std::is_same_v<T, float> || std::is_same_v<T, double>)
+  {
 #ifdef ICECXX_USE_SMHASHER
     std::vector<uint8_t> buffer;
     PackLittleEndian(value, buffer);
@@ -240,9 +248,7 @@ struct MurMurScalarHashImpl {
 
   arrow::Status ArrayHash(const arrow::ArraySpan& a) { return ArrayHash(a, a.offset, a.length); }
 
-  explicit MurMurScalarHashImpl(const arrow::Scalar& scalar) : hash_(scalar.type->Hash()) {
-    AccumulateHashFrom(scalar);
-  }
+  explicit MurMurScalarHashImpl(const arrow::Scalar& scalar) { AccumulateHashFrom(scalar); }
 
   void AccumulateHashFrom(const arrow::Scalar& scalar) {
     // Note we already injected the type in ScalarHashImpl::ScalarHashImpl
@@ -251,7 +257,7 @@ struct MurMurScalarHashImpl {
     }
   }
 
-  int64_t hash_;
+  int64_t hash_ = 0;
 };
 
 }  // namespace iceberg
