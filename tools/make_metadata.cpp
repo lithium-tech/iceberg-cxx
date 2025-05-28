@@ -1,65 +1,35 @@
-#include <absl/flags/flag.h>
-#include <absl/flags/parse.h>
-
 #include <algorithm>
-#include <filesystem>
+#include <chrono>
+#include <iostream>
+#include <stdexcept>
 
-#include <parquet/metadata.h>
-
-#include "tools/common.h"
-#include "tools/metadata_tree.h"
-
-using iceberg::tools::MetadataTree;
-using iceberg::tools::SnapshotMaker;
+#include "absl/flags/flag.h"
+#include "absl/flags/internal/flag.h"
+#include "absl/flags/parse.h"
+#include "arrow/filesystem/localfs.h"
+#include "arrow/filesystem/s3fs.h"
+#include "arrow/status.h"
+#include "iceberg/common/fs/url.h"
+#include "iceberg/manifest_entry.h"
+#include "iceberg/nested_field.h"
+#include "iceberg/result.h"
+#include "iceberg/schema.h"
+#include "iceberg/streams/arrow/error.h"
+#include "iceberg/table_metadata.h"
+#include "iceberg/test_utils/write.h"
+#include "iceberg/type.h"
+#include "iceberg/uuid.h"
+#include "parquet/file_reader.h"
+#include "parquet/metadata.h"
+#include "parquet/schema.h"
+#include "parquet/types.h"
 
 namespace {
 
-std::vector<std::filesystem::path> ListFiles(const std::filesystem::path& src, const std::string& extension = "") {
-  if (!std::filesystem::exists(src)) {
-    throw std::runtime_error("Not exists: " + src.string());
-  }
-
-  if (std::filesystem::is_regular_file(src)) {
-    std::filesystem::path path(src);
-    if (path.extension() != extension) {
-      throw std::runtime_error("Unexpected file type: " + src.string());
-    }
-    return {path};
-  }
-
-  if (!std::filesystem::is_directory(src)) {
-    throw std::runtime_error("Not a directory: " + src.string());
-  }
-
-  std::vector<std::filesystem::path> files;
-  for (const auto& entry : std::filesystem::directory_iterator(src)) {
-    if (entry.is_regular_file() && (extension.empty() || entry.path().extension() == extension)) {
-      files.emplace_back(entry.path());
-    }
-  }
-  std::sort(files.begin(), files.end());
-  return files;
-}
-
-std::vector<std::string> MakeDstPaths(const std::vector<std::filesystem::path>& srcs, const std::string& dst,
-                                      const std::string& data_dir) {
-  std::vector<std::string> out;
-  out.reserve(srcs.size());
-  for (auto& path : srcs) {
-    if (data_dir.empty()) {
-      out.push_back(dst / path.filename());
-    } else {
-      out.push_back(dst / (data_dir / path.filename()));
-    }
-  }
-  return out;
-}
-
-std::shared_ptr<const iceberg::types::Type> ConvertPhysicalType(const parquet::ColumnDescriptor* column,
-                                                                bool byte_array_is_string) {
+std::shared_ptr<const iceberg::types::Type> ConvertPhysicalType(const parquet::ColumnDescriptor& column) {
   using PrimitiveType = iceberg::types::PrimitiveType;
 
-  auto physical_type = column->physical_type();
+  auto physical_type = column.physical_type();
 
   switch (physical_type) {
     case parquet::Type::BOOLEAN:
@@ -75,41 +45,44 @@ std::shared_ptr<const iceberg::types::Type> ConvertPhysicalType(const parquet::C
     case parquet::Type::DOUBLE:
       return std::make_shared<const PrimitiveType>(iceberg::TypeID::kDouble);
     case parquet::Type::BYTE_ARRAY:
-      if (byte_array_is_string) {
-        return std::make_shared<const PrimitiveType>(iceberg::TypeID::kString);
-      } else {
-        return std::make_shared<const PrimitiveType>(iceberg::TypeID::kBinary);
-      }
+      return std::make_shared<const PrimitiveType>(iceberg::TypeID::kBinary);
     case parquet::Type::FIXED_LEN_BYTE_ARRAY:
       return std::make_shared<const PrimitiveType>(iceberg::TypeID::kFixed);
     case parquet::Type::UNDEFINED:
       break;
   }
   throw std::runtime_error("Not supported physical type " + std::to_string(physical_type) + " for column " +
-                           column->name());
+                           column.name());
 }
 
-std::shared_ptr<const iceberg::types::Type> ConvertType(const parquet::ColumnDescriptor* column,
-                                                        bool byte_array_is_string) {
+std::shared_ptr<const iceberg::types::Type> ConvertType(const parquet::ColumnDescriptor& column) {
   using ParquetLogicalType = parquet::LogicalType::Type;
   using PrimitiveType = iceberg::types::PrimitiveType;
 
-  auto& parquet_logical_type = column->logical_type();
+  auto parquet_logical_type = column.logical_type();
+  // TODO(gmusya): check that logical_type() is always non-nullptr
+  iceberg::Ensure(parquet_logical_type != nullptr,
+                  std::string(__PRETTY_FUNCTION__) + ": internal error. Parquet_logical_type is not set");
 
-  std::string str_type;
   switch (parquet_logical_type->type()) {
     case ParquetLogicalType::MAP:
     case ParquetLogicalType::LIST:
     case ParquetLogicalType::ENUM:
-    case ParquetLogicalType::DECIMAL:
     case ParquetLogicalType::INTERVAL:
     case ParquetLogicalType::NIL:
     case ParquetLogicalType::JSON:
     case ParquetLogicalType::BSON:
     case ParquetLogicalType::UUID:
     case ParquetLogicalType::FLOAT16:
-      str_type = parquet_logical_type->ToString();
       break;
+    case ParquetLogicalType::DECIMAL: {
+      auto decimal_type = dynamic_pointer_cast<const parquet::DecimalLogicalType>(parquet_logical_type);
+      iceberg::Ensure(decimal_type != nullptr,
+                      std::string(__PRETTY_FUNCTION__) + ": internal error. Failed to cast to DecimalLogicalType");
+
+      return std::make_shared<const iceberg::types::DecimalType>(decimal_type->precision(), decimal_type->scale());
+    }
+
     case ParquetLogicalType::STRING:
       return std::make_shared<const PrimitiveType>(iceberg::TypeID::kString);
     case ParquetLogicalType::DATE:
@@ -117,8 +90,10 @@ std::shared_ptr<const iceberg::types::Type> ConvertType(const parquet::ColumnDes
     case ParquetLogicalType::TIME:
       return std::make_shared<const PrimitiveType>(iceberg::TypeID::kTime);
     case ParquetLogicalType::TIMESTAMP: {
-      auto& timestamp_type = dynamic_cast<const parquet::TimestampLogicalType&>(*parquet_logical_type);
-      if (timestamp_type.is_adjusted_to_utc())
+      auto timestamp_type = dynamic_pointer_cast<const parquet::TimestampLogicalType>(parquet_logical_type);
+      iceberg::Ensure(timestamp_type != nullptr,
+                      std::string(__PRETTY_FUNCTION__) + ": internal error. Failed to cast to TimestampLogicalType");
+      if (timestamp_type->is_adjusted_to_utc())
         return std::make_shared<const PrimitiveType>(iceberg::TypeID::kTimestamptz);
       else
         return std::make_shared<const PrimitiveType>(iceberg::TypeID::kTimestamp);
@@ -127,15 +102,15 @@ std::shared_ptr<const iceberg::types::Type> ConvertType(const parquet::ColumnDes
       return std::make_shared<const PrimitiveType>(iceberg::TypeID::kInt);
     case ParquetLogicalType::UNDEFINED:
     case ParquetLogicalType::NONE:
-      return ConvertPhysicalType(column, byte_array_is_string);
+      return ConvertPhysicalType(column);
   }
 
   throw std::runtime_error("Not supported logical type " + parquet_logical_type->ToString() + " for column " +
-                           column->name());
+                           column.name());
 }
 
 std::vector<iceberg::types::NestedField> GetFieldsFromParquet(
-    const std::shared_ptr<parquet::FileMetaData>& parquet_meta, bool not_null, bool byte_array_is_string) {
+    const std::shared_ptr<parquet::FileMetaData>& parquet_meta) {
   using NestedField = iceberg::types::NestedField;
   using PrimitiveType = iceberg::types::PrimitiveType;
   using TypeID = iceberg::TypeID;
@@ -148,83 +123,147 @@ std::vector<iceberg::types::NestedField> GetFieldsFromParquet(
 
   for (int i = 0; i < num_columns; ++i) {
     const parquet::ColumnDescriptor* column = parquet_schema->Column(i);
-    if (!column) {
-      throw std::runtime_error("No column with number " + std::to_string(i));
-    }
+    iceberg::Ensure(column != nullptr,
+                    std::string(__PRETTY_FUNCTION__) + ": descriptor for column(" + std::to_string(i) + ") is not set");
+
+    const parquet::schema::NodePtr column_schema = column->schema_node();
+    iceberg::Ensure(column != nullptr,
+                    std::string(__PRETTY_FUNCTION__) + ": column_schema(" + std::to_string(i) + ") is not set");
 
     NestedField ice_field{.name = column->name(),
                           .field_id = i,
-                          .is_required = not_null,
-                          .type = ConvertType(column, byte_array_is_string)};
+                          .is_required = column_schema->is_required(),
+                          .type = ConvertType(*column)};
     fields.emplace_back(std::move(ice_field));
   }
 
   return fields;
 }
 
+struct S3FinalizerGuard {
+  S3FinalizerGuard() {
+    if (auto status = arrow::fs::InitializeS3(arrow::fs::S3GlobalOptions{}); !status.ok()) {
+      throw status;
+    }
+  }
+
+  ~S3FinalizerGuard() {
+    try {
+      if (arrow::fs::IsS3Initialized() && !arrow::fs::IsS3Finalized()) {
+        arrow::fs::EnsureS3Finalized().ok();
+      }
+    } catch (...) {
+    }
+  }
+};
+
 }  // namespace
 
-ABSL_FLAG(std::string, src_data, "", "local path to source data parquet file or directory with parquet files");
-// TODO: src_deletes
-ABSL_FLAG(std::string, dst, "", "logical destination absolute path (i.e. s3://my_bucket/clickbench)");
-ABSL_FLAG(std::string, data_dir, "", "path to dst data subdirectory (related to dst)");
-ABSL_FLAG(std::string, meta_dir, "metadata", "path to dst metadata subdirectory (related to dst)");
-ABSL_FLAG(std::string, meta_uuid, "", "UUID for metadata.json file");
-ABSL_FLAG(bool, force_not_null, false, "make columns NOT NULL");
-ABSL_FLAG(bool, byte_array_is_string, false, "intarpret BYTE_ARRAY type as String (Binary if not set)");
+ABSL_FLAG(std::string, parquet_path, "", "path to parquet file (with FS scheme)");
+
+ABSL_FLAG(std::string, filesystem, "file", "filesystem to use (file or s3)");
+ABSL_FLAG(std::string, table_base_location, "", "location where data and metadata files are stored (with FS scheme)");
+
+ABSL_FLAG(std::string, s3_access_key_id, "", "s3_access_key_id");
+ABSL_FLAG(std::string, s3_secret_access_key, "", "s3_secret_access_key");
+ABSL_FLAG(std::string, s3_endpoint, "", "s3_endpoint");
 
 int main(int argc, char** argv) {
-  try {
-    static const std::string meta_ext = ".metadata.json";
+  std::optional<S3FinalizerGuard> s3_guard;
 
+  try {
     absl::ParseCommandLine(argc, argv);
 
-    const std::string src_data = absl::GetFlag(FLAGS_src_data);
-    const std::string dst = absl::GetFlag(FLAGS_dst);
-    const std::string data_dir = absl::GetFlag(FLAGS_data_dir);
-    const std::string meta_dir = absl::GetFlag(FLAGS_meta_dir);
-    std::string meta_uuid = absl::GetFlag(FLAGS_meta_uuid);
-    const bool force_not_null = absl::GetFlag(FLAGS_force_not_null);
-    const bool byte_array_is_string = absl::GetFlag(FLAGS_byte_array_is_string);
+    const std::string filesystem_type = absl::GetFlag(FLAGS_filesystem);
 
-    if (src_data.empty()) {
-      throw std::runtime_error("No src specified");
-    }
-    if (dst.empty()) {
-      throw std::runtime_error("No dst directory specified");
-    }
-    if (meta_dir.empty() || std::filesystem::exists(meta_dir)) {
-      throw std::runtime_error("Wrong meta_dir (empty or exists): " + meta_dir);
-    }
-    if (meta_uuid.empty()) {
-      meta_uuid = iceberg::UuidGenerator().CreateRandom().ToString();
-    }
-
-    auto src_data_files = ListFiles(src_data, ".parquet");
-    auto dst_data_files = MakeDstPaths(src_data_files, dst, data_dir);
-    if (dst_data_files.empty()) {
-      throw std::runtime_error("No src files found");
+    std::shared_ptr<arrow::fs::FileSystem> fs;
+    if (filesystem_type == "file") {
+      fs = std::make_shared<arrow::fs::LocalFileSystem>();
+    } else if (filesystem_type == "s3") {
+      s3_guard.emplace();
+      const std::string access_key = absl::GetFlag(FLAGS_s3_access_key_id);
+      const std::string secret_key = absl::GetFlag(FLAGS_s3_secret_access_key);
+      auto s3options = arrow::fs::S3Options::FromAccessKey(access_key, secret_key);
+      s3options.endpoint_override = absl::GetFlag(FLAGS_s3_endpoint);
+      s3options.scheme = "http";
+      auto maybe_fs = arrow::fs::S3FileSystem::Make(s3options);
+      if (!maybe_fs.ok()) {
+        std::cerr << maybe_fs.status() << std::endl;
+        return 1;
+      }
+      fs = maybe_fs.MoveValueUnsafe();
+    } else {
+      throw std::runtime_error("Unexpected filesystem type");
     }
 
-    std::filesystem::create_directory(meta_dir);
-    std::filesystem::path data_location = dst / std::filesystem::path(data_dir);
-    std::filesystem::path metadata_location = dst / std::filesystem::path(meta_dir);
-    std::filesystem::path metadata_json = metadata_location / (meta_uuid + meta_ext);
+    const std::string fs_schema = filesystem_type + "://";
 
-    auto local_fs = std::make_shared<arrow::fs::LocalFileSystem>();
-    uint64_t file_size = 0;
-    auto parquet_meta = iceberg::ParquetMetadata(local_fs, src_data_files[0], file_size);
+    const std::string table_base_location = absl::GetFlag(FLAGS_table_base_location);
+    iceberg::Ensure(!table_base_location.empty(), "table_base_location is not set");
 
-    std::vector<iceberg::types::NestedField> fields =
-        GetFieldsFromParquet(parquet_meta, force_not_null, byte_array_is_string);
+    iceberg::Ensure(table_base_location.starts_with(fs_schema), "table_base_location must start with fs_schema");
+
+    const std::string parquet_path = absl::GetFlag(FLAGS_parquet_path);
+    iceberg::Ensure(!parquet_path.empty(), "parquet_path is not set");
+
+    iceberg::Ensure(
+        parquet_path.starts_with(table_base_location),
+        "parquet_path (" + parquet_path + ") does not start from table_base_location (" + table_base_location + ")");
+
+    std::vector<iceberg::types::NestedField> fields = [&]() {
+      iceberg::UrlComponents components = iceberg::SplitUrl(parquet_path);
+      std::shared_ptr<arrow::io::RandomAccessFile> file =
+          iceberg::ValueSafe(fs->OpenInputFile(std::string(components.path)));
+
+      std::unique_ptr<parquet::ParquetFileReader> reader = parquet::ParquetFileReader::Open(file);
+      iceberg::Ensure(reader != nullptr, std::string(__PRETTY_FUNCTION__) + ": reader is nullptr");
+
+      std::shared_ptr<parquet::FileMetaData> metadata = reader->metadata();
+      iceberg::Ensure(metadata != nullptr, std::string(__PRETTY_FUNCTION__) + ": metadata is nullptr");
+
+      return GetFieldsFromParquet(metadata);
+    }();
+
     auto schema = std::make_shared<iceberg::Schema>(0, fields);
-    auto empty_tree = MetadataTree::MakeEmptyMetadataFile(meta_uuid, metadata_json, schema);
 
-    auto snapshot_maker = SnapshotMaker(local_fs, empty_tree.table_metadata, 0);
+    std::string uuid = iceberg::UuidGenerator().CreateRandom().ToString();
+    std::string root_snapshot_path = table_base_location + "/metadata/00000-" + uuid + ".metadata.json";
 
-    snapshot_maker.MakeMetadataFiles(meta_dir, src_data, metadata_location, data_location, {}, dst_data_files, {}, 0);
+    iceberg::TableMetadataV2Builder builder;
+    builder.table_uuid = iceberg::UuidGenerator().CreateRandom().ToString();
+    builder.location = table_base_location;
+    builder.last_sequence_number = 0;
+    builder.last_updated_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    builder.last_column_id = schema->MaxColumnId();
+    builder.schemas = std::vector<std::shared_ptr<iceberg::Schema>>{schema};
+    builder.current_schema_id = 0;
+    iceberg::PartitionSpec partition_spec{.spec_id = 0, .fields = {}};
+    builder.partition_specs =
+        std::vector<std::shared_ptr<iceberg::PartitionSpec>>{std::make_shared<iceberg::PartitionSpec>(partition_spec)};
+    builder.default_spec_id = 0;
+    builder.last_partition_id = 0;
+    iceberg::SortOrder order{.order_id = 0, .fields = {}};
+    builder.sort_orders = std::vector<std::shared_ptr<iceberg::SortOrder>>{std::make_shared<iceberg::SortOrder>(order)};
+    builder.default_sort_order_id = 0;
+
+    std::shared_ptr<iceberg::TableMetadataV2> table_metadata = builder.Build();
+    iceberg::Ensure(table_metadata != nullptr, "Failed to build table_metadata");
+
+    std::string bytes = iceberg::ice_tea::WriteTableMetadataV2(*table_metadata, true);
+    auto output_stream =
+        iceberg::ValueSafe(fs->OpenOutputStream(std::string(iceberg::SplitUrl(root_snapshot_path).path)));
+
+    iceberg::Ensure(output_stream->Write(bytes));
+    iceberg::Ensure(output_stream->Close());
+
+    std::cerr << "Result file: " << root_snapshot_path << std::endl;
   } catch (std::exception& ex) {
     std::cerr << ex.what() << std::endl;
+    return 1;
+  } catch (arrow::Status& ex) {
+    std::cerr << ex.ToString() << std::endl;
     return 1;
   }
 
