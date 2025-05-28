@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <cctype>
 #include <functional>
+#include <unordered_map>
 #include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "iceberg/nested_field.h"
+#include "parquet/schema.h"
 
 namespace iceberg {
 
@@ -56,6 +58,14 @@ class Schema {
  private:
   int32_t schema_id_;
   std::vector<types::NestedField> fields_;
+};
+
+class IcebergToParquetSchemaValidator {
+ public:
+  static bool Validate(const Schema& iceberg_schema, const parquet::SchemaDescriptor& parquet_schema, bool throws_on_error = true);
+private:
+  static void ValidateColumn(const types::NestedField& field, const parquet::schema::Node* node, std::string& error_log);
+  static void Ensure(bool cond, const std::string& message, std::string& error_log);
 };
 
 }  // namespace iceberg
