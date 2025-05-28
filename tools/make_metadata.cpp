@@ -159,14 +159,18 @@ struct S3FinalizerGuard {
 
 }  // namespace
 
-ABSL_FLAG(std::string, parquet_path, "", "path to parquet file (with FS scheme)");
+ABSL_FLAG(std::string, parquet_path, "", "path to parquet file (URI)");
+
+ABSL_FLAG(std::string, table_base_location, "", "location where data and metadata files are stored (URI)");
+ABSL_FLAG(std::string, root_snapshot_path, "", "path for .metadata.json file (URI)");
+ABSL_FLAG(std::string, table_uuid, "", "");
 
 ABSL_FLAG(std::string, filesystem, "file", "filesystem to use (file or s3)");
-ABSL_FLAG(std::string, table_base_location, "", "location where data and metadata files are stored (with FS scheme)");
-
 ABSL_FLAG(std::string, s3_access_key_id, "", "s3_access_key_id");
 ABSL_FLAG(std::string, s3_secret_access_key, "", "s3_secret_access_key");
 ABSL_FLAG(std::string, s3_endpoint, "", "s3_endpoint");
+ABSL_FLAG(std::string, s3_scheme, "", "s3_scheme");
+ABSL_FLAG(std::string, s3_region, "", "s3_region");
 
 int main(int argc, char** argv) {
   std::optional<S3FinalizerGuard> s3_guard;
@@ -185,7 +189,8 @@ int main(int argc, char** argv) {
       const std::string secret_key = absl::GetFlag(FLAGS_s3_secret_access_key);
       auto s3options = arrow::fs::S3Options::FromAccessKey(access_key, secret_key);
       s3options.endpoint_override = absl::GetFlag(FLAGS_s3_endpoint);
-      s3options.scheme = "http";
+      s3options.scheme = absl::GetFlag(FLAGS_s3_scheme);
+      s3options.region = absl::GetFlag(FLAGS_s3_region);
       auto maybe_fs = arrow::fs::S3FileSystem::Make(s3options);
       if (!maybe_fs.ok()) {
         std::cerr << maybe_fs.status() << std::endl;
@@ -226,11 +231,26 @@ int main(int argc, char** argv) {
 
     auto schema = std::make_shared<iceberg::Schema>(0, fields);
 
-    std::string uuid = iceberg::UuidGenerator().CreateRandom().ToString();
-    std::string root_snapshot_path = table_base_location + "/metadata/00000-" + uuid + ".metadata.json";
+    std::string root_snapshot_path = absl::GetFlag(FLAGS_root_snapshot_path);
+    if (root_snapshot_path.empty()) {
+      std::string uuid = iceberg::UuidGenerator().CreateRandom().ToString();
+      root_snapshot_path = table_base_location + "/metadata/00000-" + uuid + ".metadata.json";
+    } else {
+      iceberg::Ensure(root_snapshot_path.starts_with(table_base_location),
+                      "root_snapshot_path (" + root_snapshot_path + ") does not start from table_base_location (" +
+                          table_base_location + ")");
+    }
 
     iceberg::TableMetadataV2Builder builder;
-    builder.table_uuid = iceberg::UuidGenerator().CreateRandom().ToString();
+
+    std::string table_uuid = absl::GetFlag(FLAGS_table_uuid);
+    if (table_uuid.empty()) {
+      builder.table_uuid = iceberg::UuidGenerator().CreateRandom().ToString();
+    } else {
+      // TODO(gmusya): validate that this is UUID
+      builder.table_uuid = table_uuid;
+    }
+
     builder.location = table_base_location;
     builder.last_sequence_number = 0;
     builder.last_updated_ms =
