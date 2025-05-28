@@ -198,8 +198,10 @@ FetchContent_Declare(
 
 # MakeAvailable
 
-set(BOOST_ENABLE_CMAKE ON CACHE BOOL "")
-FetchContent_MakeAvailable(boost)
+if (ICECXX_BUILD_BOOST)
+  set(BOOST_ENABLE_CMAKE ON CACHE BOOL "")
+  FetchContent_MakeAvailable(boost)
+endif ()
 
 if(ICECXX_BUILD_ARROW)
   set(ARROW_DEPENDENCY_SOURCE BUNDLED CACHE STRING "")
@@ -241,10 +243,12 @@ FetchContent_MakeAvailable(datasketches-cpp)
 FetchContent_MakeAvailable(hive-metastore)
 FetchContent_MakeAvailable(rapidjson)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set(OS_LINUX ON CACHE BOOL "")
-endif()
-FetchContent_MakeAvailable(thrift)
+if (ICECXX_BUILD_THRIFT)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(OS_LINUX ON CACHE BOOL "")
+  endif()
+  FetchContent_MakeAvailable(thrift)
+endif ()
 
 FetchContent_MakeAvailable(zstd)
 
