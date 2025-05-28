@@ -20,6 +20,7 @@ jobs:
         git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
         cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
         ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+        pip3 install --upgrade pynessie flask
         wget https://github.com/projectnessie/nessie/releases/download/nessie-0.104.1/nessie-quarkus-0.104.1-runner.jar
     - name: run rest
       run: |
@@ -51,6 +52,7 @@ jobs:
         git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
         cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
         ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+        pip3 install --upgrade pynessie flask
         wget https://github.com/projectnessie/nessie/releases/download/nessie-0.104.1/nessie-quarkus-0.104.1-runner.jar
     - name: run rest
       run: |
