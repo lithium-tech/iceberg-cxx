@@ -169,7 +169,7 @@ ABSL_FLAG(std::string, filesystem, "file", "filesystem to use (file or s3)");
 ABSL_FLAG(std::string, s3_access_key_id, "", "s3_access_key_id");
 ABSL_FLAG(std::string, s3_secret_access_key, "", "s3_secret_access_key");
 ABSL_FLAG(std::string, s3_endpoint, "", "s3_endpoint");
-ABSL_FLAG(std::string, s3_scheme, "", "s3_scheme");
+ABSL_FLAG(std::string, s3_scheme, "http", "s3_scheme");
 ABSL_FLAG(std::string, s3_region, "", "s3_region");
 
 int main(int argc, char** argv) {
