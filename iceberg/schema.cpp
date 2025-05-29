@@ -93,8 +93,11 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     case TypeID::kDecimal: {
       auto precision = std::static_pointer_cast<const types::DecimalType>(field.type)->Precision();
       auto scale = std::static_pointer_cast<const types::DecimalType>(field.type)->Scale();
-      Ensure(node->logical_type() == parquet::LogicalType::Decimal(precision, scale),
-             "Iceberg Decimal(P, S) column must be represented as parquet DECIMAL(P, S) logical type\n", error_log);
+      Ensure(node->logical_type()->is_decimal(),
+             "Iceberg Decimal(P, S) column must be represented as parquet Decimal(P, S) logical type\n", error_log);
+      auto decimal_node = std::static_pointer_cast<const parquet::DecimalLogicalType>(node->logical_type());
+      Ensure(decimal_node->precision() == precision && decimal_node->scale() == scale,
+             "Iceberg Decimal(P, S) column must be represented as parquet Decimal(P, S) logical type\n", error_log);
       if (precision <= 9) {
         Ensure(node->is_primitive() &&
                    static_cast<const parquet::schema::PrimitiveNode*>(node)->physical_type() == parquet::Type::INT32,
@@ -113,7 +116,7 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
                error_log);
         Ensure(
             node->is_primitive() && static_cast<const parquet::schema::PrimitiveNode*>(node)->type_length() ==
-                                        (precision * log2(10)) / CHAR_BIT + 1,
+                                        static_cast<int32_t>(std::ceil((precision * log2(10) + 1) / CHAR_BIT)),
             "Iceberg Decimal(P, S) column with P > 18 type length must use minimal number of bytes that can store P\n",
             error_log);
         // precision * log2(10) bits for digits, 1 for sign, divided by CHAR_BIT and rounded up
@@ -122,8 +125,8 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     }
 
     case TypeID::kDate: {
-      Ensure(node->logical_type() == parquet::LogicalType::Date(),
-             "Iceberg Date column must be represented as parquet DATE logical type\n", error_log);
+      Ensure(node->logical_type()->is_date(), "Iceberg Date column must be represented as parquet DATE logical type\n",
+             error_log);
       Ensure(node->is_primitive() &&
                  static_cast<const parquet::schema::PrimitiveNode*>(node)->physical_type() == parquet::Type::INT32,
              "Iceberg Date column must be represented as parquet INT32 physical type\n", error_log);
@@ -131,7 +134,12 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     }
 
     case TypeID::kTime: {
-      Ensure(node->logical_type() == parquet::LogicalType::Time(false, parquet::LogicalType::TimeUnit::MICROS),
+      Ensure(node->logical_type()->is_time(),
+             "Iceberg Time column must be represented as parquet Time logical type with adjustToUtc=false and "
+             "TimeUnit::MICROS\n",
+             error_log);
+      auto time_node = std::static_pointer_cast<const parquet::TimeLogicalType>(node->logical_type());
+      Ensure(!time_node->is_adjusted_to_utc() && time_node->time_unit() == parquet::LogicalType::TimeUnit::MICROS,
              "Iceberg Time column must be represented as parquet Time logical type with adjustToUtc=false and "
              "TimeUnit::MICROS\n",
              error_log);
@@ -143,7 +151,14 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
 
     case TypeID::kTimestamp: {
       Ensure(
-          node->logical_type() == parquet::LogicalType::Timestamp(false, parquet::LogicalType::TimeUnit::MICROS),
+          node->logical_type()->is_timestamp(),
+          "Iceberg Timestamp column must be represented as parquet Timestamp logical type with adjustToUtc=false and "
+          "TimeUnit::MICROS\n",
+          error_log);
+      auto timestamp_node = std::static_pointer_cast<const parquet::TimestampLogicalType>(node->logical_type());
+      Ensure(
+          !timestamp_node->is_adjusted_to_utc() &&
+              timestamp_node->time_unit() == parquet::LogicalType::TimeUnit::MICROS,
           "Iceberg Timestamp column must be represented as parquet Timestamp logical type with adjustToUtc=false and "
           "TimeUnit::MICROS\n",
           error_log);
@@ -155,7 +170,13 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
 
     case TypeID::kTimestamptz: {
       Ensure(
-          node->logical_type() == parquet::LogicalType::Timestamp(true, parquet::LogicalType::TimeUnit::MICROS),
+          node->logical_type()->is_timestamp(),
+          "Iceberg Timestamptz column must be represented as parquet Timestamp logical type with adjustToUtc=true and "
+          "TimeUnit::MICROS\n",
+          error_log);
+      auto timestamp_node = std::static_pointer_cast<const parquet::TimestampLogicalType>(node->logical_type());
+      Ensure(
+          timestamp_node->is_adjusted_to_utc() && timestamp_node->time_unit() == parquet::LogicalType::TimeUnit::MICROS,
           "Iceberg Timestamptz column must be represented as parquet Timestamp logical type with adjustToUtc=true and "
           "TimeUnit::MICROS\n",
           error_log);
@@ -166,7 +187,7 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     }
 
     case TypeID::kString: {
-      Ensure(node->logical_type() == parquet::LogicalType::String(),
+      Ensure(node->logical_type()->is_string(),
              "Iceberg String column must be represented as String logical type\n", error_log);
       Ensure(node->converted_type() == parquet::ConvertedType::UTF8, "Iceberg String column must be encoded in UTF-8\n",
              error_log);
@@ -177,7 +198,7 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     }
 
     case TypeID::kUuid: {
-      Ensure(node->logical_type() == parquet::LogicalType::UUID(),
+      Ensure(node->logical_type()->is_UUID(),
              "Iceberg Uuid column must be represented as UUID logical type\n", error_log);
       Ensure(node->is_primitive() &&
                  static_cast<const parquet::schema::PrimitiveNode*>(node)->physical_type() ==
@@ -204,9 +225,8 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     }
 
     case TypeID::kList: {
-      Ensure(node->logical_type() == parquet::LogicalType::List(),
+      Ensure(node->logical_type()->is_list(),
              "Iceberg List column must be represented as List logical type\n", error_log);
-
       Ensure(node->is_group(), "Iceberg List column must be represented as parquet 3-level list\n", error_log);
       auto group_node = static_cast<const parquet::schema::GroupNode*>(node);
       Ensure(group_node->field_count() == 1 && group_node->field(0)->is_group(),
