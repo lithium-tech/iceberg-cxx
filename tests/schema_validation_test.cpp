@@ -56,6 +56,23 @@ TEST(SchemaValidationTest, AllSparkTypes) {
       iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()));
 }
 
+TEST(SchemaValidationTest, UUID_TIME) {
+  std::ifstream input("tables/types/uuid_time/metadata/00002-911ccd34-0019-4c55-80eb-ffef4280d19f.metadata.json");
+
+  std::stringstream ss;
+  ss << input.rdbuf();
+  std::string data = ss.str();
+
+  auto metadata = iceberg::ice_tea::ReadTableMetadataV2(data);
+  EXPECT_NE(metadata, nullptr);
+
+  auto reader = parquet::ParquetFileReader::OpenFile(
+      "tables/types/uuid_time/data/20250529_170734_00011_bhcfi-964de9ef-55e3-426a-b542-3dd6f6ef9c2e.parquet");
+  auto parquet_metadata = reader->metadata();
+  EXPECT_NO_THROW(
+      iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()));
+}
+
 /*TEST(SchemaValidationTest, UnsupportedTypes) {
  std::ifstream input(
      "tables/types/unsupported_types/metadata/00000-27b520d0-8020-43cb-b051-4eef7c1636af.metadata.json");
