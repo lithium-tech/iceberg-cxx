@@ -187,8 +187,8 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     }
 
     case TypeID::kString: {
-      Ensure(node->logical_type()->is_string(),
-             "Iceberg String column must be represented as String logical type\n", error_log);
+      Ensure(node->logical_type()->is_string(), "Iceberg String column must be represented as String logical type\n",
+             error_log);
       Ensure(node->converted_type() == parquet::ConvertedType::UTF8, "Iceberg String column must be encoded in UTF-8\n",
              error_log);
       Ensure(node->is_primitive() &&
@@ -198,8 +198,8 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     }
 
     case TypeID::kUuid: {
-      Ensure(node->logical_type()->is_UUID(),
-             "Iceberg Uuid column must be represented as UUID logical type\n", error_log);
+      Ensure(node->logical_type()->is_UUID(), "Iceberg Uuid column must be represented as UUID logical type\n",
+             error_log);
       Ensure(node->is_primitive() &&
                  static_cast<const parquet::schema::PrimitiveNode*>(node)->physical_type() ==
                      parquet::Type::FIXED_LEN_BYTE_ARRAY &&
@@ -225,8 +225,8 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
     }
 
     case TypeID::kList: {
-      Ensure(node->logical_type()->is_list(),
-             "Iceberg List column must be represented as List logical type\n", error_log);
+      Ensure(node->logical_type()->is_list(), "Iceberg List column must be represented as List logical type\n",
+             error_log);
       Ensure(node->is_group(), "Iceberg List column must be represented as parquet 3-level list\n", error_log);
       auto group_node = static_cast<const parquet::schema::GroupNode*>(node);
       Ensure(group_node->field_count() == 1 && group_node->field(0)->is_group(),

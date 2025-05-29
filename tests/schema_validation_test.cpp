@@ -56,21 +56,21 @@ TEST(SchemaValidationTest, AllSparkTypes) {
       iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()));
 }
 
- /*TEST(SchemaValidationTest, UnsupportedTypes) {
-  std::ifstream input(
-      "tables/types/unsupported_types/metadata/00000-27b520d0-8020-43cb-b051-4eef7c1636af.metadata.json");
+/*TEST(SchemaValidationTest, UnsupportedTypes) {
+ std::ifstream input(
+     "tables/types/unsupported_types/metadata/00000-27b520d0-8020-43cb-b051-4eef7c1636af.metadata.json");
 
-  std::stringstream ss;
-  ss << input.rdbuf();
-  std::string data = ss.str();
+ std::stringstream ss;
+ ss << input.rdbuf();
+ std::string data = ss.str();
 
-  auto metadata = iceberg::ice_tea::ReadTableMetadataV2(data);
-  EXPECT_NE(metadata, nullptr);  
+ auto metadata = iceberg::ice_tea::ReadTableMetadataV2(data);
+ EXPECT_NE(metadata, nullptr);
 
-  auto reader = parquet::ParquetFileReader::OpenFile(
-      "tables/types/unsupported_types/data/00007-7-40e35baf-8f61-4545-972a-8ef5acb5bd9c-0-00001.parquet");
-  auto parquet_metadata = reader->metadata();
-  EXPECT_THROW(
-      iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()),
-      std::runtime_error);
+ auto reader = parquet::ParquetFileReader::OpenFile(
+     "tables/types/unsupported_types/data/00007-7-40e35baf-8f61-4545-972a-8ef5acb5bd9c-0-00001.parquet");
+ auto parquet_metadata = reader->metadata();
+ EXPECT_THROW(
+     iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()),
+     std::runtime_error);
 }*/

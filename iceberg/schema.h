@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <functional>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -62,9 +62,12 @@ class Schema {
 
 class IcebergToParquetSchemaValidator {
  public:
-  static bool Validate(const Schema& iceberg_schema, const parquet::SchemaDescriptor& parquet_schema, bool throws_on_error = true);
-private:
-  static void ValidateColumn(const types::NestedField& field, const parquet::schema::Node* node, std::string& error_log);
+  static bool Validate(const Schema& iceberg_schema, const parquet::SchemaDescriptor& parquet_schema,
+                       bool throws_on_error = true);
+
+ private:
+  static void ValidateColumn(const types::NestedField& field, const parquet::schema::Node* node,
+                             std::string& error_log);
   static void Ensure(bool cond, const std::string& message, std::string& error_log);
 };
 
