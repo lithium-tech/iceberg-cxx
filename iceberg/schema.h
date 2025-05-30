@@ -68,7 +68,7 @@ class IcebergToParquetSchemaValidator {
  private:
   static void ValidateColumn(const types::NestedField& field, const parquet::schema::Node* node,
                              std::string& error_log);
-  static void Ensure(bool cond, const std::string& message, std::string& error_log);
+  static bool Ensure(bool cond, const std::string& message, std::string& error_log);
 };
 
 }  // namespace iceberg

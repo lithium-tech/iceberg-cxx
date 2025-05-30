@@ -68,9 +68,129 @@ TEST(SchemaValidationTest, WrongColumnNumber) {
   auto reader = parquet::ParquetFileReader::OpenFile(
       "tables/types/all_spark_types/data/00007-7-08e6240e-b5f7-48ad-b7f0-039dc52bc563-0-00001.parquet");
   auto parquet_metadata = reader->metadata();
-  EXPECT_THROW(
-      iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()),
-      std::runtime_error);
+  const std::string expected_message = "Iceberg and parquet schemas have different number of columns\n";
+  try {
+    iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema());
+  } catch (const std::exception& e) {
+    EXPECT_EQ(e.what(), expected_message);
+    return;
+  }
+  EXPECT_TRUE(false);
+}
+
+TEST(SchemaValidationTest, TimestampNeqTimestamptz) {
+  auto schema =
+      GetMetadata("tables/types/all_spark_types/metadata/00000-4f9d7c78-62f9-48c6-b869-f25172b45b32.metadata.json")
+          ->GetCurrentSchema();
+  std::vector<iceberg::types::NestedField> fake_columns(schema->Columns());
+  EXPECT_EQ(fake_columns[9].type->TypeId(), iceberg::TypeID::kTimestamptz);
+  EXPECT_EQ(fake_columns[10].type->TypeId(), iceberg::TypeID::kTimestamp);
+  std::swap(fake_columns[9].type, fake_columns[10].type);
+  iceberg::Schema fake_schema(schema->SchemaId(), fake_columns);
+
+  auto reader = parquet::ParquetFileReader::OpenFile(
+      "tables/types/all_spark_types/data/00007-7-08e6240e-b5f7-48ad-b7f0-039dc52bc563-0-00001.parquet");
+  auto parquet_metadata = reader->metadata();
+
+  const std::string_view expected_substring1 =
+      "Iceberg Timestamp column must be represented as parquet Timestamp logical type with adjustToUtc=false and "
+      "TimeUnit::MICROS\n";
+  const std::string_view expected_substring2 =
+      "Iceberg Timestamptz column must be represented as parquet Timestamp logical type with adjustToUtc=true and "
+      "TimeUnit::MICROS\n";
+
+  try {
+    iceberg::IcebergToParquetSchemaValidator::Validate(fake_schema, *parquet_metadata->schema());
+  } catch (const std::exception& e) {
+    EXPECT_TRUE(std::string_view(e.what()).find(expected_substring1) != std::string_view::npos);
+    EXPECT_TRUE(std::string_view(e.what()).find(expected_substring2) != std::string_view::npos);
+    return;
+  }
+  EXPECT_TRUE(false);
+}
+
+TEST(SchemaValidationTest, UUIDNeqString) {
+  auto schema = GetMetadata("tables/types/uuid_time/metadata/00002-911ccd34-0019-4c55-80eb-ffef4280d19f.metadata.json")
+                    ->GetCurrentSchema();
+  std::vector<iceberg::types::NestedField> fake_columns(schema->Columns());
+  EXPECT_EQ(fake_columns[1].type->TypeId(), iceberg::TypeID::kUuid);
+  fake_columns[1].type = std::make_shared<iceberg::types::PrimitiveType>(iceberg::TypeID::kString);
+  iceberg::Schema fake_schema(schema->SchemaId(), fake_columns);
+
+  auto reader = parquet::ParquetFileReader::OpenFile(
+      "tables/types/uuid_time/data/20250529_170734_00011_bhcfi-964de9ef-55e3-426a-b542-3dd6f6ef9c2e.parquet");
+  auto parquet_metadata = reader->metadata();
+
+  const std::string_view expected_substring1 = "Iceberg String column must be represented as String logical type\n";
+  const std::string_view expected_substring2 = "Iceberg String column must be encoded in UTF-8\n";
+  const std::string_view expected_substring3 =
+      "Iceberg String column must be represented as parquet BYTE_ARRAY physical type\n";
+
+  try {
+    iceberg::IcebergToParquetSchemaValidator::Validate(fake_schema, *parquet_metadata->schema());
+  } catch (const std::exception& e) {
+    EXPECT_TRUE(std::string_view(e.what()).find(expected_substring1) != std::string_view::npos);
+    EXPECT_TRUE(std::string_view(e.what()).find(expected_substring2) != std::string_view::npos);
+    EXPECT_TRUE(std::string_view(e.what()).find(expected_substring3) != std::string_view::npos);
+    return;
+  }
+  EXPECT_TRUE(false);
+}
+
+TEST(SchemaValidationTest, StringIsNotJustBinary) {
+  auto schema =
+      GetMetadata("tables/types/all_spark_types/metadata/00000-4f9d7c78-62f9-48c6-b869-f25172b45b32.metadata.json")
+          ->GetCurrentSchema();
+
+  std::vector<iceberg::types::NestedField> fake_columns(schema->Columns());
+  EXPECT_EQ(fake_columns[7].type->TypeId(), iceberg::TypeID::kBinary);
+  fake_columns[7].type = std::make_shared<iceberg::types::PrimitiveType>(iceberg::TypeID::kString);
+  iceberg::Schema fake_schema(schema->SchemaId(), fake_columns);
+
+  auto reader = parquet::ParquetFileReader::OpenFile(
+      "tables/types/all_spark_types/data/00007-7-08e6240e-b5f7-48ad-b7f0-039dc52bc563-0-00001.parquet");
+  auto parquet_metadata = reader->metadata();
+
+  const std::string_view expected_substring1 = "Iceberg String column must be represented as String logical type\n";
+  const std::string_view expected_substring2 = "Iceberg String column must be encoded in UTF-8\n";
+  try {
+    iceberg::IcebergToParquetSchemaValidator::Validate(fake_schema, *parquet_metadata->schema());
+  } catch (const std::exception& e) {
+    EXPECT_TRUE(std::string_view(e.what()).find(expected_substring1) != std::string_view::npos);
+    EXPECT_TRUE(std::string_view(e.what()).find(expected_substring2) != std::string_view::npos);
+    return;
+  }
+  EXPECT_TRUE(false);
+}
+
+TEST(SchemaValidationTest, TimeNeqTimestamp) {
+  auto schema = GetMetadata("tables/types/uuid_time/metadata/00002-911ccd34-0019-4c55-80eb-ffef4280d19f.metadata.json")
+                    ->GetCurrentSchema();
+  std::vector<iceberg::types::NestedField> fake_columns(schema->Columns());
+  EXPECT_EQ(fake_columns[2].type->TypeId(), iceberg::TypeID::kTime);
+  fake_columns[2].type = std::make_shared<iceberg::types::PrimitiveType>(iceberg::TypeID::kTimestamp);
+  iceberg::Schema fake_schema(schema->SchemaId(), fake_columns);
+
+  auto reader = parquet::ParquetFileReader::OpenFile(
+      "tables/types/uuid_time/data/20250529_170734_00011_bhcfi-964de9ef-55e3-426a-b542-3dd6f6ef9c2e.parquet");
+  auto parquet_metadata = reader->metadata();
+
+  const std::string_view expected_message =
+      "Iceberg Timestamp column must be represented as parquet Timestamp logical type with adjustToUtc=false and "
+      "TimeUnit::MICROS\n";
+
+  const std::string_view expected_substring1 = "Iceberg String column must be represented as String logical type\n";
+  const std::string_view expected_substring2 = "Iceberg String column must be encoded in UTF-8\n";
+  const std::string_view expected_substring3 =
+      "Iceberg String column must be represented as parquet BYTE_ARRAY physical type\n";
+
+  try {
+    iceberg::IcebergToParquetSchemaValidator::Validate(fake_schema, *parquet_metadata->schema());
+  } catch (const std::exception& e) {
+    EXPECT_EQ(std::string_view(e.what()), expected_message);
+    return;
+  }
+  EXPECT_TRUE(false);
 }
 
 /*TEST(SchemaValidationTest, UnsupportedTypes) {
