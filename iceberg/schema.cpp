@@ -1,6 +1,7 @@
 #include "iceberg/schema.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -116,7 +117,7 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
                error_log);
         Ensure(
             node->is_primitive() && static_cast<const parquet::schema::PrimitiveNode*>(node)->type_length() ==
-                                        static_cast<int32_t>(std::ceil((precision * log2(10) + 1) / CHAR_BIT)),
+                                        static_cast<int32_t>(std::ceil((precision * std::log2(10) + 1) / CHAR_BIT)),
             "Iceberg Decimal(P, S) column with P > 18 type length must use minimal number of bytes that can store P\n",
             error_log);
         // precision * log2(10) bits for digits, 1 for sign, divided by CHAR_BIT and rounded up
