@@ -1,0 +1,81 @@
+{
+  "format-version" : 2,
+  "table-uuid" : "bf24e687-eb26-4045-b61a-847d0fcb35e6",
+  "location" : "s3a://warehouse/types/uuid_time",
+  "last-sequence-number" : 1,
+  "last-updated-ms" : 1748538080296,
+  "last-column-id" : 3,
+  "current-schema-id" : 0,
+  "schemas" : [ {
+    "type" : "struct",
+    "schema-id" : 0,
+    "fields" : [ {
+      "id" : 1,
+      "name" : "id",
+      "required" : false,
+      "type" : "long"
+    }, {
+      "id" : 2,
+      "name" : "uuid",
+      "required" : false,
+      "type" : "uuid"
+    }, {
+      "id" : 3,
+      "name" : "time",
+      "required" : false,
+      "type" : "time"
+    } ]
+  } ],
+  "default-spec-id" : 0,
+  "partition-specs" : [ {
+    "spec-id" : 0,
+    "fields" : [ ]
+  } ],
+  "last-partition-id" : 999,
+  "default-sort-order-id" : 0,
+  "sort-orders" : [ {
+    "order-id" : 0,
+    "fields" : [ ]
+  } ],
+  "properties" : {
+    "write.format.default" : "PARQUET",
+    "write.parquet.compression-codec" : "zstd",
+    "commit.retry.num-retries" : "4"
+  },
+  "current-snapshot-id" : 1527802670246139424,
+  "refs" : {
+    "main" : {
+      "snapshot-id" : 1527802670246139424,
+      "type" : "branch"
+    }
+  },
+  "snapshots" : [ {
+    "sequence-number" : 1,
+    "snapshot-id" : 1527802670246139424,
+    "timestamp-ms" : 1748538080296,
+    "summary" : {
+      "operation" : "append",
+      "trino_query_id" : "20250529_170120_00009_bhcfi",
+      "trino_user" : "trino",
+      "changed-partition-count" : "0",
+      "total-records" : "0",
+      "total-files-size" : "0",
+      "total-data-files" : "0",
+      "total-delete-files" : "0",
+      "total-position-deletes" : "0",
+      "total-equality-deletes" : "0",
+      "engine-version" : "471",
+      "engine-name" : "trino",
+      "iceberg-version" : "Apache Iceberg 1.7.1 (commit 4a432839233f2343a9eae8255532f911f06358ef)"
+    },
+    "manifest-list" : "s3a://warehouse/types/uuid_time/metadata/snap-1527802670246139424-1-fbd20d0d-2109-4dff-9a81-afbd418fb25e.avro",
+    "schema-id" : 0
+  } ],
+  "statistics" : [ ],
+  "partition-statistics" : [ ],
+  "snapshot-log" : [ {
+    "timestamp-ms" : 1748538080296,
+    "snapshot-id" : 1527802670246139424
+  } ],
+  "metadata-log" : [ ]
+}
