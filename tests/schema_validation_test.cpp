@@ -50,12 +50,12 @@ TEST(SchemaValidationTest, AllSparkTypes) {
       iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()));
 }
 
-TEST(SchemaValidationTest, UUID_TIME) {
+TEST(SchemaValidationTest, AllTrinoTypes) {
   auto metadata =
-      GetMetadata("tables/types/uuid_time/metadata/00002-911ccd34-0019-4c55-80eb-ffef4280d19f.metadata.json");
+      GetMetadata("tables/types/all_trino_types/metadata/00002-6105d5eb-ce39-470c-af78-50b744662ef2.metadata.json");
 
   auto reader = parquet::ParquetFileReader::OpenFile(
-      "tables/types/uuid_time/data/20250529_170734_00011_bhcfi-964de9ef-55e3-426a-b542-3dd6f6ef9c2e.parquet");
+      "tables/types/all_trino_types/data/20250601_201751_00003_935ws-92e43a1f-75de-42b6-87bf-85642c280237.parquet");
   auto parquet_metadata = reader->metadata();
   EXPECT_NO_THROW(
       iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()));
@@ -63,7 +63,7 @@ TEST(SchemaValidationTest, UUID_TIME) {
 
 TEST(SchemaValidationTest, WrongColumnNumber) {
   auto metadata =
-      GetMetadata("tables/types/uuid_time/metadata/00002-911ccd34-0019-4c55-80eb-ffef4280d19f.metadata.json");
+      GetMetadata("tables/types/all_trino_types/metadata/00002-6105d5eb-ce39-470c-af78-50b744662ef2.metadata.json");
 
   auto reader = parquet::ParquetFileReader::OpenFile(
       "tables/types/all_spark_types/data/00007-7-08e6240e-b5f7-48ad-b7f0-039dc52bc563-0-00001.parquet");
@@ -110,15 +110,16 @@ TEST(SchemaValidationTest, TimestampNeqTimestamptz) {
 }
 
 TEST(SchemaValidationTest, UUIDNeqString) {
-  auto schema = GetMetadata("tables/types/uuid_time/metadata/00002-911ccd34-0019-4c55-80eb-ffef4280d19f.metadata.json")
-                    ->GetCurrentSchema();
+  auto schema =
+      GetMetadata("tables/types/all_trino_types/metadata/00002-6105d5eb-ce39-470c-af78-50b744662ef2.metadata.json")
+          ->GetCurrentSchema();
   std::vector<iceberg::types::NestedField> fake_columns(schema->Columns());
-  EXPECT_EQ(fake_columns[1].type->TypeId(), iceberg::TypeID::kUuid);
-  fake_columns[1].type = std::make_shared<iceberg::types::PrimitiveType>(iceberg::TypeID::kString);
+  EXPECT_EQ(fake_columns[12].type->TypeId(), iceberg::TypeID::kUuid);
+  fake_columns[12].type = std::make_shared<iceberg::types::PrimitiveType>(iceberg::TypeID::kString);
   iceberg::Schema fake_schema(schema->SchemaId(), fake_columns);
 
   auto reader = parquet::ParquetFileReader::OpenFile(
-      "tables/types/uuid_time/data/20250529_170734_00011_bhcfi-964de9ef-55e3-426a-b542-3dd6f6ef9c2e.parquet");
+      "tables/types/all_trino_types/data/20250601_201751_00003_935ws-92e43a1f-75de-42b6-87bf-85642c280237.parquet");
   auto parquet_metadata = reader->metadata();
 
   const std::string_view expected_substring1 = "Iceberg String column must be represented as String logical type\n";
@@ -164,15 +165,16 @@ TEST(SchemaValidationTest, StringIsNotJustBinary) {
 }
 
 TEST(SchemaValidationTest, TimeNeqTimestamp) {
-  auto schema = GetMetadata("tables/types/uuid_time/metadata/00002-911ccd34-0019-4c55-80eb-ffef4280d19f.metadata.json")
-                    ->GetCurrentSchema();
+  auto schema =
+      GetMetadata("tables/types/all_trino_types/metadata/00002-6105d5eb-ce39-470c-af78-50b744662ef2.metadata.json")
+          ->GetCurrentSchema();
   std::vector<iceberg::types::NestedField> fake_columns(schema->Columns());
-  EXPECT_EQ(fake_columns[2].type->TypeId(), iceberg::TypeID::kTime);
-  fake_columns[2].type = std::make_shared<iceberg::types::PrimitiveType>(iceberg::TypeID::kTimestamp);
+  EXPECT_EQ(fake_columns[8].type->TypeId(), iceberg::TypeID::kTime);
+  fake_columns[8].type = std::make_shared<iceberg::types::PrimitiveType>(iceberg::TypeID::kTimestamp);
   iceberg::Schema fake_schema(schema->SchemaId(), fake_columns);
 
   auto reader = parquet::ParquetFileReader::OpenFile(
-      "tables/types/uuid_time/data/20250529_170734_00011_bhcfi-964de9ef-55e3-426a-b542-3dd6f6ef9c2e.parquet");
+      "tables/types/all_trino_types/data/20250601_201751_00003_935ws-92e43a1f-75de-42b6-87bf-85642c280237.parquet");
   auto parquet_metadata = reader->metadata();
 
   const std::string_view expected_message =
