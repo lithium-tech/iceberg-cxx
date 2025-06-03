@@ -93,7 +93,6 @@ const std::map<TypeID, parquet::Type::type> IcebergToParquetSchemaValidator::map
 
 void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& field, const parquet::schema::Node* node,
                                                      std::vector<std::string>& error_log) {
-  Ensure(field.field_id == node->field_id(), "Iceberg field_id must match parquet field_id", error_log);
   switch (field.type->TypeId()) {
     case TypeID::kBoolean:
     case TypeID::kInt:
