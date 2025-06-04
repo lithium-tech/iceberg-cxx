@@ -29,6 +29,23 @@ class PositionalDeleteStream {
   class Reader;
 
  public:
+  struct Query {
+    std::string url;
+    int64_t begin;
+    int64_t end;
+  };
+  class RowGroupFilter {
+   public:
+    virtual ~RowGroupFilter() = default;
+    virtual bool Skip(const std::string& path, const parquet::RowGroupMetaData* metadata, const Query& query) = 0;
+  };
+
+  class BasicRowGroupFilter : public RowGroupFilter {
+   public:
+    bool Skip(const std::string& path, const parquet::RowGroupMetaData* metadata, const Query& query) override;
+  };
+
+ public:
   using Layer = int;
 
   PositionalDeleteStream(const std::map<Layer, std::vector<std::string>>& urls,
@@ -53,20 +70,12 @@ class PositionalDeleteStream {
    * @param begin beginning of the requested range
    * @param end end of the requeted range
    */
-  DeleteRows GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer_number);
-
- private:
-  void EnqueueOrDelete(Reader*);
+  DeleteRows GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer_number,
+                        std::unique_ptr<RowGroupFilter> filter = std::make_unique<BasicRowGroupFilter>());
 
  private:
   struct ReaderGreater {
     bool operator()(const Reader* lhs, const Reader* rhs) const;
-  };
-
-  struct Query {
-    std::string url;
-    int64_t begin;
-    int64_t end;
   };
 
   absl::flat_hash_set<Reader*> readers_;
