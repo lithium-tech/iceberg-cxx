@@ -83,7 +83,7 @@ TEST(SchemaValidationTest, AllTrinoTypes) {
       iceberg::IcebergToParquetSchemaValidator::Validate(*metadata->GetCurrentSchema(), *parquet_metadata->schema()));
 }
 
-TEST(SchemaValidationTest, MappingWithFieldID) {
+TEST(SchemaValidationTest, MappingWithFieldID1) {
   auto schema = GetMetadata(kAllSparkTypesMetadata)->GetCurrentSchema();
   std::vector<iceberg::types::NestedField> fake_columns(schema->Columns());
   std::swap(fake_columns[0].field_id, fake_columns[1].field_id);
@@ -94,6 +94,21 @@ TEST(SchemaValidationTest, MappingWithFieldID) {
 
   EXPECT_THROW(iceberg::IcebergToParquetSchemaValidator::Validate(fake_schema, *parquet_metadata->schema()),
                std::runtime_error);
+}
+
+TEST(SchemaValidationTest, MappingWithFieldID2) {
+  auto schema = GetMetadata(kAllSparkTypesMetadata)->GetCurrentSchema();
+  std::vector<iceberg::types::NestedField> fake_columns(schema->Columns());
+  for (auto& col : fake_columns) {
+    col.field_id = -1;
+  }
+  iceberg::Schema fake_schema(schema->SchemaId(), fake_columns);
+
+  // note here is kAllTrinoTypesData, not kAllSparkTypesData
+  auto reader = parquet::ParquetFileReader::OpenFile(kAllTrinoTypesData);
+  auto parquet_metadata = reader->metadata();
+
+  EXPECT_NO_THROW(iceberg::IcebergToParquetSchemaValidator::Validate(fake_schema, *parquet_metadata->schema()));
 }
 
 TEST(SchemaValidationTest, TimestampNeqTimestamptz) {

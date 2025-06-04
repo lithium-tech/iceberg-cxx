@@ -17,7 +17,6 @@ inline bool HasPhysicalType(const parquet::schema::Node* node, parquet::Type::ty
 }
 
 inline int32_t GetTypeLength(const parquet::schema::Node* node) {
-  assert(node->is_primitive());
   return static_cast<const parquet::schema::PrimitiveNode*>(node)->type_length();
 }
 
@@ -82,12 +81,17 @@ bool IcebergToParquetSchemaValidator::Ensure(bool cond, const std::string& messa
   return cond;
 }
 
-const std::map<TypeID, parquet::Type::type> IcebergToParquetSchemaValidator::map_ = {
-    {TypeID::kBoolean, parquet::Type::BOOLEAN},   {TypeID::kInt, parquet::Type::INT32},
-    {TypeID::kLong, parquet::Type::INT64},        {TypeID::kFloat, parquet::Type::FLOAT},
-    {TypeID::kDouble, parquet::Type::DOUBLE},     {TypeID::kDate, parquet::Type::INT32},
-    {TypeID::kTime, parquet::Type::INT64},        {TypeID::kTimestamp, parquet::Type::INT64},
-    {TypeID::kTimestamptz, parquet::Type::INT64}, {TypeID::kString, parquet::Type::BYTE_ARRAY},
+const std::array<std::pair<TypeID, parquet::Type::type>, 11> IcebergToParquetSchemaValidator::map_ = {
+    std::pair{TypeID::kBoolean, parquet::Type::BOOLEAN},
+    {TypeID::kInt, parquet::Type::INT32},
+    {TypeID::kLong, parquet::Type::INT64},
+    {TypeID::kFloat, parquet::Type::FLOAT},
+    {TypeID::kDouble, parquet::Type::DOUBLE},
+    {TypeID::kDate, parquet::Type::INT32},
+    {TypeID::kTime, parquet::Type::INT64},
+    {TypeID::kTimestamp, parquet::Type::INT64},
+    {TypeID::kTimestamptz, parquet::Type::INT64},
+    {TypeID::kString, parquet::Type::BYTE_ARRAY},
     {TypeID::kBinary, parquet::Type::BYTE_ARRAY},
 };
 
@@ -227,9 +231,10 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
       break;
     }
   }
-  if (map_.contains(field.type->TypeId())) {
-    Ensure(HasPhysicalType(node, map_.at(field.type->TypeId())),
-           PhysicalTypeErrorMessage(field.type, map_.at(field.type->TypeId())), error_log);
+  for (const auto& [iceberg_type, parquet_type] : map_) {
+    if (field.type->TypeId() == iceberg_type) {
+      Ensure(HasPhysicalType(node, parquet_type), PhysicalTypeErrorMessage(field.type, parquet_type), error_log);
+    }
   }
 }
 
@@ -239,7 +244,10 @@ bool IcebergToParquetSchemaValidator::Validate(const Schema& iceberg_schema,
   std::vector<std::string> error_log;
   std::map<int, int> fieldid_to_index;
   for (int i = 0; i < parquet_schema.num_columns(); ++i) {
-    fieldid_to_index[parquet_schema.GetColumnRoot(i)->field_id()] = i;
+    auto field_id = parquet_schema.GetColumnRoot(i)->field_id();
+    if (field_id >= 0) {
+      fieldid_to_index[field_id] = i;
+    }
   }
   for (const auto& ice_col : ice_cols) {
     if (fieldid_to_index.contains(ice_col.field_id)) {
