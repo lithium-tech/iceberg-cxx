@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 
 #include <hive_metastore_types.h>
 #include <thrift/protocol/TBinaryProtocol.h>
