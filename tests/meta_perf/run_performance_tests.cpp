@@ -105,6 +105,21 @@ void run_manifest_entries(std::shared_ptr<arrow::fs::FileSystem> fs, const int t
   }
 }
 
+void run_manifest_entries_wide(std::shared_ptr<arrow::fs::FileSystem> fs, const int times,
+                          const iceberg::ice_tea::GetScanMetadataConfig& config) {
+  for (int _ = 0; _ < times; ++_) {
+    auto maybe_scan_metadata =
+        iceberg::ice_tea::GetScanMetadata(fs,
+                                          "s3://warehouse/performance/manifest_entries_wide/metadata/"
+                                          "00001-95d2fd1a-501a-4db4-a6b2-49c2d1a87e71.metadata.json",
+                                          config);
+    if (maybe_scan_metadata.status() != arrow::Status::OK()) {
+      std::cerr << "run_manifest_entries_wide failed" << std::endl;
+      exit(1);
+    }
+  }
+}
+
 void run_manifest_files(std::shared_ptr<arrow::fs::FileSystem> fs, const int times,
                         const iceberg::ice_tea::GetScanMetadataConfig& config) {
   for (int _ = 0; _ < times; ++_) {
@@ -147,6 +162,7 @@ void run_snapshots(std::shared_ptr<arrow::fs::FileSystem> fs, const int times,
 }  // namespace
 
 ABSL_FLAG(int, manifest_entries, 0, "how many times manifest entries performance test will run");
+ABSL_FLAG(int, manifest_entries_wide, 0, "how many times manifest entries performance test will run");
 ABSL_FLAG(int, manifest_files, 0, "how many times manifest files performance test will run");
 ABSL_FLAG(int, schemas, 0, "how many times schemas performance test will run");
 ABSL_FLAG(int, snapshots, 0, "how many times snapshots performance test will run");
@@ -155,6 +171,7 @@ ABSL_FLAG(bool, full, true, "if true, GetScanMetadata claims all metadata");
 int main(int argc, char* argv[]) {
   absl::ParseCommandLine(argc, argv);
   const int manifest_entries = absl::GetFlag(FLAGS_manifest_entries);
+  const int manifest_entries_wide = absl::GetFlag(FLAGS_manifest_entries_wide);
   const int manifest_files = absl::GetFlag(FLAGS_manifest_files);
   const int schemas = absl::GetFlag(FLAGS_schemas);
   const int snapshots = absl::GetFlag(FLAGS_snapshots);
@@ -176,6 +193,7 @@ int main(int argc, char* argv[]) {
   }
 
   run_manifest_entries(fs, manifest_entries, config);
+  run_manifest_entries_wide(fs, manifest_entries_wide, config);
   run_manifest_files(fs, manifest_files, config);
   run_schemas(fs, schemas, config);
   run_snapshots(fs, snapshots, config);
