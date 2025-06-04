@@ -106,7 +106,7 @@ void run_manifest_entries(std::shared_ptr<arrow::fs::FileSystem> fs, const int t
 }
 
 void run_manifest_entries_wide(std::shared_ptr<arrow::fs::FileSystem> fs, const int times,
-                          const iceberg::ice_tea::GetScanMetadataConfig& config) {
+                               const iceberg::ice_tea::GetScanMetadataConfig& config) {
   for (int _ = 0; _ < times; ++_) {
     auto maybe_scan_metadata =
         iceberg::ice_tea::GetScanMetadata(fs,
