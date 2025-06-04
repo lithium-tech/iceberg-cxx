@@ -6,7 +6,11 @@ Now iceberg-cxx contains 4 different performance tests to check:
 
 ### Manifest Entries
 
-This is a test case where there is only 1 manifest file, which contains 10,000 manifest entries. Generated using pyspark
+This is a test case where there is only 1 manifest file, which contains 10,000 manifest entries with 2 columns in each file. Generated using pyspark
+
+### Manifest Entries (wide)
+
+This is a test case where there is only 1 manifest file, which contains 200 manifest entries with 51 columns in each file. Generated using pyspark
 
 ### Manifest Files
 
