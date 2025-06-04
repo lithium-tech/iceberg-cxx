@@ -10,9 +10,20 @@
 #include "iceberg/common/logger.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_reader.h"
+#include "parquet/statistics.h"
 #include "parquet/types.h"
 
 namespace iceberg {
+
+static bool Equals(parquet::ByteArray a, parquet::ByteArray b) {
+  if (a.len != b.len) {
+    return false;
+  }
+  if (a.ptr == b.ptr) {
+    return true;
+  }
+  return std::memcmp(a.ptr, b.ptr, a.len) == 0;
+};
 
 class PositionalDeleteStream::Reader {
  public:
@@ -49,20 +60,14 @@ class PositionalDeleteStream::Reader {
            std::make_tuple(std::string_view(other.current_file_path_), other.current_pos_);
   }
 
+  const parquet::RowGroupMetaData* current_row_group_metadata() const noexcept {
+    return current_rowgroup_reader_->metadata();
+  }
+
   /**
    * Advance to the next record.
    */
   bool Next() {
-    const auto compare_byte_array = [](parquet::ByteArray a, parquet::ByteArray b) {
-      if (a.len != b.len) {
-        return false;
-      }
-      if (a.ptr == b.ptr) {
-        return true;
-      }
-      return std::memcmp(a.ptr, b.ptr, a.len) == 0;
-    };
-
     while (true) {
       if (file_path_reader_ && file_path_reader_->HasNext()) {
         parquet::ByteArray file_path_value;
@@ -71,7 +76,7 @@ class PositionalDeleteStream::Reader {
         ReadValueNotNull(file_path_reader_, file_path_value);
         ReadValueNotNull(pos_reader_, pos);
 
-        if (!compare_byte_array(current_file_path_value_, file_path_value)) {
+        if (!Equals(current_file_path_value_, file_path_value)) {
           current_file_path_ = StringFromByteArray(file_path_value);
         }
         current_pos_ = pos;
@@ -83,19 +88,45 @@ class PositionalDeleteStream::Reader {
     }
   }
 
+  /**
+   * Advance to the first record in the next row group.
+   */
+  bool NextRowGroup() {
+    if (logger_ && current_row_group_ >= 0) {
+      logger_->Log(std::to_string(rows_in_prev_row_groups_ - current_pos_), "metrics:positional:rows_skipped");
+    }
+
+    if (!MakeGroupReader()) {
+      return false;
+    }
+    parquet::ByteArray file_path_value;
+    int64_t pos;
+
+    ReadValueNotNull(file_path_reader_, file_path_value);
+    ReadValueNotNull(pos_reader_, pos);
+
+    if (!Equals(current_file_path_value_, file_path_value)) {
+      current_file_path_ = StringFromByteArray(file_path_value);
+    }
+    current_pos_ = pos;
+    return true;
+  }
+
  private:
   bool MakeGroupReader() {
     current_file_path_value_ = parquet::ByteArray();
     file_path_reader_.reset();
     pos_reader_.reset();
 
-    if (next_row_group_ >= num_row_groups_) {
+    ++current_row_group_;
+    if (current_row_group_ >= num_row_groups_) {
       return false;
     }
 
-    auto row_group_reader = parquet_reader_->RowGroup(next_row_group_++);
-    auto column0 = row_group_reader->Column(0);
-    auto column1 = row_group_reader->Column(1);
+    current_rowgroup_reader_ = parquet_reader_->RowGroup(current_row_group_);
+    rows_in_prev_row_groups_ += current_rowgroup_reader_->metadata()->num_rows();
+    auto column0 = current_rowgroup_reader_->Column(0);
+    auto column1 = current_rowgroup_reader_->Column(1);
     // Validate type of the columns.
     if (column0->type() != parquet::Type::BYTE_ARRAY) {
       throw arrow::Status::ExecutionError("Unexpected column 0 type ", column0->type());
@@ -130,15 +161,45 @@ class PositionalDeleteStream::Reader {
   std::shared_ptr<parquet::ByteArrayReader> file_path_reader_;
   std::shared_ptr<parquet::Int64Reader> pos_reader_;
 
+  // we must keep a reference to the reader to avoid the reader being destroyed
+  std::shared_ptr<parquet::RowGroupReader> current_rowgroup_reader_;
+
   parquet::ByteArray current_file_path_value_;
   std::string current_file_path_;
-  int64_t current_pos_;
+  int64_t current_pos_{0};
   int num_row_groups_;
-  int next_row_group_{0};
+  int current_row_group_{-1};
+  int64_t rows_in_prev_row_groups_{0};
 
   const Layer layer_;
   std::shared_ptr<iceberg::ILogger> logger_;
 };
+
+bool PositionalDeleteStream::BasicRowGroupFilter::Skip(const std::string& path,
+                                                       const parquet::RowGroupMetaData* metadata, const Query& query) {
+  auto column_metadata0 = metadata->ColumnChunk(0);
+  auto column_metadata1 = metadata->ColumnChunk(1);
+  if (!column_metadata0->is_stats_set() || !column_metadata1->is_stats_set()) {
+    return false;
+  }
+  auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
+  auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
+
+  bool only_one_url = (str_stats->HasDistinctCount() && str_stats->distinct_count() == 1);
+  if (str_stats->HasMinMax()) {
+    auto min_value = parquet::ByteArrayToString(str_stats->min());
+    auto max_value = parquet::ByteArrayToString(str_stats->max());
+    if (min_value > query.url || max_value < query.url) {
+      return true;
+    }
+    only_one_url |= (str_stats->HasMinMax() && min_value == max_value);
+  }
+
+  if (!only_one_url || !int_stats->HasMinMax()) {
+    return false;
+  }
+  return query.url != path || int_stats->max() < query.begin;
+}
 
 bool PositionalDeleteStream::ReaderGreater::operator()(std::shared_ptr<Reader> lhs, std::shared_ptr<Reader> rhs) const {
   return rhs->is_less(*lhs);
@@ -147,8 +208,8 @@ bool PositionalDeleteStream::ReaderGreater::operator()(std::shared_ptr<Reader> l
 PositionalDeleteStream::PositionalDeleteStream(
     const std::map<Layer, std::vector<std::string>>& urls,
     const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
-    std::shared_ptr<iceberg::ILogger> logger)
-    : logger_(logger) {
+    std::shared_ptr<iceberg::ILogger> logger, std::unique_ptr<RowGroupFilter> filter)
+    : logger_(logger), filter_(std::move(filter)) {
   for (const auto& [layer, urls_for_layer] : urls) {
     for (const auto& url : urls_for_layer) {
       if (logger) {
@@ -164,8 +225,9 @@ PositionalDeleteStream::PositionalDeleteStream(
 }
 
 PositionalDeleteStream::PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> e, Layer layer,
-                                               std::shared_ptr<iceberg::ILogger> logger)
-    : logger_(logger) {
+                                               std::shared_ptr<iceberg::ILogger> logger,
+                                               std::unique_ptr<RowGroupFilter> filter)
+    : logger_(logger), filter_(std::move(filter)) {
   if (logger) {
     logger->Log(std::to_string(1), "metrics:positional:files_read");
   }
@@ -229,6 +291,16 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     logger_->Log(std::to_string(rows_read), "metrics:positional:rows_read");
   }
   return rows;
+}
+
+void PositionalDeleteStream::EnqueueOrDelete(bool cond, Reader* r) {
+  if (cond) {
+    queue_.push(r);
+  } else if (readers_.erase(r)) {
+    delete r;
+  } else {
+    assert(false);
+  }
 }
 
 }  // namespace iceberg
