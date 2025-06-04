@@ -32,6 +32,8 @@ class IcebergScanBuilder {
                                             std::shared_ptr<const IRowGroupFilter> rg_filter,
                                             const iceberg::Schema& schema, std::vector<int> field_ids_to_retrieve,
                                             std::shared_ptr<const IFileReaderProvider> file_reader_provider,
+                                            std::shared_ptr<PositionalDeleteStream::BasicRowGroupFilter> filter =
+                                                std::make_shared<PositionalDeleteStream::BasicRowGroupFilter>(),
                                             std::shared_ptr<ILogger> logger = nullptr) {
     Ensure(file_reader_provider != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
 
@@ -54,7 +56,7 @@ class IcebergScanBuilder {
 
     if (!positional_deletes.delete_entries.empty()) {
       stream = std::make_shared<PositionalDeleteApplier>(stream, std::move(positional_deletes), file_reader_provider,
-                                                         logger);
+                                                         filter, logger);
     }
 
     stream = MakeFinalProjection(*mapper, stream, field_ids_to_retrieve);

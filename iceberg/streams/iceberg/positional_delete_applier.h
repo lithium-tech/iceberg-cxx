@@ -40,10 +40,13 @@ class PositionalDeleteApplier : public IcebergStream {
  public:
   explicit PositionalDeleteApplier(IcebergStreamPtr input, PositionalDeletes pos_del_infos,
                                    std::shared_ptr<const IFileReaderProvider> file_reader_provider,
+                                   std::shared_ptr<PositionalDeleteStream::BasicRowGroupFilter> filter =
+                                       std::make_shared<PositionalDeleteStream::BasicRowGroupFilter>(),
                                    std::shared_ptr<ILogger> logger = nullptr)
       : input_(input),
         pos_del_infos_(std::move(pos_del_infos)),
         file_reader_provider_(file_reader_provider),
+        filter_(filter),
         logger_(logger) {
     Ensure(input_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": input is nullptr");
     Ensure(file_reader_provider_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
@@ -87,7 +90,7 @@ class PositionalDeleteApplier : public IcebergStream {
       };
 
       positional_delete_ = std::make_shared<PositionalDeleteStream>(pos_del_infos_.GetDeleteUrls(batch->GetPartition()),
-                                                                    open_file_lambda, logger_);
+                                                                    open_file_lambda, filter_, logger_);
     }
 
     if (positional_delete_) {
@@ -121,6 +124,7 @@ class PositionalDeleteApplier : public IcebergStream {
 
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::optional<PartitionLayerFilePosition> current_state_;
+  std::shared_ptr<PositionalDeleteStream::BasicRowGroupFilter> filter_;
   std::shared_ptr<ILogger> logger_;
 };
 
