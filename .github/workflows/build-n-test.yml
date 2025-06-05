@@ -36,6 +36,8 @@ jobs:
         cd _build/tests/
         ../iceberg/iceberg-cpp-test
         ../iceberg/common/fs/iceberg_common_fs_test
+        ../iceberg/filter/representation/filter_representation_ut
+        ../iceberg/filter/stats_filter/stats_filter_ut
         ./iceberg_local_test
 
   build-macos:
@@ -61,4 +63,6 @@ jobs:
         cd _build/tests/
         ../iceberg/iceberg-cpp-test
         ../iceberg/common/fs/iceberg_common_fs_test
+        ../iceberg/filter/representation/filter_representation_ut
+        ../iceberg/filter/stats_filter/stats_filter_ut
         ./iceberg_local_test

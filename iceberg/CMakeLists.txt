@@ -50,6 +50,7 @@ add_library(iceberg-cpp STATIC ${iceberg_cpp_files})
 
 add_subdirectory(common)
 add_subdirectory(equality_delete)
+add_subdirectory(filter)
 add_subdirectory(positional_delete)
 add_subdirectory(test_utils)
 add_subdirectory(streams)
