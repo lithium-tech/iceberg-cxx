@@ -1,24 +1,38 @@
 #pragma once
 
 #include <cstdint>
+#include <stdexcept>
+#include <utility>
+#include <variant>
 
-#include "hll.hpp"
+#include "stats/datasketch/distinct_hll.h"
+#include "stats/datasketch/distinct_naive.h"
+#include "stats/datasketch/distinct_theta.h"
 
 namespace stats {
 
-class HLLDistinctCounter {
-  static constexpr int32_t kDefaultLgK = 11;
-
+class GenericDistinctCounterSketch {
  public:
-  // sketch can hold 2^lg_config_k rows
-  explicit HLLDistinctCounter(int32_t lg_config_k = kDefaultLgK) : sketch_(lg_config_k) {}
+  using VariantType = std::variant<HLLDistinctCounter, ThetaDistinctCounter, NaiveDistinctCounter>;
 
-  void AppendValue(const int64_t value) { sketch_.update(value); }
-  void AppendValue(const void* data, uint64_t size) { sketch_.update(data, size); }
+  explicit GenericDistinctCounterSketch(const VariantType& other) : sketch_(other) {}
+  explicit GenericDistinctCounterSketch(VariantType&& other) : sketch_(std::move(other)) {}
 
-  uint64_t GetDistinctValuesCount() const { return sketch_.get_estimate(); }
+  void AppendValue(const int64_t value) {
+    std::visit([value](auto&& sketch) { sketch.AppendValue(value); }, sketch_);
+  }
+  void AppendValue(const void* data, uint64_t size) {
+    std::visit([data, size](auto&& sketch) { sketch.AppendValue(data, size); }, sketch_);
+  }
 
-  datasketches::hll_sketch sketch_;
+  uint64_t GetDistinctValuesCount() const {
+    return std::visit([](auto&& sketch) { return sketch.GetDistinctValuesCount(); }, sketch_);
+  }
+
+  const VariantType& GetSketch() const { return sketch_; }
+
+ private:
+  VariantType sketch_;
 };
 
 }  // namespace stats
