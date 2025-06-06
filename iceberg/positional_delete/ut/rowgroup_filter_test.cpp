@@ -64,8 +64,6 @@ void CreateRowGroupMetaData(RowGroupMetaDataBuilder* row_group_builder, const St
 
   CreateInt64ColumnChunkMeta(row_group_builder->NextColumnChunk(), int_stats);
 
-  row_group_builder->set_num_rows(1000);
-
   row_group_builder->Finish(4096);
 }
 
