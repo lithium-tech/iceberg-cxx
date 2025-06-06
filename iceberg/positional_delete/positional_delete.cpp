@@ -15,6 +15,16 @@
 
 namespace iceberg {
 
+static bool compare_byte_array(parquet::ByteArray a, parquet::ByteArray b) {
+  if (a.len != b.len) {
+    return false;
+  }
+  if (a.ptr == b.ptr) {
+    return true;
+  }
+  return std::memcmp(a.ptr, b.ptr, a.len) == 0;
+};
+
 class PositionalDeleteStream::Reader {
  public:
   explicit Reader(std::shared_ptr<parquet::arrow::FileReader> file_reader, Layer layer,
@@ -58,16 +68,6 @@ class PositionalDeleteStream::Reader {
    * Advance to the next record.
    */
   bool Next() {
-    const auto compare_byte_array = [](parquet::ByteArray a, parquet::ByteArray b) {
-      if (a.len != b.len) {
-        return false;
-      }
-      if (a.ptr == b.ptr) {
-        return true;
-      }
-      return std::memcmp(a.ptr, b.ptr, a.len) == 0;
-    };
-
     int64_t rows_read = 0;
 
     while (true) {
@@ -101,16 +101,6 @@ class PositionalDeleteStream::Reader {
    * Advance to the first record in the next row group.
    */
   bool NextRowGroup() {
-    const auto compare_byte_array = [](parquet::ByteArray a, parquet::ByteArray b) {
-      if (a.len != b.len) {
-        return false;
-      }
-      if (a.ptr == b.ptr) {
-        return true;
-      }
-      return std::memcmp(a.ptr, b.ptr, a.len) == 0;
-    };
-
     if (logger_ && current_row_group_ >= 0) {
       logger_->Log(std::to_string(rows_in_prev_row_groups_ - current_pos_), "metrics:positional:rows_skipped");
     }
@@ -200,14 +190,14 @@ bool PositionalDeleteStream::BasicRowGroupFilter::Skip(const std::string& path,
   if (!column_metadata0->is_stats_set() || !column_metadata1->is_stats_set()) {
     return false;
   }
-  auto stats0 = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
-  auto stats1 = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
-  bool only_one_url = (stats0->HasDistinctCount() && stats0->distinct_count() == 1);
-  only_one_url |= (stats0->HasMinMax() && stats0->min() == stats0->max());
-  if (!only_one_url || !stats1->HasMinMax()) {
+  auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
+  auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
+  bool only_one_url = (str_stats->HasDistinctCount() && str_stats->distinct_count() == 1);
+  only_one_url |= (str_stats->HasMinMax() && compare_byte_array(str_stats->min(), str_stats->max()));
+  if (!only_one_url || !int_stats->HasMinMax()) {
     return false;
   }
-  return query.url != path || stats1->max() < query.begin;
+  return query.url != path || int_stats->max() < query.begin;
 }
 
 bool PositionalDeleteStream::ReaderGreater::operator()(const Reader* lhs, const Reader* rhs) const {
