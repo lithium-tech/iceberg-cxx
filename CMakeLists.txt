@@ -15,6 +15,7 @@ option_v(ICECXX_BUILD_TOOLS "enable & build tools" ON)
 option_v(ICECXX_GENERATOR "enable & build generator" ON)
 option_v(ICECXX_USE_REST "enable rest catalog support" OFF)
 option_v(ICECXX_STATISTICS "enable datasketches based statistics" OFF)
+option_v(ICECXX_COMPUTE "enable compute based on Arrow.Compute" ON)
 # deps options
 option_v(ICECXX_BUILD_ARROW "build Apache Arrow (use system's one otherwise)" ON)
 option_v(ICECXX_BUILD_ABSEIL "build abseil (use system's one otherwise)" ON)
