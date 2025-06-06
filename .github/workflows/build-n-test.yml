@@ -38,6 +38,7 @@ jobs:
         ../iceberg/common/fs/iceberg_common_fs_test
         ../iceberg/filter/representation/filter_representation_ut
         ../iceberg/filter/stats_filter/stats_filter_ut
+        ../iceberg/streams/compute/ice_compute_ut
         ./iceberg_local_test
 
   build-macos:
@@ -65,4 +66,5 @@ jobs:
         ../iceberg/common/fs/iceberg_common_fs_test
         ../iceberg/filter/representation/filter_representation_ut
         ../iceberg/filter/stats_filter/stats_filter_ut
+        ../iceberg/streams/compute/ice_compute_ut
         ./iceberg_local_test

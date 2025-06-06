@@ -5,7 +5,7 @@
 #include "arrow/api.h"
 #include "arrow/compute/api.h"
 #include "arrow/compute/api_aggregate.h"
-#include "filter/representation/function.h"
+#include "iceberg/filter/representation/function.h"
 
 namespace iceberg::compute {
 

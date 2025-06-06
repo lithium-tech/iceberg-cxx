@@ -1,4 +1,4 @@
-#include "streams/compute/ssa_program.h"
+#include "iceberg/streams/compute/ssa_program.h"
 
 #include <algorithm>
 
@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "streams/compute/projection.h"
+#include "iceberg/streams/compute/projection.h"
 
 namespace {
 
@@ -41,7 +41,8 @@ std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2)
 
 namespace iceberg::compute {
 
-// TODO: kCastTimestamptz, kLower, kUpper, kLTrim, kRTrim, kBTrim, kExtractTimestamp, kDateTrunc, kDateDiff, kModuloWithChecks, kCbrt
+// TODO: kCastTimestamptz, kLower, kUpper, kLTrim, kRTrim, kBTrim, kExtractTimestamp, kDateTrunc, kDateDiff,
+// kModuloWithChecks, kCbrt
 const char* GetFunctionName(SsaOperation op) {
   switch (op) {
     case SsaOperation::kCastInt4:    // TODO: rename from PG-style to adequate kCastInt32
@@ -104,11 +105,9 @@ const char* GetFunctionName(SsaOperation op) {
     case SsaOperation::kLog10:
       return "log10";
 
-    // TODO: kILike, kNotLike, kNotILike, kLocate, kConcatenate, kSubstring
+    // TODO: kLike, kILike, kNotLike, kNotILike, kLocate, kConcatenate, kSubstring - depends on MatchSubstringOptions
     case SsaOperation::kCharLength:
       return "binary_length";
-    case SsaOperation::kLike:
-      return "match_like";
 
     case SsaOperation::kSign:
       return "sign";

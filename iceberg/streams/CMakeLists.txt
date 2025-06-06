@@ -1,7 +1,12 @@
+if(${ICECXX_COMPUTE})
+  add_subdirectory(compute)
+  set(ICE_COMPUTE ice_compute)
+endif()
+
 add_library(iceberg_streams INTERFACE)
 
 target_include_directories(iceberg_streams INTERFACE ${CMAKE_SOURCE_DIR})
-target_link_libraries(iceberg_streams INTERFACE Arrow::arrow_static Parquet::parquet_static iceberg iceberg_common iceberg_positional_delete iceberg_equality_delete)
+target_link_libraries(iceberg_streams INTERFACE Arrow::arrow_static Parquet::parquet_static iceberg iceberg_common iceberg_positional_delete iceberg_equality_delete ${ICE_COMPUTE})
 
 add_executable(iceberg_streams_ut
   # ut/builder_test.cpp # TODO(gmusya): cover
@@ -17,7 +22,7 @@ add_executable(iceberg_streams_ut
 
 target_link_libraries(iceberg_streams_ut PUBLIC iceberg_streams iceberg_test_utils gtest_main iceberg_common_fs ${CMAKE_DL_LIBS})
 
-if (NOT APPLE)
+if(NOT APPLE)
   target_link_options(iceberg_streams_ut PRIVATE "-Wl,--allow-multiple-definition")
 endif()
 
@@ -25,7 +30,6 @@ add_executable(iceberg_streams_cli main.cpp)
 
 target_link_libraries(iceberg_streams_cli PUBLIC iceberg_streams iceberg_common_fs ${CMAKE_DL_LIBS})
 
-if (NOT APPLE)
+if(NOT APPLE)
   target_link_options(iceberg_streams_cli PRIVATE "-Wl,--allow-multiple-definition")
 endif()
-
