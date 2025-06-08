@@ -34,7 +34,9 @@ FetchContent_Declare(
   thrift
   GIT_REPOSITORY ${GITHUB}/apache/thrift.git
   GIT_TAG df626d768a87fe07fef215b4dde831185e6929d7 # v0.19.0
-  PATCH_COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/thrift/CMakeLists.txt ./
+  PATCH_COMMAND git reset --hard HEAD
+    && git apply ${CMAKE_CURRENT_SOURCE_DIR}/thrift/thrift-no-uuid-to-string.patch
+    && cp ${CMAKE_CURRENT_SOURCE_DIR}/thrift/CMakeLists.txt ./
 )
 
 FetchContent_Declare(
