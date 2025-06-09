@@ -193,8 +193,17 @@ bool PositionalDeleteStream::BasicRowGroupFilter::Skip(const std::string& path,
   }
   auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
   auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
+
   bool only_one_url = (str_stats->HasDistinctCount() && str_stats->distinct_count() == 1);
-  only_one_url |= (str_stats->HasMinMax() && Equals(str_stats->min(), str_stats->max()));
+  if (str_stats->HasMinMax()) {
+    auto min_value = parquet::ByteArrayToString(str_stats->min());
+    auto max_value = parquet::ByteArrayToString(str_stats->max());
+    if (min_value > query.url || max_value < query.url) {
+      return true;
+    }
+    only_one_url |= (str_stats->HasMinMax() && min_value == max_value);
+  }
+
   if (!only_one_url || !int_stats->HasMinMax()) {
     return false;
   }

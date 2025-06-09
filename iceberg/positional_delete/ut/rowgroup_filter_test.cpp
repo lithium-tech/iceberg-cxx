@@ -129,6 +129,16 @@ TEST(RowGroupFilter, ManyPathsMinMax) {
   EXPECT_FALSE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}));
 }
 
+TEST(RowGroupFilter, PathOutOfRange) {
+  std::vector<Stats<std::string>> str_stats = {{true, "b", "c", std::nullopt}};
+  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2, std::nullopt}};
+
+  auto metadata = GetFileMetadata(str_stats, int_stats);
+  PositionalDeleteStream::BasicRowGroupFilter filter;
+  EXPECT_TRUE(filter.Skip("b", metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"a", 3, 5}));
+  EXPECT_TRUE(filter.Skip("c", metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"d", 3, 5}));
+}
+
 TEST(RowGroupFilter, NoMinMax) {
   const std::string path = "a";
 
