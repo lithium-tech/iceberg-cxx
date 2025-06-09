@@ -1,6 +1,7 @@
 #pragma once
 
-#include <optional>
+#include <stdexcept>
+#include <variant>
 
 #include "arrow/api.h"
 #include "arrow/compute/api.h"
@@ -12,58 +13,38 @@ namespace iceberg::compute {
 using SsaOperation = iceberg::filter::FunctionID;
 
 const char* GetFunctionName(SsaOperation op);
-std::optional<SsaOperation> ValidateOperation(SsaOperation op, uint32_t argsSize);
+bool IsOperationValid(SsaOperation op, size_t num_args);
+
+inline void ValidateOperation(SsaOperation op, size_t num_args) {
+  if (IsOperationValid(op, num_args)) {
+    throw std::runtime_error("Wrong arguments count for function");
+  }
+}
 
 class Assign {
  public:
-  Assign(const std::string& name_, SsaOperation op, std::vector<std::string>&& args)
-      : name(name_), operation(ValidateOperation(op, args.size())), arguments(std::move(args)), funcOpts(nullptr) {}
-
   Assign(const std::string& name_, SsaOperation op, std::vector<std::string>&& args,
-         std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
-      : name(name_), operation(ValidateOperation(op, args.size())), arguments(std::move(args)), funcOpts(funcOpts) {}
-
-  explicit Assign(const std::string& name_, bool value)
-      : name(name_), constant(std::make_shared<arrow::BooleanScalar>(value)), funcOpts(nullptr) {}
-
-  explicit Assign(const std::string& name_, int32_t value)
-      : name(name_), constant(std::make_shared<arrow::Int32Scalar>(value)), funcOpts(nullptr) {}
-
-  explicit Assign(const std::string& name_, uint32_t value)
-      : name(name_), constant(std::make_shared<arrow::UInt32Scalar>(value)), funcOpts(nullptr) {}
-
-  explicit Assign(const std::string& name_, int64_t value)
-      : name(name_), constant(std::make_shared<arrow::Int64Scalar>(value)), funcOpts(nullptr) {}
-
-  explicit Assign(const std::string& name_, uint64_t value)
-      : name(name_), constant(std::make_shared<arrow::UInt64Scalar>(value)), funcOpts(nullptr) {}
-
-  explicit Assign(const std::string& name_, float value)
-      : name(name_), constant(std::make_shared<arrow::FloatScalar>(value)), funcOpts(nullptr) {}
-
-  explicit Assign(const std::string& name_, double value)
-      : name(name_), constant(std::make_shared<arrow::DoubleScalar>(value)), funcOpts(nullptr) {}
-
-  explicit Assign(const std::string& name_, const std::string& value)
-      : name(name_), constant(std::make_shared<arrow::StringScalar>(value)), funcOpts(nullptr) {}
+         std::shared_ptr<arrow::compute::FunctionOptions> func_opts = {})
+      : name(name_), assignment(op), arguments(std::move(args)), func_opts(func_opts) {
+    ValidateOperation(op, arguments.size());
+  }
 
   Assign(const std::string& name_, const std::shared_ptr<arrow::Scalar>& value)
-      : name(name_), constant(value), funcOpts(nullptr) {}
+      : name(name_), assignment(value), func_opts(nullptr) {}
 
-  bool IsConstant() const { return constant.get(); }
-  bool IsOk() const { return operation.has_value() || constant; }
-  SsaOperation GetOperation() const { return *operation; }
+  bool IsConstant() const { return std::holds_alternative<std::shared_ptr<arrow::Scalar>>(assignment); }
+  bool IsOperation() const { return std::holds_alternative<SsaOperation>(assignment); }
+  SsaOperation GetOperation() const { return std::get<SsaOperation>(assignment); }
+  std::shared_ptr<arrow::Scalar> GetConstant() const { return std::get<std::shared_ptr<arrow::Scalar>>(assignment); }
   const std::vector<std::string>& GetArguments() const { return arguments; }
-  std::shared_ptr<arrow::Scalar> GetConstant() const { return constant; }
   const std::string& GetName() const { return name; }
-  const arrow::compute::FunctionOptions* GetFunctionOptions() const { return funcOpts.get(); }
+  const arrow::compute::FunctionOptions* GetFunctionOptions() const { return func_opts.get(); }
 
  private:
   std::string name;
-  std::shared_ptr<arrow::Scalar> constant;  // either constant or operation is set, not both of them
-  std::optional<SsaOperation> operation;
+  std::variant<std::shared_ptr<arrow::Scalar>, SsaOperation> assignment;
   std::vector<std::string> arguments;
-  std::shared_ptr<arrow::compute::FunctionOptions> funcOpts;
+  std::shared_ptr<arrow::compute::FunctionOptions> func_opts;
 };
 
 /// Group of commands that finishes with projection. Steps add locality for columns definition.

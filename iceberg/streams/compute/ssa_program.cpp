@@ -146,7 +146,7 @@ const char* GetFunctionName(SsaOperation op) {
   return "";
 }
 
-std::optional<SsaOperation> ValidateOperation(SsaOperation op, uint32_t argsSize) {
+bool IsOperationValid(SsaOperation op, size_t num_args) {
   switch (op) {
     case SsaOperation::kEqual:
     case SsaOperation::kNotEqual:
@@ -166,8 +166,9 @@ std::optional<SsaOperation> ValidateOperation(SsaOperation op, uint32_t argsSize
     case SsaOperation::kMultiplyWithoutChecks:
     case SsaOperation::kDivideWithoutChecks:
     case SsaOperation::kAtan2:
-      if (argsSize == 2) return op;
-      break;
+      if (num_args == 2) {
+        return true;
+      }
 
     case SsaOperation::kCastInt4:
     case SsaOperation::kCastInt8:
@@ -193,13 +194,14 @@ std::optional<SsaOperation> ValidateOperation(SsaOperation op, uint32_t argsSize
     case SsaOperation::kTanh:
     case SsaOperation::kAsin:
     case SsaOperation::kAcos:
-      if (argsSize == 1) return op;
-      break;
+      if (num_args == 1) {
+        return true;
+      }
 
     default:
       break;
   }
-  return {};
+  return false;
 }
 
 namespace {

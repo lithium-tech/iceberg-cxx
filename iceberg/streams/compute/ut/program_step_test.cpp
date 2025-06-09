@@ -358,7 +358,7 @@ TEST(ProgramStep, ScalarTest) {
   const std::string filter = "filter";
 
   auto step = std::make_shared<ProgramStep>();
-  step->assignes.emplace_back(Assign(y, 56));
+  step->assignes.emplace_back(Assign(y, std::make_shared<arrow::Int32Scalar>(56)));
   step->assignes.emplace_back(Assign(res, SsaOperation::kAddWithoutChecks, {x, y}));
   step->filters.emplace_back(filter);
   step->projection.emplace_back(filter);
