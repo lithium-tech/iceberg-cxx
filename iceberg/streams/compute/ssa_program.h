@@ -16,7 +16,7 @@ const char* GetFunctionName(SsaOperation op);
 bool IsOperationValid(SsaOperation op, size_t num_args);
 
 inline void ValidateOperation(SsaOperation op, size_t num_args) {
-  if (IsOperationValid(op, num_args)) {
+  if (!IsOperationValid(op, num_args)) {
     throw std::runtime_error("Wrong arguments count for function");
   }
 }
