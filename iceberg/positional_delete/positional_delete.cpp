@@ -15,7 +15,7 @@
 
 namespace iceberg {
 
-static bool compare_byte_array(parquet::ByteArray a, parquet::ByteArray b) {
+static bool Equals(parquet::ByteArray a, parquet::ByteArray b) {
   if (a.len != b.len) {
     return false;
   }
@@ -79,7 +79,7 @@ class PositionalDeleteStream::Reader {
         ReadValueNotNull(file_path_reader_, file_path_value);
         ReadValueNotNull(pos_reader_, pos);
 
-        if (!compare_byte_array(current_file_path_value_, file_path_value)) {
+        if (!Equals(current_file_path_value_, file_path_value)) {
           current_file_path_ = StringFromByteArray(file_path_value);
         }
         current_pos_ = pos;
@@ -114,7 +114,7 @@ class PositionalDeleteStream::Reader {
     ReadValueNotNull(file_path_reader_, file_path_value);
     ReadValueNotNull(pos_reader_, pos);
 
-    if (!compare_byte_array(current_file_path_value_, file_path_value)) {
+    if (!Equals(current_file_path_value_, file_path_value)) {
       current_file_path_ = StringFromByteArray(file_path_value);
     }
     current_pos_ = pos;
@@ -127,7 +127,8 @@ class PositionalDeleteStream::Reader {
     file_path_reader_.reset();
     pos_reader_.reset();
 
-    if (++current_row_group_ >= num_row_groups_) {
+    ++current_row_group_;
+    if (current_row_group_ >= num_row_groups_) {
       return false;
     }
 
@@ -193,7 +194,7 @@ bool PositionalDeleteStream::BasicRowGroupFilter::Skip(const std::string& path,
   auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
   auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
   bool only_one_url = (str_stats->HasDistinctCount() && str_stats->distinct_count() == 1);
-  only_one_url |= (str_stats->HasMinMax() && compare_byte_array(str_stats->min(), str_stats->max()));
+  only_one_url |= (str_stats->HasMinMax() && Equals(str_stats->min(), str_stats->max()));
   if (!only_one_url || !int_stats->HasMinMax()) {
     return false;
   }
@@ -207,8 +208,8 @@ bool PositionalDeleteStream::ReaderGreater::operator()(const Reader* lhs, const 
 PositionalDeleteStream::PositionalDeleteStream(
     const std::map<Layer, std::vector<std::string>>& urls,
     const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
-    std::shared_ptr<iceberg::ILogger> logger)
-    : logger_(logger) {
+    std::shared_ptr<iceberg::ILogger> logger, std::unique_ptr<RowGroupFilter> filter)
+    : logger_(logger), filter_(std::move(filter)) {
   readers_.reserve(urls.size());
 
   for (const auto& [layer, urls_for_layer] : urls) {
@@ -227,8 +228,9 @@ PositionalDeleteStream::PositionalDeleteStream(
 }
 
 PositionalDeleteStream::PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> e, Layer layer,
-                                               std::shared_ptr<iceberg::ILogger> logger)
-    : logger_(logger) {
+                                               std::shared_ptr<iceberg::ILogger> logger,
+                                               std::unique_ptr<RowGroupFilter> filter)
+    : logger_(logger), filter_(std::move(filter)) {
   if (logger) {
     logger->Log(std::to_string(1), "metrics:positional:files_read");
   }
@@ -261,8 +263,7 @@ void PositionalDeleteStream::Append(UrlDeleteRows& rows) {
   }
 }
 
-DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer,
-                                              std::unique_ptr<RowGroupFilter> filter) {
+DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer) {
   if (last_query_.has_value()) {
     if (std::tie(last_query_->url, last_query_->end) > std::tie(url, begin)) {
       throw std::runtime_error("PositionalDeleteStream::GetDeleted: internal error in tea.");
@@ -289,18 +290,30 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
       }
     }
     queue_.pop();
-    bool can_skip = filter->Skip(r->current_file_path(), r->current_row_group_metadata(), last_query_.value());
-
-    if ((can_skip && r->NextRowGroup()) || (!can_skip && r->Next())) {
-      queue_.push(r);
-    } else if (readers_.erase(r)) {
-      delete r;
+    bool can_skip = [&]() {
+      if (!filter_) {
+        return false;
+      }
+      return filter_->Skip(r->current_file_path(), r->current_row_group_metadata(), last_query_.value());
+    }();
+    if (can_skip) {
+      EnqueueOrDelete(r->NextRowGroup(), r);
     } else {
-      assert(false);
+      EnqueueOrDelete(r->Next(), r);
     }
   }
 
   return rows;
+}
+
+void PositionalDeleteStream::EnqueueOrDelete(bool cond, Reader* r) {
+  if (cond) {
+    queue_.push(r);
+  } else if (readers_.erase(r)) {
+    delete r;
+  } else {
+    assert(false);
+  }
 }
 
 }  // namespace iceberg

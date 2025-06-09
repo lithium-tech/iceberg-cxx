@@ -50,12 +50,14 @@ class PositionalDeleteStream {
 
   PositionalDeleteStream(const std::map<Layer, std::vector<std::string>>& urls,
                          const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
-                         std::shared_ptr<iceberg::ILogger> logger = nullptr);
+                         std::shared_ptr<iceberg::ILogger> logger = nullptr,
+                         std::unique_ptr<RowGroupFilter> filter = std::make_unique<BasicRowGroupFilter>());
 
   // used only for testing purposes. DO NOT USE IN PRODUCTION CODE
   // TODO(gmusya): remove this constructor
   explicit PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> file, Layer delete_layer,
-                                  std::shared_ptr<iceberg::ILogger> logger = nullptr);
+                                  std::shared_ptr<iceberg::ILogger> logger = nullptr,
+                                  std::unique_ptr<RowGroupFilter> filter = std::make_unique<BasicRowGroupFilter>());
 
   ~PositionalDeleteStream();
 
@@ -70,10 +72,11 @@ class PositionalDeleteStream {
    * @param begin beginning of the requested range
    * @param end end of the requeted range
    */
-  DeleteRows GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer_number,
-                        std::unique_ptr<RowGroupFilter> filter = std::make_unique<BasicRowGroupFilter>());
+  DeleteRows GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer_number);
 
  private:
+  void EnqueueOrDelete(bool cond, Reader* r);
+
   struct ReaderGreater {
     bool operator()(const Reader* lhs, const Reader* rhs) const;
   };
@@ -83,6 +86,7 @@ class PositionalDeleteStream {
   std::optional<Query> last_query_;
 
   std::shared_ptr<iceberg::ILogger> logger_;
+  std::unique_ptr<RowGroupFilter> filter_;
 };
 
 }  // namespace iceberg
