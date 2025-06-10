@@ -38,6 +38,7 @@ set (AVROCPP_SOURCE_FILES
     "${AVROCPP_SOURCE_DIR}/json/JsonDom.cc"
     "${AVROCPP_SOURCE_DIR}/Resolver.cc"
     "${AVROCPP_SOURCE_DIR}/Validator.cc"
+    "${AVROCPP_SOURCE_DIR}/CustomAttributes.cc"
     )
 
 add_library (_avrocpp ${AVROCPP_SOURCE_FILES})
@@ -46,6 +47,7 @@ set_target_properties (_avrocpp PROPERTIES VERSION ${AVRO_VERSION_MAJOR}.${AVRO_
 
 target_include_directories(_avrocpp SYSTEM PUBLIC ${AVROCPP_INCLUDE_DIR})
 
+target_compile_definitions(_avrocpp PUBLIC -DFMT_HEADER_ONLY)
 target_link_libraries (_avrocpp PRIVATE boost::headers_only boost::iostreams fmt::fmt-header-only)
 
 target_compile_definitions (_avrocpp PUBLIC SNAPPY_CODEC_AVAILABLE)
