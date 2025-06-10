@@ -937,22 +937,22 @@ Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserialize
   avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream));
   Manifest result;
 
-  // result.metadata = data_file_reader.metadata();
+  result.metadata = data_file_reader.metadata();
 
-  // result.metadata.erase("avro.schema");
-  // result.metadata.erase("avro.codec");
+  result.metadata.erase("avro.schema");
+  result.metadata.erase("avro.codec");
 
-  // if (!result.metadata.contains("schema-id") && result.metadata.contains("schema")) {
-  //   rapidjson::Document document;
-  //   const auto& schema = result.metadata["schema"];
-  //   std::string schema_str(schema.begin(), schema.end());
-  //   document.Parse(schema_str.c_str());
-  //   if (document.IsObject()) {
-  //     std::string schema_id_str = std::to_string(document["schema-id"].GetInt());
-  //     std::vector<uint8_t> schema_id_bytes(schema_id_str.begin(), schema_id_str.end());
-  //     result.metadata["schema-id"] = schema_id_bytes;
-  //   }
-  // }
+  if (!result.metadata.contains("schema-id") && result.metadata.contains("schema")) {
+    rapidjson::Document document;
+    const auto& schema = result.metadata["schema"];
+    std::string schema_str(schema.begin(), schema.end());
+    document.Parse(schema_str.c_str());
+    if (document.IsObject()) {
+      std::string schema_id_str = std::to_string(document["schema-id"].GetInt());
+      std::vector<uint8_t> schema_id_bytes(schema_id_str.begin(), schema_id_str.end());
+      result.metadata["schema-id"] = schema_id_bytes;
+    }
+  }
   ManifestEntryDeserializer deserializer(config);
   while (true) {
     avro::GenericDatum manifest_entry(data_file_reader.dataSchema());

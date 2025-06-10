@@ -24,8 +24,7 @@ FetchContent_Declare(
   GIT_REPOSITORY ${GITHUB}/apache/avro.git
   GIT_TAG 82a2bc8b034de34626e2ab8bf091234122474d50
   PATCH_COMMAND git reset --hard HEAD
-    # && git apply ${CMAKE_CURRENT_SOURCE_DIR}/avro/avro.patch
-    # && git apply ${CMAKE_CURRENT_SOURCE_DIR}/avro/avro_metadata.patch
+    && git apply ${CMAKE_CURRENT_SOURCE_DIR}/avro/avro_metadata.patch
     && cp ${CMAKE_CURRENT_SOURCE_DIR}/avro/CMakeLists.txt ./
 )
 
