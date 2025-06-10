@@ -14,6 +14,12 @@ endif()
 # Declare
 
 FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY ${GITHUB}/fmtlib/fmt.git
+  GIT_TAG e69e5f977d458f2650bb346dadf2ad30c5320281
+)
+
+FetchContent_Declare(
   avro
   GIT_REPOSITORY ${GITHUB}/apache/avro.git
   GIT_TAG 82a2bc8b034de34626e2ab8bf091234122474d50
@@ -227,6 +233,8 @@ if(ICECXX_BUILD_ARROW)
   add_library(Arrow::arrow_static ALIAS arrow_static)
   add_library(Parquet::parquet_static ALIAS parquet_static)
 endif()
+
+FetchContent_MakeAvailable(fmt)
 
 FetchContent_MakeAvailable(avro)
 
