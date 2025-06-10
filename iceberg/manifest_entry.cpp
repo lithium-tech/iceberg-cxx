@@ -977,7 +977,8 @@ std::string WriteManifestEntries(const Manifest& manifest, const std::vector<Par
   std::stringstream ss;
   auto ostream = avro::ostreamOutputStream(ss, bufferSize);
   avro::DataFileWriter<avro::GenericDatum> writer(std::move(ostream),
-                                                  avro::ValidSchema(MakeSchemaManifestEntry(partition_spec)));
+                                                  avro::ValidSchema(MakeSchemaManifestEntry(partition_spec)), 16 * 1024,
+                                                  avro::NULL_CODEC, manifest.metadata);
 
   for (auto& man_entry : manifest.entries) {
     writer.write(SerializeManifestEntry(partition_spec, man_entry));
