@@ -20,6 +20,7 @@ FetchContent_Declare(
   PATCH_COMMAND git reset --hard HEAD
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/avro/avro_metadata.patch
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/avro/avro_format.patch
+    && git apply ${CMAKE_CURRENT_SOURCE_DIR}/avro/avro_missing_cstring.patch
     && cp ${CMAKE_CURRENT_SOURCE_DIR}/avro/CMakeLists.txt ./
 )
 
