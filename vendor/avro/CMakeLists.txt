@@ -1,8 +1,8 @@
 set(AVROCPP_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lang/c++")
-set(AVROCPP_INCLUDE_DIR "${AVROCPP_ROOT_DIR}/api")
+set(AVROCPP_INCLUDE_DIR "${AVROCPP_ROOT_DIR}/include/avro")
 set(AVROCPP_SOURCE_DIR "${AVROCPP_ROOT_DIR}/impl")
 
-set (CMAKE_CXX_STANDARD 17)
+set (CMAKE_CXX_STANDARD 20)
 
 if (EXISTS "${AVROCPP_ROOT_DIR}/../../share/VERSION.txt")
     file(READ "${AVROCPP_ROOT_DIR}/../../share/VERSION.txt"
@@ -38,6 +38,7 @@ set (AVROCPP_SOURCE_FILES
     "${AVROCPP_SOURCE_DIR}/json/JsonDom.cc"
     "${AVROCPP_SOURCE_DIR}/Resolver.cc"
     "${AVROCPP_SOURCE_DIR}/Validator.cc"
+    "${AVROCPP_SOURCE_DIR}/CustomAttributes.cc"
     )
 
 add_library (_avrocpp ${AVROCPP_SOURCE_FILES})
@@ -56,7 +57,7 @@ target_link_libraries (_avrocpp PRIVATE snappy)
 set(AVRO_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/include")
 ADD_CUSTOM_TARGET(avro_symlink_headers ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory "${AVRO_INCLUDE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E create_symlink "${AVROCPP_ROOT_DIR}/api" "${AVRO_INCLUDE_DIR}/avro"
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${AVROCPP_ROOT_DIR}/include/avro" "${AVRO_INCLUDE_DIR}/avro"
 )
 add_dependencies(_avrocpp avro_symlink_headers)
 target_include_directories(_avrocpp SYSTEM BEFORE PUBLIC "${AVRO_INCLUDE_DIR}")

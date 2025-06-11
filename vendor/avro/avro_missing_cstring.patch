@@ -1,0 +1,24 @@
+diff --git a/lang/c++/include/avro/buffer/BufferReader.hh b/lang/c++/include/avro/buffer/BufferReader.hh
+index 39b23fa70..56bc4f680 100644
+--- a/lang/c++/include/avro/buffer/BufferReader.hh
++++ b/lang/c++/include/avro/buffer/BufferReader.hh
+@@ -20,6 +20,7 @@
+ #define avro_BufferReader_hh__
+ 
+ #include "Buffer.hh"
++#include <cstring>
+ #include <type_traits>
+ 
+ #ifdef min
+diff --git a/lang/c++/include/avro/buffer/detail/BufferDetail.hh b/lang/c++/include/avro/buffer/detail/BufferDetail.hh
+index 56e86c8a2..040eed212 100644
+--- a/lang/c++/include/avro/buffer/detail/BufferDetail.hh
++++ b/lang/c++/include/avro/buffer/detail/BufferDetail.hh
+@@ -23,6 +23,7 @@
+ #include <boost/asio/buffer.hpp>
+ #endif
+ #include <cassert>
++#include <cstring>
+ #include <deque>
+ #include <exception>
+ #include <functional>

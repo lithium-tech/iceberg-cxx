@@ -1,0 +1,69 @@
+diff --git a/lang/c++/include/avro/Exception.hh b/lang/c++/include/avro/Exception.hh
+index 234a1c930..b5e33519e 100644
+--- a/lang/c++/include/avro/Exception.hh
++++ b/lang/c++/include/avro/Exception.hh
+@@ -20,7 +20,7 @@
+ #define avro_Exception_hh__
+ 
+ #include "Config.hh"
+-#include <fmt/core.h>
++#include <format>
+ #include <stdexcept>
+ 
+ namespace avro {
+@@ -33,8 +33,8 @@ public:
+     explicit Exception(const std::string &msg) : std::runtime_error(msg) {}
+ 
+     template<typename... Args>
+-    Exception(fmt::format_string<Args...> fmt, Args &&...args)
+-        : std::runtime_error(fmt::format(fmt, std::forward<Args>(args)...)) {}
++    Exception(std::format_string<Args...> fmt, Args &&...args)
++        : std::runtime_error(std::format(fmt, std::forward<Args>(args)...)) {}
+ };
+ 
+ } // namespace avro
+diff --git a/lang/c++/include/avro/Node.hh b/lang/c++/include/avro/Node.hh
+index 7918c3302..bc02aa7e9 100644
+--- a/lang/c++/include/avro/Node.hh
++++ b/lang/c++/include/avro/Node.hh
+@@ -223,10 +223,10 @@ inline std::ostream &operator<<(std::ostream &os, const avro::Node &n) {
+ } // namespace std
+ 
+ template<>
+-struct fmt::formatter<avro::Name> : fmt::formatter<std::string> {
++struct std::formatter<avro::Name> : std::formatter<std::string> {
+     template<typename FormatContext>
+-    auto format(const avro::Name &n, FormatContext &ctx) {
+-        return fmt::formatter<std::string>::format(n.fullname(), ctx);
++    auto format(const avro::Name &n, FormatContext &ctx) const {
++        return std::formatter<std::string>::format(n.fullname(), ctx);
+     }
+ };
+ 
+diff --git a/lang/c++/include/avro/Types.hh b/lang/c++/include/avro/Types.hh
+index 84a33976e..666413083 100644
+--- a/lang/c++/include/avro/Types.hh
++++ b/lang/c++/include/avro/Types.hh
+@@ -19,7 +19,7 @@
+ #ifndef avro_Types_hh__
+ #define avro_Types_hh__
+ 
+-#include <fmt/format.h>
++#include <format>
+ #include <iostream>
+ 
+ #include "Config.hh"
+@@ -111,10 +111,10 @@ std::ostream &operator<<(std::ostream &os, const Null &null);
+ } // namespace avro
+ 
+ template<>
+-struct fmt::formatter<avro::Type> : fmt::formatter<std::string> {
++struct std::formatter<avro::Type> : std::formatter<std::string> {
+     template<typename FormatContext>
+-    auto format(avro::Type t, FormatContext &ctx) {
+-        return fmt::formatter<std::string>::format(avro::toString(t), ctx);
++    auto format(avro::Type t, FormatContext &ctx) const {
++        return std::formatter<std::string>::format(avro::toString(t), ctx);
+     }
+ };
+ 
