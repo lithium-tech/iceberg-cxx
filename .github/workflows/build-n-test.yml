@@ -51,10 +51,15 @@ jobs:
         git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
         cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
         ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+    - name: run rest
+      run: |
+        bash tests/rest/setup/init_nessie.sh
+        cat nessie.log
+        python3 tests/rest/setup/upload_table.py
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja ../
+        cmake -GNinja -DICECXX_USE_REST=ON ../
     - name: make
       run: |
         cd _build

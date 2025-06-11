@@ -1,7 +1,7 @@
 import pynessie
 
 client = pynessie.init(config_dict={
-                'endpoint': 'http://0.0.0.0:19120/api/v1',
+                'endpoint': 'http://127.0.0.1:19120/api/v1',
                 'verify': True,
                 'default_branch': 'main',
             })
