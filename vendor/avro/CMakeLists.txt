@@ -47,12 +47,11 @@ set_target_properties (_avrocpp PROPERTIES VERSION ${AVRO_VERSION_MAJOR}.${AVRO_
 
 target_include_directories(_avrocpp SYSTEM PUBLIC ${AVROCPP_INCLUDE_DIR})
 
-target_compile_definitions(_avrocpp PUBLIC -DFMT_HEADER_ONLY)
-target_link_libraries (_avrocpp PRIVATE boost::headers_only boost::iostreams fmt::fmt-header-only)
+target_link_libraries (_avrocpp PRIVATE boost::headers_only boost::iostreams)
 
 target_compile_definitions (_avrocpp PUBLIC SNAPPY_CODEC_AVAILABLE)
 target_include_directories (_avrocpp PRIVATE ${SNAPPY_INCLUDE_DIR})
-target_link_libraries (_avrocpp PRIVATE snappy fmt::fmt-header-only)
+target_link_libraries (_avrocpp PRIVATE snappy)
 
 # create a symlink to include headers with <avro/...>
 set(AVRO_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/include")
