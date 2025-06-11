@@ -24,7 +24,6 @@ jobs:
         cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
         ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
         pip3 install --upgrade pynessie "marshmallow<4" flask
-        wget https://github.com/projectnessie/nessie/releases/download/nessie-0.104.1/nessie-quarkus-0.104.1-runner.jar
     - name: run rest
       run: |
         bash tests/rest/setup/init_nessie.sh
@@ -56,7 +55,6 @@ jobs:
         cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
         ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
         pip3 install --upgrade --break-system-packages pynessie "marshmallow<4" flask
-        wget https://github.com/projectnessie/nessie/releases/download/nessie-0.104.1/nessie-quarkus-0.104.1-runner.jar
     - name: run rest
       run: |
         bash tests/rest/setup/init_nessie.sh
