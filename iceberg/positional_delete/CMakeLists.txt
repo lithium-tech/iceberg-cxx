@@ -5,7 +5,7 @@ add_library(iceberg_positional_delete STATIC
 
 set_target_properties(iceberg_positional_delete PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(iceberg_positional_delete PUBLIC ${CMAKE_SOURCE_DIR})
-target_link_libraries(iceberg_positional_delete PUBLIC Arrow::arrow_static Parquet::parquet_static absl::base)
+target_link_libraries(iceberg_positional_delete PUBLIC Arrow::arrow_static Parquet::parquet_static)
 
 add_executable(iceberg_positional_delete_test
   ut/positional_delete_test.cpp

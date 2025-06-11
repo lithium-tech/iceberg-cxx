@@ -149,7 +149,7 @@ class PositionalDeleteStream::Reader {
   std::shared_ptr<iceberg::ILogger> logger_;
 };
 
-bool PositionalDeleteStream::ReaderGreater::operator()(const Reader* lhs, const Reader* rhs) const {
+bool PositionalDeleteStream::ReaderGreater::operator()(std::shared_ptr<Reader> lhs, std::shared_ptr<Reader> rhs) const {
   return rhs->is_less(*lhs);
 }
 
@@ -158,18 +158,15 @@ PositionalDeleteStream::PositionalDeleteStream(
     const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
     std::shared_ptr<iceberg::ILogger> logger)
     : logger_(logger) {
-  readers_.reserve(urls.size());
-
   for (const auto& [layer, urls_for_layer] : urls) {
     for (const auto& url : urls_for_layer) {
       if (logger) {
         logger->Log(std::to_string(1), "metrics:positional:files_read");
       }
-      auto reader = std::make_unique<Reader>(cb(url), layer, logger);
+      auto reader = std::make_shared<Reader>(cb(url), layer, logger);
 
       if (reader->Next()) {
-        queue_.push(reader.get());
-        readers_.insert(reader.release());
+        queue_.push(reader);
       }
     }
   }
@@ -181,17 +178,10 @@ PositionalDeleteStream::PositionalDeleteStream(std::unique_ptr<parquet::arrow::F
   if (logger) {
     logger->Log(std::to_string(1), "metrics:positional:files_read");
   }
-  auto reader = std::make_unique<Reader>(std::move(e), layer, logger);
+  auto reader = std::make_shared<Reader>(std::move(e), layer, logger);
 
   if (reader->Next()) {
-    queue_.push(reader.get());
-    readers_.insert(reader.release());
-  }
-}
-
-PositionalDeleteStream::~PositionalDeleteStream() {
-  for (auto r : readers_) {
-    delete r;
+    queue_.push(reader);
   }
 }
 
@@ -237,20 +227,12 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
       }
     }
     queue_.pop();
-    EnqueueOrDelete(r);
+    if (r->Next()) {
+      queue_.push(r);
+    }
   }
 
   return rows;
-}
-
-void PositionalDeleteStream::EnqueueOrDelete(Reader* r) {
-  if (r->Next()) {
-    queue_.push(r);
-  } else if (readers_.erase(r)) {
-    delete r;
-  } else {
-    assert(false);
-  }
 }
 
 }  // namespace iceberg
