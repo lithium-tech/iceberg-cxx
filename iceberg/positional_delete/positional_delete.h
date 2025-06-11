@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "absl/container/flat_hash_set.h"
 #include "parquet/arrow/reader.h"
 
 namespace iceberg {
@@ -40,8 +39,6 @@ class PositionalDeleteStream {
   explicit PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> file, Layer delete_layer,
                                   std::shared_ptr<iceberg::ILogger> logger = nullptr);
 
-  ~PositionalDeleteStream();
-
   // used only for testing purposes. DO NOT USE IN PRODUCTION CODE
   // TODO(gmusya): remove this method
   void Append(UrlDeleteRows& rows);
@@ -56,11 +53,8 @@ class PositionalDeleteStream {
   DeleteRows GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer_number);
 
  private:
-  void EnqueueOrDelete(Reader*);
-
- private:
   struct ReaderGreater {
-    bool operator()(const Reader* lhs, const Reader* rhs) const;
+    bool operator()(std::shared_ptr<Reader> lhs, std::shared_ptr<Reader> rhs) const;
   };
 
   struct Query {
@@ -69,8 +63,7 @@ class PositionalDeleteStream {
     int64_t end;
   };
 
-  absl::flat_hash_set<Reader*> readers_;
-  std::priority_queue<Reader*, std::vector<Reader*>, ReaderGreater> queue_;
+  std::priority_queue<std::shared_ptr<Reader>, std::vector<std::shared_ptr<Reader>>, ReaderGreater> queue_;
   std::optional<Query> last_query_;
 
   std::shared_ptr<iceberg::ILogger> logger_;
