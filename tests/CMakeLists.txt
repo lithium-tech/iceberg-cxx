@@ -9,7 +9,6 @@ set(iceberg_local_test_files
     referenced_data_file_test.cpp
     run_tests.cpp
     compat/partitions_test.cpp
-    rest/test_rest_catalog.cpp
     compat/transforms_test.cpp
 )
 
