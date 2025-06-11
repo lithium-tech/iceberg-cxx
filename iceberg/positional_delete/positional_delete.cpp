@@ -68,7 +68,6 @@ class PositionalDeleteStream::Reader {
         parquet::ByteArray file_path_value;
         int64_t pos;
 
-        ++rows_read_;
         ReadValueNotNull(file_path_reader_, file_path_value);
         ReadValueNotNull(pos_reader_, pos);
 
@@ -77,9 +76,6 @@ class PositionalDeleteStream::Reader {
         }
         current_pos_ = pos;
         return true;
-      }
-      if (logger_ && next_row_group_ > 0) {
-        logger_->Log(std::to_string(rows_read_), "metrics:positional:rows_read");
       }
       if (!MakeGroupReader()) {
         return false;
@@ -92,7 +88,6 @@ class PositionalDeleteStream::Reader {
     current_file_path_value_ = parquet::ByteArray();
     file_path_reader_.reset();
     pos_reader_.reset();
-    rows_read_ = 0;
 
     if (next_row_group_ >= num_row_groups_) {
       return false;
@@ -138,7 +133,6 @@ class PositionalDeleteStream::Reader {
   parquet::ByteArray current_file_path_value_;
   std::string current_file_path_;
   int64_t current_pos_;
-  int64_t rows_read_{0};
   int num_row_groups_;
   int next_row_group_{0};
 
@@ -206,6 +200,7 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
   last_query_ = Query{.url = url, .begin = begin, .end = end};
 
   DeleteRows rows;
+  int64_t rows_read = 0;
 
   while (!queue_.empty()) {
     const auto r = queue_.top();
@@ -227,8 +222,12 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     if (r->Next()) {
       queue_.push(r);
     }
+    ++rows_read;
   }
 
+  if (logger_) {
+    logger_->Log(std::to_string(rows_read), "metrics:positional:rows_read");
+  }
   return rows;
 }
 
