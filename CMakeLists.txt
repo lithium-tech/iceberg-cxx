@@ -18,7 +18,10 @@ option_v(ICECXX_STATISTICS "enable datasketches based statistics" OFF)
 option_v(ICECXX_COMPUTE "enable compute based on Arrow.Compute" ON)
 # deps options
 option_v(ICECXX_BUILD_ARROW "build Apache Arrow (use system's one otherwise)" ON)
+option_v(ICECXX_BUILD_THRIFT "build Apache Thrift (use system's one otherwise)" ON)
 option_v(ICECXX_BUILD_ABSEIL "build abseil (use system's one otherwise)" ON)
+option_v(ICECXX_BUILD_BOOST "build Boost (use system's one otherwise)" ON)
+option_v(ICECXX_BUILD_SNAPPY "build Snappy (use system's one otherwise)" ON)
 option_v(ICECXX_USE_SMHASHER "use MurmurHash3 from SMHasher" ON)
 
 set(CMAKE_CXX_STANDARD 20)

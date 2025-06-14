@@ -47,7 +47,12 @@ set_target_properties (_avrocpp PROPERTIES VERSION ${AVRO_VERSION_MAJOR}.${AVRO_
 
 target_include_directories(_avrocpp SYSTEM PUBLIC ${AVROCPP_INCLUDE_DIR})
 
-target_link_libraries (_avrocpp PRIVATE boost::headers_only boost::iostreams)
+if(ICECXX_BUILD_BOOST)
+    target_link_libraries (_avrocpp PRIVATE boost::headers_only boost::iostreams)
+else()
+    find_package(Boost REQUIRED CONFIG COMPONENTS iostreams)
+    target_link_libraries (_avrocpp PRIVATE Boost::iostreams)
+endif()
 
 target_compile_definitions (_avrocpp PUBLIC SNAPPY_CODEC_AVAILABLE)
 target_include_directories (_avrocpp PRIVATE ${SNAPPY_INCLUDE_DIR})
