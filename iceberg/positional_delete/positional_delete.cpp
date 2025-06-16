@@ -63,14 +63,11 @@ class PositionalDeleteStream::Reader {
       return std::memcmp(a.ptr, b.ptr, a.len) == 0;
     };
 
-    int64_t rows_read = 0;
-
     while (true) {
       if (file_path_reader_ && file_path_reader_->HasNext()) {
         parquet::ByteArray file_path_value;
         int64_t pos;
 
-        ++rows_read;
         ReadValueNotNull(file_path_reader_, file_path_value);
         ReadValueNotNull(pos_reader_, pos);
 
@@ -78,15 +75,9 @@ class PositionalDeleteStream::Reader {
           current_file_path_ = StringFromByteArray(file_path_value);
         }
         current_pos_ = pos;
-        if (logger_) {
-          logger_->Log(std::to_string(rows_read), "metrics:positional:rows_read");
-        }
         return true;
       }
       if (!MakeGroupReader()) {
-        if (logger_) {
-          logger_->Log(std::to_string(rows_read), "metrics:positional:rows_read");
-        }
         return false;
       }
     }
@@ -209,6 +200,7 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
   last_query_ = Query{.url = url, .begin = begin, .end = end};
 
   DeleteRows rows;
+  int64_t rows_read = 0;
 
   while (!queue_.empty()) {
     const auto r = queue_.top();
@@ -230,8 +222,12 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     if (r->Next()) {
       queue_.push(r);
     }
+    ++rows_read;
   }
 
+  if (logger_) {
+    logger_->Log(std::to_string(rows_read), "metrics:positional:rows_read");
+  }
   return rows;
 }
 
