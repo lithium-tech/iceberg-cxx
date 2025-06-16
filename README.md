@@ -83,7 +83,7 @@ Not implemented
 | Append data               | 1,2 | +   | +   | +   | +   | +   |
 | Write position deletes    |   2 | -   | +   | -   | -   | -   |
 | Write equality deletes    |   2 | -   | +   | -   | -   | -   |
-| Write deletion vectors    |   2 | +   | +   | -   | -   | -   |
+| Write deletion vectors    |   3 | +   | +   | -   | -   | -   |
 
 ### Catalog
 
