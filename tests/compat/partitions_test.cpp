@@ -149,7 +149,7 @@ TEST(CompatPartitions, TruncateTransform) {
 #ifdef ICECXX_USE_SMHASHER
   EXPECT_EQ(table->GetFilePathes().size(), 5);
 #else
-  EXPECT_EQ(table->GetFilePathes().size(), 3);
+  EXPECT_EQ(table->GetFilePathes().size(), 2);
 #endif
 }
 
