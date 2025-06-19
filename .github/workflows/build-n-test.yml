@@ -26,7 +26,7 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja ../
+        cmake -GNinja -DICECXX_STATISTICS=ON -DICECXX_USE_SMHASHER=OFF ../
     - name: make
       run: |
         cd _build
@@ -59,7 +59,7 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja -DICECXX_USE_REST=ON ../
+        cmake -GNinja -DICECXX_USE_REST=ON -DICECXX_STATISTICS=ON -DICECXX_USE_SMHASHER=OFF ../
     - name: make
       run: |
         cd _build
