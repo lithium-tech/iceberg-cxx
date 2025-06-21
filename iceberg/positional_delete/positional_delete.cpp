@@ -87,10 +87,9 @@ class PositionalDeleteStream::Reader {
    * State RowGroup, so Next() will advance to the first record in the next RowGroup.
    */
   bool NextRowGroup() {
-    // TODO (a.l.cherniy): Fix Logging
-    /*if (logger_ && current_row_group_ >= 0) {
-      logger_->Log(std::to_string(rows_in_prev_row_groups_ - current_pos_), "metrics:positional:rows_skipped");
-    }*/
+    if (logger_ && current_row_group_ >= 0) {
+      logger_->Log(std::to_string(current_row_group_metadata()->num_rows()), "metrics:positional:rows_skipped");
+    }
 
     if (!MakeGroupReader()) {
       return false;
@@ -110,7 +109,6 @@ class PositionalDeleteStream::Reader {
     }
 
     current_rowgroup_reader_ = parquet_reader_->RowGroup(current_row_group_);
-    rows_in_prev_row_groups_ += current_rowgroup_reader_->metadata()->num_rows();
     auto column0 = current_rowgroup_reader_->Column(0);
     auto column1 = current_rowgroup_reader_->Column(1);
     // Validate type of the columns.
@@ -157,7 +155,6 @@ class PositionalDeleteStream::Reader {
   int64_t current_pos_{0};
   int num_row_groups_;
   int current_row_group_{-1};
-  int64_t rows_in_prev_row_groups_{0};
 
   const Layer layer_;
   std::shared_ptr<iceberg::ILogger> logger_;
@@ -338,7 +335,7 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     }
     queue_.pop();
     if (r->Next()) {
-      queue_.push(ReaderHolder(r));
+      queue_.push(holder);
     }
     ++rows_read;
   }
