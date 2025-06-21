@@ -208,8 +208,8 @@ bool PositionalDeleteStream::ReaderGreater::operator()(std::shared_ptr<Reader> l
 PositionalDeleteStream::PositionalDeleteStream(
     const std::map<Layer, std::vector<std::string>>& urls,
     const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
-    std::shared_ptr<iceberg::ILogger> logger, std::unique_ptr<RowGroupFilter> filter)
-    : logger_(logger), filter_(std::move(filter)) {
+    std::shared_ptr<RowGroupFilter> filter, std::shared_ptr<iceberg::ILogger> logger)
+    : filter_(filter), logger_(logger) {
   for (const auto& [layer, urls_for_layer] : urls) {
     for (const auto& url : urls_for_layer) {
       if (logger) {
@@ -225,9 +225,9 @@ PositionalDeleteStream::PositionalDeleteStream(
 }
 
 PositionalDeleteStream::PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> e, Layer layer,
-                                               std::shared_ptr<iceberg::ILogger> logger,
-                                               std::unique_ptr<RowGroupFilter> filter)
-    : logger_(logger), filter_(std::move(filter)) {
+                                               std::shared_ptr<RowGroupFilter> filter,
+                                               std::shared_ptr<iceberg::ILogger> logger)
+    : filter_(filter), logger_(logger) {
   if (logger) {
     logger->Log(std::to_string(1), "metrics:positional:files_read");
   }
@@ -291,16 +291,6 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     logger_->Log(std::to_string(rows_read), "metrics:positional:rows_read");
   }
   return rows;
-}
-
-void PositionalDeleteStream::EnqueueOrDelete(bool cond, Reader* r) {
-  if (cond) {
-    queue_.push(r);
-  } else if (readers_.erase(r)) {
-    delete r;
-  } else {
-    assert(false);
-  }
 }
 
 }  // namespace iceberg
