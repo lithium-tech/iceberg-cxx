@@ -26,6 +26,19 @@ using UrlDeleteRows = std::map<std::string, DeleteRows>;
  */
 class PositionalDeleteStream {
   class Reader;
+  class ReaderHolder {
+   public:
+    explicit ReaderHolder(std::shared_ptr<Reader> reader);
+
+    std::shared_ptr<Reader> GetReader() const;
+
+    std::pair<std::string, int64_t> GetPosition() const;
+
+    bool IsStarted() const;
+
+   private:
+    std::shared_ptr<Reader> reader_;
+  };
 
  public:
   struct Query {
@@ -35,16 +48,21 @@ class PositionalDeleteStream {
   };
   class RowGroupFilter {
    public:
+    enum class Result {
+      kLess,
+      kInter,
+      kGreater,
+    };
+
     virtual ~RowGroupFilter() = default;
-    virtual bool Skip(const std::string& path, const parquet::RowGroupMetaData* metadata, const Query& query) = 0;
+    virtual Result State(const parquet::RowGroupMetaData* metadata, const Query& query) = 0;
   };
 
   class BasicRowGroupFilter : public RowGroupFilter {
    public:
-    bool Skip(const std::string& path, const parquet::RowGroupMetaData* metadata, const Query& query) override;
+    Result State(const parquet::RowGroupMetaData* metadata, const Query& query) override;
   };
 
- public:
   using Layer = int;
 
   PositionalDeleteStream(const std::map<Layer, std::vector<std::string>>& urls,
@@ -71,11 +89,12 @@ class PositionalDeleteStream {
    */
   DeleteRows GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer_number);
 
-  struct ReaderGreater {
-    bool operator()(std::shared_ptr<Reader> lhs, std::shared_ptr<Reader> rhs) const;
+ private:
+  struct ReaderHolderGreater {
+    bool operator()(const ReaderHolder& lhs, const ReaderHolder& rhs) const;
   };
 
-  std::priority_queue<std::shared_ptr<Reader>, std::vector<std::shared_ptr<Reader>>, ReaderGreater> queue_;
+  std::priority_queue<ReaderHolder, std::vector<ReaderHolder>, ReaderHolderGreater> queue_;
   std::optional<Query> last_query_;
 
   std::shared_ptr<iceberg::ILogger> logger_;

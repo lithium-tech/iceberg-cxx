@@ -40,7 +40,8 @@ class PositionalDeleteApplier : public IcebergStream {
  public:
   explicit PositionalDeleteApplier(IcebergStreamPtr input, PositionalDeletes pos_del_infos,
                                    std::shared_ptr<const IFileReaderProvider> file_reader_provider,
-                                   std::shared_ptr<PositionalDeleteStream::BasicRowGroupFilter> filter = std::make_shared<PositionalDeleteStream::BasicRowGroupFilter>(),
+                                   std::shared_ptr<PositionalDeleteStream::BasicRowGroupFilter> filter =
+                                       std::make_shared<PositionalDeleteStream::BasicRowGroupFilter>(),
                                    std::shared_ptr<ILogger> logger = nullptr)
       : input_(input),
         pos_del_infos_(std::move(pos_del_infos)),

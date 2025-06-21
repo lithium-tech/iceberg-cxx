@@ -55,11 +55,6 @@ class PositionalDeleteStream::Reader {
 
   Layer layer() const noexcept { return layer_; }
 
-  bool is_less(const Reader& other) const noexcept {
-    return std::make_tuple(std::string_view(current_file_path_), current_pos_) <
-           std::make_tuple(std::string_view(other.current_file_path_), other.current_pos_);
-  }
-
   const parquet::RowGroupMetaData* current_row_group_metadata() const noexcept {
     return current_rowgroup_reader_->metadata();
   }
@@ -89,26 +84,17 @@ class PositionalDeleteStream::Reader {
   }
 
   /**
-   * Advance to the first record in the next row group.
+   * State RowGroup, so Next() will advance to the first record in the next RowGroup.
    */
   bool NextRowGroup() {
-    if (logger_ && current_row_group_ >= 0) {
+    // TODO (a.l.cherniy): Fix Logging
+    /*if (logger_ && current_row_group_ >= 0) {
       logger_->Log(std::to_string(rows_in_prev_row_groups_ - current_pos_), "metrics:positional:rows_skipped");
-    }
+    }*/
 
     if (!MakeGroupReader()) {
       return false;
     }
-    parquet::ByteArray file_path_value;
-    int64_t pos;
-
-    ReadValueNotNull(file_path_reader_, file_path_value);
-    ReadValueNotNull(pos_reader_, pos);
-
-    if (!Equals(current_file_path_value_, file_path_value)) {
-      current_file_path_ = StringFromByteArray(file_path_value);
-    }
-    current_pos_ = pos;
     return true;
   }
 
@@ -137,6 +123,8 @@ class PositionalDeleteStream::Reader {
 
     file_path_reader_ = std::static_pointer_cast<parquet::ByteArrayReader>(column0);
     pos_reader_ = std::static_pointer_cast<parquet::Int64Reader>(column1);
+    current_pos_ = -1;
+    current_file_path_ = "";
 
     return true;
   }
@@ -175,34 +163,74 @@ class PositionalDeleteStream::Reader {
   std::shared_ptr<iceberg::ILogger> logger_;
 };
 
-bool PositionalDeleteStream::BasicRowGroupFilter::Skip(const std::string& path,
-                                                       const parquet::RowGroupMetaData* metadata, const Query& query) {
-  auto column_metadata0 = metadata->ColumnChunk(0);
-  auto column_metadata1 = metadata->ColumnChunk(1);
+std::shared_ptr<PositionalDeleteStream::Reader> PositionalDeleteStream::ReaderHolder::GetReader() const {
+  return reader_;
+}
+
+PositionalDeleteStream::ReaderHolder::ReaderHolder(std::shared_ptr<PositionalDeleteStream::Reader> reader)
+    : reader_(reader) {}
+
+std::pair<std::string, int64_t> PositionalDeleteStream::ReaderHolder::GetPosition() const {
+  std::pair<std::string, int64_t> res(reader_->current_file_path(), reader_->current_pos());
+  if (res.second >= 0) {
+    return res;
+  }
+
+  auto column_metadata0 = reader_->current_row_group_metadata()->ColumnChunk(0);
+  auto column_metadata1 = reader_->current_row_group_metadata()->ColumnChunk(1);
   if (!column_metadata0->is_stats_set() || !column_metadata1->is_stats_set()) {
-    return false;
+    return res;
   }
   auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
   auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
-
-  bool only_one_url = (str_stats->HasDistinctCount() && str_stats->distinct_count() == 1);
-  if (str_stats->HasMinMax()) {
-    auto min_value = parquet::ByteArrayToString(str_stats->min());
-    auto max_value = parquet::ByteArrayToString(str_stats->max());
-    if (min_value > query.url || max_value < query.url) {
-      return true;
-    }
-    only_one_url |= (str_stats->HasMinMax() && min_value == max_value);
+  if (!str_stats->HasMinMax()) {
+    return res;
   }
+  res.first = parquet::ByteArrayToString(str_stats->min());
 
-  if (!only_one_url || !int_stats->HasMinMax()) {
-    return false;
+  if (int_stats->HasMinMax()) {
+    res.second = int_stats->min();
   }
-  return query.url != path || int_stats->max() < query.begin;
+  return res;
 }
 
-bool PositionalDeleteStream::ReaderGreater::operator()(std::shared_ptr<Reader> lhs, std::shared_ptr<Reader> rhs) const {
-  return rhs->is_less(*lhs);
+bool PositionalDeleteStream::ReaderHolder::IsStarted() const { return reader_->current_pos() >= 0; }
+
+PositionalDeleteStream::BasicRowGroupFilter::Result PositionalDeleteStream::BasicRowGroupFilter::State(
+    const parquet::RowGroupMetaData* metadata, const Query& query) {
+  auto column_metadata0 = metadata->ColumnChunk(0);
+  auto column_metadata1 = metadata->ColumnChunk(1);
+  if (!column_metadata0->is_stats_set() || !column_metadata1->is_stats_set()) {
+    return Result::kInter;
+  }
+  auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
+  auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
+  if (!str_stats->HasMinMax()) {
+    return Result::kInter;
+  }
+
+  auto min_value = parquet::ByteArrayToString(str_stats->min());
+  auto max_value = parquet::ByteArrayToString(str_stats->max());
+  if (max_value < query.url) {
+    return Result::kLess;
+  }
+  if (min_value > query.url) {
+    return Result::kGreater;
+  }
+  if (min_value != max_value || !int_stats->HasMinMax()) {
+    return Result::kInter;
+  }
+  if (int_stats->max() < query.begin) {
+    return Result::kLess;
+  }
+  if (int_stats->min() >= query.end) {
+    return Result::kGreater;
+  }
+  return Result::kInter;
+}
+
+bool PositionalDeleteStream::ReaderHolderGreater::operator()(const ReaderHolder& lhs, const ReaderHolder& rhs) const {
+  return lhs.GetPosition() < rhs.GetPosition();
 }
 
 PositionalDeleteStream::PositionalDeleteStream(
@@ -217,8 +245,8 @@ PositionalDeleteStream::PositionalDeleteStream(
       }
       auto reader = std::make_shared<Reader>(cb(url), layer, logger);
 
-      if (reader->Next()) {
-        queue_.push(reader);
+      if (reader->NextRowGroup()) {
+        queue_.push(ReaderHolder(reader));
       }
     }
   }
@@ -233,15 +261,21 @@ PositionalDeleteStream::PositionalDeleteStream(std::unique_ptr<parquet::arrow::F
   }
   auto reader = std::make_shared<Reader>(std::move(e), layer, logger);
 
-  if (reader->Next()) {
-    queue_.push(reader);
+  if (reader->NextRowGroup()) {
+    queue_.push(ReaderHolder(reader));
   }
 }
 
 // TODO(gmusya): get rid of this method
 void PositionalDeleteStream::Append(UrlDeleteRows& rows) {
   while (!queue_.empty()) {
-    const std::string url = queue_.top()->current_file_path();
+    auto holder = queue_.top();
+    auto reader = holder.GetReader();
+    if (!holder.IsStarted() && !reader->Next()) {
+      queue_.pop();
+      continue;
+    }
+    const std::string url = reader->current_file_path();
     const auto& poses = GetDeleted(url, 0, INT64_MAX, 0);
     rows[url].insert(rows[url].end(), poses.begin(), poses.end());
   }
@@ -265,7 +299,29 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
   int64_t rows_read = 0;
 
   while (!queue_.empty()) {
-    const auto r = queue_.top();
+    auto holder = queue_.top();
+    auto r = holder.GetReader();
+    if (!holder.IsStarted()) {
+      if (filter_) {
+        auto res = filter_->State(r->current_row_group_metadata(), last_query_.value());
+        if (res == RowGroupFilter::Result::kLess) {
+          queue_.pop();
+          if (r->NextRowGroup()) {
+            queue_.push(holder);
+          }
+          continue;
+        }
+        if (res == RowGroupFilter::Result::kGreater) {
+          break;
+        }
+      }
+
+      if (!r->Next()) {
+        queue_.pop();
+        continue;
+      }
+    }
+
     const auto cmp = url.compare(r->current_file_path());
 
     if (cmp < 0) {
@@ -282,7 +338,7 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     }
     queue_.pop();
     if (r->Next()) {
-      queue_.push(r);
+      queue_.push(ReaderHolder(r));
     }
     ++rows_read;
   }

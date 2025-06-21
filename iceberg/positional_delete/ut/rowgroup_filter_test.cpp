@@ -18,7 +18,6 @@ struct Stats {
   bool set_stats;
   std::optional<T> min_val;
   std::optional<T> max_val;
-  std::optional<int64_t> distinct_count;
 };
 
 void CreateInt64ColumnChunkMeta(ColumnChunkMetaDataBuilder* metadata_builder, const Stats<int64_t>& stats) {
@@ -32,9 +31,6 @@ void CreateInt64ColumnChunkMeta(ColumnChunkMetaDataBuilder* metadata_builder, co
     }
     if (stats.max_val.has_value()) {
       int_stats.set_max(std::string(reinterpret_cast<const char*>(&stats.max_val.value()), sizeof(int64_t)));
-    }
-    if (stats.distinct_count.has_value()) {
-      int_stats.set_distinct_count(stats.distinct_count.value());
     }
     metadata_builder->SetStatistics(int_stats);
   }
@@ -50,9 +46,6 @@ void CreateByteArrayColumnChunkMeta(ColumnChunkMetaDataBuilder* metadata_builder
     }
     if (stats.max_val.has_value()) {
       str_stats.set_max(stats.max_val.value());
-    }
-    if (stats.distinct_count.has_value()) {
-      str_stats.set_distinct_count(stats.distinct_count.value());
     }
     metadata_builder->SetStatistics(str_stats);
   }
@@ -83,93 +76,73 @@ std::shared_ptr<FileMetaData> GetFileMetadata(const std::vector<Stats<std::strin
   return meta_builder->Finish();
 }
 
-TEST(RowGroupFilter, OnePathDistinctCount) {
-  const std::string path = "a";
-
-  std::vector<Stats<std::string>> str_stats = {{true, std::nullopt, std::nullopt, 1}};
-  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2, std::nullopt}};
-
-  auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_TRUE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}));
-  EXPECT_FALSE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 2, 5}));
-  EXPECT_TRUE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"b", 2, 5}));
-}
-
-TEST(RowGroupFilter, ManyPathsDistinctCount) {
-  const std::string path = "a";
-
-  std::vector<Stats<std::string>> str_stats = {{true, std::nullopt, std::nullopt, 2}};
-  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2, std::nullopt}};
-
-  auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_FALSE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}));
-}
-
-TEST(RowGroupFilter, OnePathMinMax) {
-  const std::string path = "a";
-
-  std::vector<Stats<std::string>> str_stats = {{true, path, path, std::nullopt}};
-  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2, std::nullopt}};
-
-  auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_TRUE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}));
-}
-
-TEST(RowGroupFilter, ManyPathsMinMax) {
-  const std::string path = "a";
-
-  std::vector<Stats<std::string>> str_stats = {{true, path, "b", std::nullopt}};
-  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2, std::nullopt}};
-
-  auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_FALSE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}));
-}
-
-TEST(RowGroupFilter, PathOutOfRange) {
-  std::vector<Stats<std::string>> str_stats = {{true, "b", "c", std::nullopt}};
-  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2, std::nullopt}};
-
-  auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_TRUE(filter.Skip("b", metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"a", 3, 5}));
-  EXPECT_TRUE(filter.Skip("c", metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"d", 3, 5}));
-}
-
-TEST(RowGroupFilter, NoMinMax) {
-  const std::string path = "a";
-
-  std::vector<Stats<std::string>> str_stats = {{true, path, path, 1}};
-  std::vector<Stats<int64_t>> int_stats = {{true, std::nullopt, std::nullopt, 1}};
-
-  auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_FALSE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}));
-}
+using Result = PositionalDeleteStream::BasicRowGroupFilter::Result;
 
 TEST(RowGroupFilter, NoStrStats) {
   const std::string path = "a";
 
-  std::vector<Stats<std::string>> str_stats = {{false, path, path, 1}};
-  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2, 1}};
+  std::vector<Stats<std::string>> str_stats = {{false, path, path}};
+  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2}};
 
   auto metadata = GetFileMetadata(str_stats, int_stats);
   PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_FALSE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}));
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}), Result::kInter);
 }
 
 TEST(RowGroupFilter, NoIntStats) {
   const std::string path = "a";
 
-  std::vector<Stats<std::string>> str_stats = {{true, path, path, 1}};
-  std::vector<Stats<int64_t>> int_stats = {{false, 1, 2, 1}};
+  std::vector<Stats<std::string>> str_stats = {{true, path, path}};
+  std::vector<Stats<int64_t>> int_stats = {{false, 1, 2}};
 
   auto metadata = GetFileMetadata(str_stats, int_stats);
   PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_FALSE(filter.Skip(path, metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}));
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}), Result::kInter);
+}
+
+TEST(RowGroupFilter, PathOutOfRange) {
+  std::vector<Stats<std::string>> str_stats = {{true, "b", "c"}};
+  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2}};
+
+  auto metadata = GetFileMetadata(str_stats, int_stats);
+  PositionalDeleteStream::BasicRowGroupFilter filter;
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"a", 3, 5}), Result::kGreater);
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"d", 3, 5}), Result::kLess);
+}
+
+TEST(RowGroupFilter, NoIntMinMax) {
+  const std::string path = "a";
+
+  std::vector<Stats<std::string>> str_stats = {{true, path, path}};
+  std::vector<Stats<int64_t>> int_stats = {{true, std::nullopt, std::nullopt}};
+
+  auto metadata = GetFileMetadata(str_stats, int_stats);
+  PositionalDeleteStream::BasicRowGroupFilter filter;
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}), Result::kInter);
+}
+
+TEST(RowGroupFilter, ManyPaths) {
+  const std::string path = "a";
+
+  std::vector<Stats<std::string>> str_stats = {{true, path, "b"}};
+  std::vector<Stats<int64_t>> int_stats = {{true, 1, 2}};
+
+  auto metadata = GetFileMetadata(str_stats, int_stats);
+  PositionalDeleteStream::BasicRowGroupFilter filter;
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}), Result::kInter);
+}
+
+TEST(RowGroupFilter, IntMinMax) {
+  const std::string path = "a";
+
+  std::vector<Stats<std::string>> str_stats = {{true, path, path}};
+  std::vector<Stats<int64_t>> int_stats = {{true, 3, 5}};
+
+  auto metadata = GetFileMetadata(str_stats, int_stats);
+  PositionalDeleteStream::BasicRowGroupFilter filter;
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 6, 7}), Result::kLess);
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 2, 4}), Result::kInter);
+  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 1, 3}), Result::kGreater);
 }
 
 }  // namespace
