@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "arrow/filesystem/filesystem.h"
+#include "arrow/filesystem/mockfs.h"
 #include "gtest/gtest.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_writer.h"
@@ -167,6 +168,84 @@ Status ReadFile(std::shared_ptr<FileSystem> fs, const std::string& path, UrlDele
   return arrow::Status::OK();
 }
 
+struct Metrics {
+  uint64_t requests = 0;
+  uint64_t bytes_read = 0;
+  uint64_t files_opened = 0;
+};
+
+class InputFileWrapper : public arrow::io::RandomAccessFile {
+ public:
+  explicit InputFileWrapper(std::shared_ptr<arrow::io::RandomAccessFile> file) : file_(file) {}
+
+  arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override {
+    return file_->ReadAt(position, nbytes, out);
+  }
+
+  arrow::Status Close() override { return file_->Close(); }
+
+  bool closed() const override { return file_->closed(); }
+
+  arrow::Result<int64_t> Tell() const override { return file_->Tell(); }
+
+  arrow::Result<int64_t> Read(int64_t nbytes, void* out) override { return file_->Read(nbytes, out); }
+
+  arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override { return file_->Read(nbytes); }
+
+  arrow::Status Seek(int64_t position) override { return file_->Seek(position); }
+
+  arrow::Result<int64_t> GetSize() override { return file_->GetSize(); }
+
+ private:
+  std::shared_ptr<arrow::io::RandomAccessFile> file_;
+};
+
+class LoggingInputFile : public InputFileWrapper {
+ public:
+  LoggingInputFile(std::shared_ptr<arrow::io::RandomAccessFile> file, Metrics& metrics)
+      : InputFileWrapper(file), metrics_(metrics) {}
+
+  arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::ReadAt(position, nbytes, out);
+  }
+
+  arrow::Result<int64_t> Read(int64_t nbytes, void* out) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::Read(nbytes, out);
+  }
+
+  arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::Read(nbytes);
+  }
+
+ private:
+  void TakeRequestIntoAccount(int64_t bytes) {
+    ++metrics_.requests;
+    metrics_.bytes_read += bytes;
+  }
+
+  Metrics& metrics_;
+};
+
+class LoggingFileSystem : public arrow::fs::internal::MockFileSystem {
+ public:
+  LoggingFileSystem(std::shared_ptr<arrow::fs::FileSystem> fs) : fs_(fs), MockFileSystem(arrow::fs::TimePoint()) {}
+
+  arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenInputFile(const std::string& path) override {
+    ++metrics_.files_opened;
+    ARROW_ASSIGN_OR_RAISE(auto file, fs_->OpenInputFile(path));
+    return std::make_shared<LoggingInputFile>(file, metrics_);
+  }
+
+  Metrics GetMetrics() const { return metrics_; }
+
+ private:
+  std::shared_ptr<arrow::fs::FileSystem> fs_;
+  Metrics metrics_{};
+};
+
 class PositionalDeleteTest : public ::testing::Test {
  protected:
   void SetUp() override { fs_ = arrow::fs::FileSystemFromUri(uri_, &path_).ValueOrDie(); }
@@ -303,6 +382,24 @@ TEST_F(PositionalDeleteTest, DoNotCountTwice) {
   ASSERT_EQ(ReadFile(fs_, path_, rows, &count), arrow::Status::OK());
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1}}, {"path2", {3}}}));
   EXPECT_EQ(count, 2);
+}
+
+TEST_F(PositionalDeleteTest, NoExtraRequests) {
+  fs_ = std::make_shared<LoggingFileSystem>(fs_);
+
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
+
+  auto metrics = std::static_pointer_cast<LoggingFileSystem>(fs_)->GetMetrics();
+
+  EXPECT_NO_THROW([&]() {
+    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+    ARROW_ASSIGN_OR_RAISE(arrow_reader, OpenUrl(fs_, path_));
+
+    PositionalDeleteStream(std::move(arrow_reader), 0);
+  }());
+  EXPECT_EQ(metrics.requests, std::static_pointer_cast<LoggingFileSystem>(fs_)->GetMetrics().requests);
+  EXPECT_EQ(metrics.bytes_read, std::static_pointer_cast<LoggingFileSystem>(fs_)->GetMetrics().bytes_read);
 }
 
 }  // namespace
