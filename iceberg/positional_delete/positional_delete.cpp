@@ -49,9 +49,9 @@ class PositionalDeleteStream::Reader {
     num_row_groups_ = file_metadata->num_row_groups();
   }
 
-  const std::string& current_file_path() const noexcept { return current_file_path_; }
+  const std::optional<std::string>& current_file_path() const noexcept { return current_file_path_; }
 
-  int64_t current_pos() const noexcept { return current_pos_; }
+  std::optional<int64_t> current_pos() const noexcept { return current_pos_; }
 
   Layer layer() const noexcept { return layer_; }
 
@@ -77,28 +77,16 @@ class PositionalDeleteStream::Reader {
         current_pos_ = pos;
         return true;
       }
-      if (!MakeGroupReader()) {
+      if (!NextRowGroup()) {
         return false;
       }
     }
   }
 
   /**
-   * State RowGroup, so Next() will advance to the first record in the next RowGroup.
+   * Skip RowGroup, so Next() will advance to the first record in the next RowGroup.
    */
   bool NextRowGroup() {
-    if (logger_ && current_row_group_ >= 0) {
-      logger_->Log(std::to_string(current_row_group_metadata()->num_rows()), "metrics:positional:rows_skipped");
-    }
-
-    if (!MakeGroupReader()) {
-      return false;
-    }
-    return true;
-  }
-
- private:
-  bool MakeGroupReader() {
     current_file_path_value_ = parquet::ByteArray();
     file_path_reader_.reset();
     pos_reader_.reset();
@@ -121,12 +109,13 @@ class PositionalDeleteStream::Reader {
 
     file_path_reader_ = std::static_pointer_cast<parquet::ByteArrayReader>(column0);
     pos_reader_ = std::static_pointer_cast<parquet::Int64Reader>(column1);
-    current_pos_ = -1;
-    current_file_path_ = "";
+    current_pos_.reset();
+    current_file_path_.reset();
 
     return true;
   }
 
+ private:
   template <typename Reader, typename Value>
   void ReadValueNotNull(Reader& reader, Value& value) {
     int64_t values_read;
@@ -151,8 +140,8 @@ class PositionalDeleteStream::Reader {
   std::shared_ptr<parquet::RowGroupReader> current_rowgroup_reader_;
 
   parquet::ByteArray current_file_path_value_;
-  std::string current_file_path_;
-  int64_t current_pos_{0};
+  std::optional<std::string> current_file_path_;
+  std::optional<int64_t> current_pos_;
   int num_row_groups_;
   int current_row_group_{-1};
 
@@ -167,9 +156,11 @@ std::shared_ptr<PositionalDeleteStream::Reader> PositionalDeleteStream::ReaderHo
 PositionalDeleteStream::ReaderHolder::ReaderHolder(std::shared_ptr<PositionalDeleteStream::Reader> reader)
     : reader_(reader) {}
 
-std::pair<std::string, int64_t> PositionalDeleteStream::ReaderHolder::GetPosition() const {
-  std::pair<std::string, int64_t> res(reader_->current_file_path(), reader_->current_pos());
-  if (res.second >= 0) {
+std::pair<std::optional<std::string>, std::optional<int64_t>> PositionalDeleteStream::ReaderHolder::GetPosition()
+    const {
+  std::pair<std::optional<std::string>, std::optional<int64_t>> res(reader_->current_file_path(),
+                                                                    reader_->current_pos());
+  if (!IsStarted()) {
     return res;
   }
 
@@ -191,7 +182,7 @@ std::pair<std::string, int64_t> PositionalDeleteStream::ReaderHolder::GetPositio
   return res;
 }
 
-bool PositionalDeleteStream::ReaderHolder::IsStarted() const { return reader_->current_pos() >= 0; }
+bool PositionalDeleteStream::ReaderHolder::IsStarted() const { return reader_->current_pos().has_value(); }
 
 PositionalDeleteStream::BasicRowGroupFilter::Result PositionalDeleteStream::BasicRowGroupFilter::State(
     const parquet::RowGroupMetaData* metadata, const Query& query) {
@@ -272,7 +263,7 @@ void PositionalDeleteStream::Append(UrlDeleteRows& rows) {
       queue_.pop();
       continue;
     }
-    const std::string url = reader->current_file_path();
+    const std::string url = *reader->current_file_path();
     const auto& poses = GetDeleted(url, 0, INT64_MAX, 0);
     rows[url].insert(rows[url].end(), poses.begin(), poses.end());
   }
@@ -298,42 +289,47 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
   while (!queue_.empty()) {
     auto holder = queue_.top();
     auto r = holder.GetReader();
+    queue_.pop();
     if (!holder.IsStarted()) {
       if (filter_) {
         auto res = filter_->State(r->current_row_group_metadata(), last_query_.value());
         if (res == RowGroupFilter::Result::kLess) {
-          queue_.pop();
+          if (logger_) {
+            logger_->Log(std::to_string(r->current_row_group_metadata()->num_rows()),
+                         "metrics:positional:rows_skipped");
+          }
           if (r->NextRowGroup()) {
             queue_.push(holder);
           }
           continue;
         }
         if (res == RowGroupFilter::Result::kGreater) {
+          queue_.push(holder);
           break;
         }
       }
 
       if (!r->Next()) {
-        queue_.pop();
         continue;
       }
     }
 
-    const auto cmp = url.compare(r->current_file_path());
+    const auto cmp = url.compare(*r->current_file_path());
 
     if (cmp < 0) {
+      queue_.push(holder);
       break;
     }
     if (cmp == 0 && r->current_pos() >= begin) {
       if (r->current_pos() < end) {
         if ((rows.empty() || rows.back() != r->current_pos()) && r->layer() >= data_layer) {
-          rows.push_back(r->current_pos());
+          rows.push_back(*r->current_pos());
         }
       } else {
+        queue_.push(holder);
         break;
       }
     }
-    queue_.pop();
     if (r->Next()) {
       queue_.push(holder);
     }

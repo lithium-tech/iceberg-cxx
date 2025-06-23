@@ -32,7 +32,7 @@ class PositionalDeleteStream {
 
     std::shared_ptr<Reader> GetReader() const;
 
-    std::pair<std::string, int64_t> GetPosition() const;
+    std::pair<std::optional<std::string>, std::optional<int64_t>> GetPosition() const;
 
     bool IsStarted() const;
 
