@@ -69,9 +69,7 @@ FetchContent_Declare(
 FetchContent_Declare(
   abseil
   GIT_REPOSITORY ${GITHUB}/abseil/abseil-cpp.git
-  GIT_TAG 20211102.0
-  PATCH_COMMAND git reset --hard HEAD
-    && git apply ${CMAKE_CURRENT_SOURCE_DIR}/abseil/abseil-fix-build.patch
+  GIT_TAG lts_2024_07_22
 )
 
 FetchContent_Declare(
