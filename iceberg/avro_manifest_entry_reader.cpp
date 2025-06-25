@@ -137,8 +137,8 @@ void XReader::init(const avro::ValidSchema& readerSchema) {
 static void drain(avro::InputStream& in) {
   const uint8_t* p = nullptr;
   size_t n = 0;
-  while (in.next(&p, &n))
-    ;
+  while (in.next(&p, &n)) {
+  }
 }
 
 char hex(unsigned int x) { return static_cast<char>(x + (x < 10 ? '0' : ('a' - 10))); }
