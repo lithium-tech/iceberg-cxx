@@ -11,6 +11,7 @@
 #include "avro/Config.hh"
 #include "avro/DataFile.hh"
 #include "avro/Encoder.hh"
+#include "avro/Generic.hh"
 #include "avro/Specific.hh"
 #include "avro/Stream.hh"
 #include "avro/ValidSchema.hh"
@@ -95,9 +96,7 @@ class XReader {
   void readHeader();
 
   void readDataBlock();
-#if 0
-  void doSeek(int64_t position);
-#endif
+
  public:
   /**
    * Returns the current decoder for this reader.
@@ -161,31 +160,6 @@ class XReader {
    * Closes the reader. No further operation is possible on this reader.
    */
   void close();
-
-#if 0
-  /**
-   * Move to a specific, known synchronization point, for example one returned
-   * from tell() after sync().
-   */
-  void seek(int64_t position);
-
-  /**
-   * Move to the next synchronization point after a position. To process a
-   * range of file entries, call this with the starting position, then check
-   * pastSync() with the end point before each use of decoder().
-   */
-  void sync(int64_t position);
-
-  /**
-   * Return true if past the next synchronization point after a position.
-   */
-  bool pastSync(int64_t position);
-
-  /**
-   * Return the last synchronization point before our current position.
-   */
-  int64_t previousSync() const;
-#endif
 
   /**
    * Return file metadata.
@@ -265,7 +239,23 @@ class YReader {
         size_t current_offset = data_stream.current_offset();
 
         avro::GenericDatum one_field(base_->oneFieldSchema());
-        avro::decode(base_->one_field_decoder(), one_field);
+        {
+          auto& decoder = base_->one_field_decoder();
+          const bool is_resolving = dynamic_cast<avro::ResolvingDecoder*>(&decoder) != nullptr;
+          auto& r = one_field.value<avro::GenericRecord>();
+          size_t c = r.schema()->leaves();
+          if (is_resolving) {
+            std::vector<size_t> fo = static_cast<avro::ResolvingDecoder&>(decoder).fieldOrder();
+            for (size_t i = 0; i < c; ++i) {
+              avro::GenericReader::read(decoder, r.fieldAt(fo[i]));
+            }
+          } else {
+            for (size_t i = 0; i < c; ++i) {
+              avro::GenericReader::read(decoder, r.fieldAt(i));
+            }
+          }
+          //   avro::GenericReader::read(base_->one_field_decoder(), one_field);
+        }
         int32_t status = one_field.value<avro::GenericRecord>().field("status").value<int32_t>();
         if (status == 2) {
           continue;
@@ -293,31 +283,6 @@ class YReader {
    * Closes the reader. No further operation is possible on this reader.
    */
   void close() { return base_->close(); }
-
-#if 0
-  /**
-   * Move to a specific, known synchronization point, for example one returned
-   * from previousSync().
-   */
-  void seek(int64_t position) { base_->seek(position); }
-
-  /**
-   * Move to the next synchronization point after a position. To process a
-   * range of file entries, call this with the starting position, then check
-   * pastSync() with the end point before each call to read().
-   */
-  void sync(int64_t position) { base_->sync(position); }
-
-  /**
-   * Return true if past the next synchronization point after a position.
-   */
-  bool pastSync(int64_t position) { return base_->pastSync(position); }
-
-  /**
-   * Return the last synchronization point before our current position.
-   */
-  int64_t previousSync() { return base_->previousSync(); }
-#endif
 
   /**
    * Return file metadata.
