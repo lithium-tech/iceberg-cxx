@@ -401,7 +401,7 @@ TEST(PositionalDeleteTest2, NoExtraBytesRead) {
   std::string path;
   auto logging_fs = std::make_shared<LoggingFileSystem>("mock:///delete.parquet", &path);
   if (WriteFile(logging_fs, path, Container{{{"path1", 1}, {"path2", 3}}}) != arrow::Status::OK()) {
-    throw std::runtime_error("WriteFile failed");
+    FAIL();
   }
   EXPECT_NO_THROW([&]() {
     logging_fs->Clear();
