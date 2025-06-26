@@ -16,12 +16,25 @@ endif()
 
 add_library(iceberg-tools ${LIB_SOURCES})
 target_include_directories(iceberg-tools PUBLIC "${PROJECT_SOURCE_DIR}")
-target_link_libraries(iceberg-tools PUBLIC _hivemetastore _thrift
-  iceberg-cpp _rapidjson _avrocpp _boost_iostreams _hivemetastore absl::flags absl::flags_parse Parquet::parquet_static
+target_link_libraries(iceberg-tools PUBLIC _hivemetastore
+  iceberg-cpp _rapidjson _avrocpp _hivemetastore absl::flags absl::flags_parse Parquet::parquet_static
   OpenSSL::Crypto OpenSSL::SSL)
 if (TOOLS_USE_ARROW)
   target_link_libraries(iceberg-tools PUBLIC Arrow::arrow_static)
 endif()
+if(ICECXX_BUILD_BOOST)
+  target_link_libraries(iceberg-tools PUBLIC _boost_iostreams)
+else()
+  find_package(Boost REQUIRED CONFIG COMPONENTS iostreams)
+  target_link_libraries(iceberg-tools PUBLIC Boost::iostreams)
+endif()
+if (ICECXX_BUILD_THRIFT)
+  target_link_libraries(iceberg-tools PUBLIC _thrift)
+else()
+  find_package(Thrift REQUIRED CONFIG)
+  target_link_libraries(iceberg-tools PUBLIC thrift::thrift)
+endif()
+
 
 
 add_executable(fix_location fix_location.cpp)

@@ -197,8 +197,10 @@ FetchContent_Declare(
 
 # MakeAvailable
 
-set(BOOST_ENABLE_CMAKE ON CACHE BOOL "")
-FetchContent_MakeAvailable(boost)
+if (ICECXX_BUILD_BOOST)
+  set(BOOST_ENABLE_CMAKE ON CACHE BOOL "")
+  FetchContent_MakeAvailable(boost)
+endif ()
 
 if(ICECXX_BUILD_ARROW)
   set(ARROW_DEPENDENCY_SOURCE BUNDLED CACHE STRING "")
@@ -240,10 +242,12 @@ FetchContent_MakeAvailable(datasketches-cpp)
 FetchContent_MakeAvailable(hive-metastore)
 FetchContent_MakeAvailable(rapidjson)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set(OS_LINUX ON CACHE BOOL "")
-endif()
-FetchContent_MakeAvailable(thrift)
+if (ICECXX_BUILD_THRIFT)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(OS_LINUX ON CACHE BOOL "")
+  endif()
+  FetchContent_MakeAvailable(thrift)
+endif ()
 
 FetchContent_MakeAvailable(zstd)
 
@@ -251,9 +255,11 @@ set(INSTALL_GTEST OFF CACHE BOOL "")
 set(INSTALL_GMOCK OFF CACHE BOOL "")
 FetchContent_MakeAvailable(googletest)
 
-set(SNAPPY_BUILD_TESTS OFF CACHE BOOL "")
-set(SNAPPY_BUILD_BENCHMARKS OFF CACHE BOOL "")
-FetchContent_MakeAvailable(snappy)
+if (ICECXX_BUILD_SNAPPY)
+  set(SNAPPY_BUILD_TESTS OFF CACHE BOOL "")
+  set(SNAPPY_BUILD_BENCHMARKS OFF CACHE BOOL "")
+  FetchContent_MakeAvailable(snappy)
+endif ()
 
 set(ZLIB_ENABLE_TESTS OFF CACHE BOOL "")
 set(ZLIBNG_ENABLE_TESTS OFF CACHE BOOL "")
