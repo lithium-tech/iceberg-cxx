@@ -7,6 +7,8 @@
 
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/filesystem/mockfs.h"
+#include "arrow/filesystem/path_util.h"
+#include "arrow/filesystem/util_internal.h"
 #include "gtest/gtest.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_writer.h"
@@ -172,6 +174,8 @@ struct Metrics {
   uint64_t requests = 0;
   uint64_t bytes_read = 0;
   uint64_t files_opened = 0;
+
+  bool operator==(const Metrics& other) const = default;
 };
 
 class InputFileWrapper : public arrow::io::RandomAccessFile {
@@ -231,18 +235,26 @@ class LoggingInputFile : public InputFileWrapper {
 
 class LoggingFileSystem : public arrow::fs::internal::MockFileSystem {
  public:
-  LoggingFileSystem(std::shared_ptr<arrow::fs::FileSystem> fs) : fs_(fs), MockFileSystem(arrow::fs::TimePoint()) {}
+  LoggingFileSystem(const std::string& uri, std::string* path,
+                    const arrow::io::IOContext& io_context = arrow::io::default_io_context())
+      : arrow::fs::internal::MockFileSystem(arrow::fs::TimePoint(), io_context) {
+    if (path != nullptr) {
+      auto fsuri = arrow::fs::internal::ParseFileSystemUri(uri).ValueOrDie();
+      *path = std::string(arrow::fs::internal::RemoveLeadingSlash(fsuri.path()));
+    }
+  }
 
   arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenInputFile(const std::string& path) override {
     ++metrics_.files_opened;
-    ARROW_ASSIGN_OR_RAISE(auto file, fs_->OpenInputFile(path));
+    ARROW_ASSIGN_OR_RAISE(auto file, arrow::fs::internal::MockFileSystem::OpenInputFile(path));
     return std::make_shared<LoggingInputFile>(file, metrics_);
   }
 
-  Metrics GetMetrics() const { return metrics_; }
+  Metrics GetCurrentMetrics() const { return metrics_; }
+
+  void Clear() { metrics_ = {}; }
 
  private:
-  std::shared_ptr<arrow::fs::FileSystem> fs_;
   Metrics metrics_{};
 };
 
@@ -384,22 +396,35 @@ TEST_F(PositionalDeleteTest, DoNotCountTwice) {
   EXPECT_EQ(count, 2);
 }
 
-TEST_F(PositionalDeleteTest, NoExtraRequests) {
-  fs_ = std::make_shared<LoggingFileSystem>(fs_);
-
+TEST(PositionalDeleteTest2, NoExtraBytesRead) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
-
-  auto metrics = std::static_pointer_cast<LoggingFileSystem>(fs_)->GetMetrics();
+  std::string path;
+  auto logging_fs = std::make_shared<LoggingFileSystem>("mock:///delete.parquet", &path);
+  if (WriteFile(logging_fs, path, Container{{{"path1", 1}, {"path2", 3}}}) != arrow::Status::OK()) {
+    throw std::runtime_error("WriteFile failed");
+  }
+  EXPECT_NO_THROW([&]() {
+    logging_fs->Clear();
+    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
+    arrow_reader->num_row_groups();
+  }());
+  auto metrics = logging_fs->GetCurrentMetrics();
 
   EXPECT_NO_THROW([&]() {
-    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-    ARROW_ASSIGN_OR_RAISE(arrow_reader, OpenUrl(fs_, path_));
-
-    PositionalDeleteStream(std::move(arrow_reader), 0);
+    logging_fs->Clear();
+    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
+    PositionalDeleteStream(std::move(arrow_reader), 0).GetDeleted("path3", 1, 2, 0);
   }());
-  EXPECT_EQ(metrics.requests, std::static_pointer_cast<LoggingFileSystem>(fs_)->GetMetrics().requests);
-  EXPECT_EQ(metrics.bytes_read, std::static_pointer_cast<LoggingFileSystem>(fs_)->GetMetrics().bytes_read);
+
+  EXPECT_EQ(metrics, logging_fs->GetCurrentMetrics());
+
+  EXPECT_NO_THROW([&]() {
+    logging_fs->Clear();
+    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
+    PositionalDeleteStream(std::move(arrow_reader), 0).GetDeleted("path1", 1, 2, 0);
+  }());
+
+  EXPECT_NE(metrics, logging_fs->GetCurrentMetrics());
 }
 
 }  // namespace

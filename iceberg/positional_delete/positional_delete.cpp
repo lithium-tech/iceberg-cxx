@@ -64,7 +64,21 @@ class PositionalDeleteStream::Reader {
    */
   bool Next() {
     while (true) {
-      if (file_path_reader_ && file_path_reader_->HasNext()) {
+      if (!file_path_reader_) {
+        auto column0 = current_rowgroup_reader_->Column(0);
+        auto column1 = current_rowgroup_reader_->Column(1);
+        // Validate type of the columns.
+        if (column0->type() != parquet::Type::BYTE_ARRAY) {
+          throw arrow::Status::ExecutionError("Unexpected column 0 type ", column0->type());
+        }
+        if (column1->type() != parquet::Type::INT64) {
+          throw arrow::Status::ExecutionError("Unexpected column 1 type ", column1->type());
+        }
+
+        file_path_reader_ = std::static_pointer_cast<parquet::ByteArrayReader>(column0);
+        pos_reader_ = std::static_pointer_cast<parquet::Int64Reader>(column1);
+      }
+      if (file_path_reader_->HasNext()) {
         parquet::ByteArray file_path_value;
         int64_t pos;
 
@@ -97,18 +111,6 @@ class PositionalDeleteStream::Reader {
     }
 
     current_rowgroup_reader_ = parquet_reader_->RowGroup(current_row_group_);
-    auto column0 = current_rowgroup_reader_->Column(0);
-    auto column1 = current_rowgroup_reader_->Column(1);
-    // Validate type of the columns.
-    if (column0->type() != parquet::Type::BYTE_ARRAY) {
-      throw arrow::Status::ExecutionError("Unexpected column 0 type ", column0->type());
-    }
-    if (column1->type() != parquet::Type::INT64) {
-      throw arrow::Status::ExecutionError("Unexpected column 1 type ", column1->type());
-    }
-
-    file_path_reader_ = std::static_pointer_cast<parquet::ByteArrayReader>(column0);
-    pos_reader_ = std::static_pointer_cast<parquet::Int64Reader>(column1);
     current_pos_.reset();
     current_file_path_.reset();
 
