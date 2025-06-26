@@ -1,0 +1,13 @@
+diff --git a/lib/cpp/src/thrift/protocol/TDebugProtocol.cpp b/lib/cpp/src/thrift/protocol/TDebugProtocol.cpp
+index 6e88313db..85ee7db76 100644
+--- a/lib/cpp/src/thrift/protocol/TDebugProtocol.cpp
++++ b/lib/cpp/src/thrift/protocol/TDebugProtocol.cpp
+@@ -392,7 +392,7 @@ uint32_t TDebugProtocol::writeUUID(const TUuid& uuid) {
+   indentUp();
+   size += writeIndented("[raw] = ");
+   size += writeString(std::string(std::begin(uuid), std::end(uuid)));
+-  size += writeIndented("[enc] = \"" + to_string(uuid) + "\"\n");
++  size += writeIndented("[enc] = DISABLED\n"); // it needs boost.uuid
+   indentDown();
+   size += writeIndented("}\n");
+   return size;
