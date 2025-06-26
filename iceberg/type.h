@@ -21,14 +21,16 @@ enum class TypeID {
   kTime = 7,
   kTimestamp = 8,
   kTimestamptz = 9,
-  kString = 10,
-  kUuid = 11,
-  kFixed = 12,
-  kBinary = 13,
-  kStruct = 14,
-  kList = 15,
-  kMap = 16,
-  kUnknown = 17
+  kTimestampNs = 10,
+  kTimestamptzNs = 11,
+  kString = 12,
+  kUuid = 13,
+  kFixed = 14,
+  kBinary = 15,
+  kStruct = 16,
+  kList = 17,
+  kMap = 18,
+  kUnknown = 19
 };
 
 namespace types {

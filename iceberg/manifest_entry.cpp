@@ -300,6 +300,9 @@ DataFile::PartitionTuple Deserialize(const avro::GenericDatum& datum) {
         case avro::LogicalType::TIMESTAMP_MICROS:
           result.fields.emplace_back(name, value, std::make_shared<types::PrimitiveType>(TypeID::kTimestamp));
           break;
+        case avro::LogicalType::TIMESTAMP_NANOS:
+          result.fields.emplace_back(name, value, std::make_shared<types::PrimitiveType>(TypeID::kTimestampNs));
+          break;
         case avro::LogicalType::TIME_MICROS:
           result.fields.emplace_back(name, value, std::make_shared<types::PrimitiveType>(TypeID::kTime));
           break;
@@ -487,9 +490,13 @@ avro::ValidSchema MakeSchemaTimestamp() {
   schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::TIMESTAMP_MICROS));
   return avro::ValidSchema(schema);
 }
-avro::ValidSchema MakeSchemaTimestamptz() {
-  return MakeSchemaTimestamp();  // timestamp and timestamptz are same types for avro
+
+avro::ValidSchema MakeSchemaTimestampNs() {
+  auto schema = avro::LongSchema();
+  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::TIMESTAMP_NANOS));
+  return avro::ValidSchema(schema);
 }
+
 constexpr int MinimumBytesToStoreDecimalUnsafe(int precision) {
   int bytes = 1;
   __uint128_t minimum_nonrepresentable_value =
@@ -579,6 +586,11 @@ avro::ValidSchema MakeSchemaPartition(const std::vector<PartitionKeyField>& part
       case TypeID::kTimestamptz:
       case TypeID::kTimestamp:
         AddField(schema, field.name, MakeSchemaOptional(MakeSchemaTimestamp()));
+        break;
+      // timestamp_ns and timestamptz_ns are same types for avro
+      case TypeID::kTimestamptzNs:
+      case TypeID::kTimestampNs:
+        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaTimestampNs()));
         break;
       case TypeID::kDecimal: {
         auto decimal_type = std::static_pointer_cast<const types::DecimalType>(field.type);
@@ -845,6 +857,8 @@ avro::GenericDatum SerializePartition(const std::vector<PartitionKeyField>& part
           case TypeID::kTime:
           case TypeID::kTimestamp:
           case TypeID::kTimestamptz:
+          case TypeID::kTimestampNs:
+          case TypeID::kTimestamptzNs:
             return SerializeOptionalLong(is_null ? std::nullopt : std::optional(std::get<int64_t>(info.value)));
           case TypeID::kFloat:
             return SerializeOptionalFloat(is_null ? std::nullopt : std::optional(std::get<float>(info.value)));

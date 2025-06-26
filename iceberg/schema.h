@@ -67,7 +67,7 @@ class IcebergToParquetSchemaValidator {
                        bool throws_on_error = true);
 
  private:
-  static const std::array<std::pair<TypeID, parquet::Type::type>, 11> map_;
+  static const std::array<std::pair<TypeID, parquet::Type::type>, 13> map_;
 
   static void ValidateColumn(const types::NestedField& field, const parquet::schema::Node* node,
                              std::vector<std::string>& error_log);

@@ -51,7 +51,8 @@ struct ContentFile {
         Ensure(type_id == TypeID::kInt || type_id == TypeID::kDate, error_message);
       } else if (std::holds_alternative<int64_t>(value)) {
         Ensure(type_id == TypeID::kLong || type_id == TypeID::kTime || type_id == TypeID::kTimestamp ||
-                   type_id == TypeID::kTimestamptz,
+                   type_id == TypeID::kTimestamptz || type_id == TypeID::kTimestampNs ||
+                   type_id == TypeID::kTimestamptzNs,
                error_message);
       } else if (std::holds_alternative<float>(value)) {
         Ensure(type_id == TypeID::kFloat, error_message);
