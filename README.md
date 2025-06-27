@@ -37,6 +37,14 @@ Source https://iceberg.apache.org/status/
 | struct                   | 2 | -   | +   | +   | +   | +   |
 | unknown                  | 3 | +   | ?   | ?   | ?   | ?   |
 
+#### Datetime types restrictions
+
+Datetime restrictions are defined in [Iceberg spec](https://iceberg.apache.org/spec/?h=timestamp_ns#parquet).
+For `date` underlying type is `int32`. For `time*` it's `int64`.
+`timestamp` and `timestamptz` store microseconds from `1970-01-01 00:00:00.000000`.
+`timestamp_ns` and `timestamptz_ns` store nanoseconds from `1970-01-01 00:00:00.000000000`.
+`tz` suffix means the time is adjusted to UTC.
+
 ### Data files format
 
 | File format   | Cxx | Java | Go | Python | Rust |
