@@ -97,9 +97,6 @@ class PositionalDeleteStream::Reader {
     }
   }
 
-  /**
-   * Skip RowGroup, so Next() will advance to the first record in the next RowGroup.
-   */
   bool NextRowGroup() {
     current_file_path_value_ = parquet::ByteArray();
     file_path_reader_.reset();

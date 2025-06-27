@@ -1,5 +1,4 @@
 #include "iceberg/positional_delete/positional_delete.h"
-#include "iceberg/common/fs/filesystem_wrapper.h"
 
 #include <memory>
 #include <string>
@@ -11,6 +10,7 @@
 #include "arrow/filesystem/path_util.h"
 #include "arrow/filesystem/util_internal.h"
 #include "gtest/gtest.h"
+#include "iceberg/common/fs/filesystem_wrapper.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_writer.h"
 #include "parquet/file_writer.h"
