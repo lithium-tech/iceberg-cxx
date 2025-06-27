@@ -92,12 +92,12 @@ std::shared_ptr<Type> ConvertArrowTypeToIceberg(const std::shared_ptr<arrow::Dat
         return std::make_shared<PrimitiveType>(timestamp_type->timezone().empty() ? TypeID::kTimestampNs
                                                                                   : TypeID::kTimestamptzNs);
       }
-      if (timestamp_type->unit() != arrow::TimeUnit::MICRO) {
-        throw std::runtime_error(
-            "arrow::Type::TIMESTAMP with TimeUnit::type != MICRO or NANO is not supported in iceberg-cpp");
+      if (timestamp_type->unit() == arrow::TimeUnit::MICRO) {
+        return std::make_shared<PrimitiveType>(timestamp_type->timezone().empty() ? TypeID::kTimestamp
+                                                                                  : TypeID::kTimestamptz);
       }
-      return std::make_shared<PrimitiveType>(timestamp_type->timezone().empty() ? TypeID::kTimestamp
-                                                                                : TypeID::kTimestamptz);
+      throw std::runtime_error(
+          "arrow::Type::TIMESTAMP with TimeUnit::type != MICRO or NANO is not supported in iceberg-cpp");
     }
     case arrow::Type::STRING: {
       return std::make_shared<PrimitiveType>(TypeID::kString);
