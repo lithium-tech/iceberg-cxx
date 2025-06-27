@@ -6,7 +6,11 @@
 #include <vector>
 
 #include "arrow/filesystem/filesystem.h"
+#include "arrow/filesystem/mockfs.h"
+#include "arrow/filesystem/path_util.h"
+#include "arrow/filesystem/util_internal.h"
 #include "gtest/gtest.h"
+#include "iceberg/common/fs/filesystem_wrapper.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_writer.h"
 #include "parquet/file_writer.h"
@@ -167,6 +171,68 @@ Status ReadFile(std::shared_ptr<FileSystem> fs, const std::string& path, UrlDele
   return arrow::Status::OK();
 }
 
+struct Metrics {
+  uint64_t requests = 0;
+  uint64_t bytes_read = 0;
+  uint64_t files_opened = 0;
+
+  bool operator==(const Metrics& other) const = default;
+};
+
+class LoggingInputFile : public InputFileWrapper {
+ public:
+  LoggingInputFile(std::shared_ptr<arrow::io::RandomAccessFile> file, Metrics& metrics)
+      : InputFileWrapper(file), metrics_(metrics) {}
+
+  arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::ReadAt(position, nbytes, out);
+  }
+
+  arrow::Result<int64_t> Read(int64_t nbytes, void* out) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::Read(nbytes, out);
+  }
+
+  arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::Read(nbytes);
+  }
+
+ private:
+  void TakeRequestIntoAccount(int64_t bytes) {
+    ++metrics_.requests;
+    metrics_.bytes_read += bytes;
+  }
+
+  Metrics& metrics_;
+};
+
+class LoggingFileSystem : public arrow::fs::internal::MockFileSystem {
+ public:
+  LoggingFileSystem(const std::string& uri, std::string* path,
+                    const arrow::io::IOContext& io_context = arrow::io::default_io_context())
+      : arrow::fs::internal::MockFileSystem(arrow::fs::TimePoint(), io_context) {
+    if (path != nullptr) {
+      auto fsuri = arrow::fs::internal::ParseFileSystemUri(uri).ValueOrDie();
+      *path = std::string(arrow::fs::internal::RemoveLeadingSlash(fsuri.path()));
+    }
+  }
+
+  arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenInputFile(const std::string& path) override {
+    ++metrics_.files_opened;
+    ARROW_ASSIGN_OR_RAISE(auto file, arrow::fs::internal::MockFileSystem::OpenInputFile(path));
+    return std::make_shared<LoggingInputFile>(file, metrics_);
+  }
+
+  Metrics GetCurrentMetrics() const { return metrics_; }
+
+  void Clear() { metrics_ = {}; }
+
+ private:
+  Metrics metrics_{};
+};
+
 class PositionalDeleteTest : public ::testing::Test {
  protected:
   void SetUp() override { fs_ = arrow::fs::FileSystemFromUri(uri_, &path_).ValueOrDie(); }
@@ -303,6 +369,37 @@ TEST_F(PositionalDeleteTest, DoNotCountTwice) {
   ASSERT_EQ(ReadFile(fs_, path_, rows, &count), arrow::Status::OK());
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1}}, {"path2", {3}}}));
   EXPECT_EQ(count, 2);
+}
+
+TEST(PositionalDeleteTest2, NoExtraBytesRead) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  std::string path;
+  auto logging_fs = std::make_shared<LoggingFileSystem>("mock:///delete.parquet", &path);
+  if (WriteFile(logging_fs, path, Container{{{"path1", 1}, {"path2", 3}}}) != arrow::Status::OK()) {
+    FAIL();
+  }
+  EXPECT_NO_THROW([&]() {
+    logging_fs->Clear();
+    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
+    arrow_reader->num_row_groups();
+  }());
+  auto metrics = logging_fs->GetCurrentMetrics();
+
+  EXPECT_NO_THROW([&]() {
+    logging_fs->Clear();
+    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
+    PositionalDeleteStream(std::move(arrow_reader), 0).GetDeleted("path3", 1, 2, 0);
+  }());
+
+  EXPECT_EQ(metrics, logging_fs->GetCurrentMetrics());
+
+  EXPECT_NO_THROW([&]() {
+    logging_fs->Clear();
+    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
+    PositionalDeleteStream(std::move(arrow_reader), 0).GetDeleted("path1", 1, 2, 0);
+  }());
+
+  EXPECT_NE(metrics, logging_fs->GetCurrentMetrics());
 }
 
 }  // namespace
