@@ -25,6 +25,8 @@ constexpr StringToTypeEntry kStringToPrimitiveTypeId[] = {{"boolean", TypeID::kB
                                                           {"time", TypeID::kTime},
                                                           {"timestamp", TypeID::kTimestamp},
                                                           {"timestamptz", TypeID::kTimestamptz},
+                                                          {"timestamp_ns", TypeID::kTimestampNs},
+                                                          {"timestamptz_ns", TypeID::kTimestamptzNs},
                                                           {"string", TypeID::kString},
                                                           {"uuid", TypeID::kUuid},
                                                           {"binary", TypeID::kBinary}};
@@ -86,8 +88,16 @@ std::shared_ptr<Type> ConvertArrowTypeToIceberg(const std::shared_ptr<arrow::Dat
       return std::make_shared<PrimitiveType>(TypeID::kTime);
     case arrow::Type::TIMESTAMP: {
       auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(type);
-      return std::make_shared<PrimitiveType>(timestamp_type->timezone().empty() ? TypeID::kTimestamp
-                                                                                : TypeID::kTimestamptz);
+      if (timestamp_type->unit() == arrow::TimeUnit::NANO) {
+        return std::make_shared<PrimitiveType>(timestamp_type->timezone().empty() ? TypeID::kTimestampNs
+                                                                                  : TypeID::kTimestamptzNs);
+      }
+      if (timestamp_type->unit() == arrow::TimeUnit::MICRO) {
+        return std::make_shared<PrimitiveType>(timestamp_type->timezone().empty() ? TypeID::kTimestamp
+                                                                                  : TypeID::kTimestamptz);
+      }
+      throw std::runtime_error(
+          "arrow::Type::TIMESTAMP with TimeUnit::type != MICRO or NANO is not supported in iceberg-cpp");
     }
     case arrow::Type::STRING: {
       return std::make_shared<PrimitiveType>(TypeID::kString);

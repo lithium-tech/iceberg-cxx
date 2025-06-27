@@ -171,6 +171,22 @@ ParquetColumn MakeTimestamptzColumn(const std::string& name, int field_id, const
   return {info, data};
 }
 
+ParquetColumn MakeTimestampNsColumn(const std::string& name, int field_id, const OptionalVector<int64_t>& data) {
+  ParquetInfo info{.name = name,
+                   .physical_type = parquet::Type::INT64,
+                   .logical_type = parquet::TimestampLogicalType::Make(false, parquet::LogicalType::TimeUnit::NANOS),
+                   .field_id = field_id};
+  return {info, data};
+}
+
+ParquetColumn MakeTimestamptzNsColumn(const std::string& name, int field_id, const OptionalVector<int64_t>& data) {
+  ParquetInfo info{.name = name,
+                   .physical_type = parquet::Type::INT64,
+                   .logical_type = parquet::TimestampLogicalType::Make(true, parquet::LogicalType::TimeUnit::NANOS),
+                   .field_id = field_id};
+  return {info, data};
+}
+
 ParquetColumn MakeDateColumn(const std::string& name, int field_id, const OptionalVector<int32_t>& data) {
   ParquetInfo info{.name = name,
                    .physical_type = parquet::Type::INT32,

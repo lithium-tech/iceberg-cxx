@@ -25,8 +25,8 @@ Source https://iceberg.apache.org/status/
 | time                     | 2 | +   | +   | +   | +   | +   |
 | timestamp                | 2 | +   | +   | +   | +   | +   |
 | timestamptz              | 2 | +   | +   | +   | +   | +   |
-| timestamp_ns             | 3 | -   | +   | +   | +   | +   |
-| timestamptz_ns           | 3 | -   | +   | +   | +   | +   |
+| timestamp_ns             | 3 | +   | +   | +   | +   | +   |
+| timestamptz_ns           | 3 | +   | +   | +   | +   | +   |
 | string                   | 2 | +   | +   | +   | +   | +   |
 | uuid                     | 2 | +   | +   | +   | +   | +   |
 | fixed                    | 2 | +   | +   | +   | +   | +   |

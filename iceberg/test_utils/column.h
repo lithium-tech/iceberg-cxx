@@ -66,6 +66,8 @@ ParquetColumn MakeUuidColumn(const std::string& name, int field_id, const std::v
 ParquetColumn MakeTimeColumn(const std::string& name, int field_id, const OptionalVector<int64_t>& data);
 ParquetColumn MakeTimestampColumn(const std::string& name, int field_id, const OptionalVector<int64_t>& data);
 ParquetColumn MakeTimestamptzColumn(const std::string& name, int field_id, const OptionalVector<int64_t>& data);
+ParquetColumn MakeTimestampNsColumn(const std::string& name, int field_id, const OptionalVector<int64_t>& data);
+ParquetColumn MakeTimestamptzNsColumn(const std::string& name, int field_id, const OptionalVector<int64_t>& data);
 ParquetColumn MakeDateColumn(const std::string& name, int field_id, const OptionalVector<int32_t>& data);
 ParquetColumn MakeNumericColumn(const std::string& name, int field_id, const OptionalVector<int32_t>& data,
                                 int precision, int scale);

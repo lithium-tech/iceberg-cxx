@@ -81,7 +81,7 @@ bool IcebergToParquetSchemaValidator::Ensure(bool cond, const std::string& messa
   return cond;
 }
 
-const std::array<std::pair<TypeID, parquet::Type::type>, 11> IcebergToParquetSchemaValidator::map_ = {
+const std::array<std::pair<TypeID, parquet::Type::type>, 13> IcebergToParquetSchemaValidator::map_ = {
     std::pair{TypeID::kBoolean, parquet::Type::BOOLEAN},
     {TypeID::kInt, parquet::Type::INT32},
     {TypeID::kLong, parquet::Type::INT64},
@@ -91,6 +91,8 @@ const std::array<std::pair<TypeID, parquet::Type::type>, 11> IcebergToParquetSch
     {TypeID::kTime, parquet::Type::INT64},
     {TypeID::kTimestamp, parquet::Type::INT64},
     {TypeID::kTimestamptz, parquet::Type::INT64},
+    {TypeID::kTimestampNs, parquet::Type::INT64},
+    {TypeID::kTimestamptzNs, parquet::Type::INT64},
     {TypeID::kString, parquet::Type::BYTE_ARRAY},
     {TypeID::kBinary, parquet::Type::BYTE_ARRAY},
 };
@@ -179,6 +181,36 @@ void IcebergToParquetSchemaValidator::ValidateColumn(const types::NestedField& f
                    timestamp_node->time_unit() == parquet::LogicalType::TimeUnit::MICROS,
                LogicalTypeErrorMessage(field.type,
                                        parquet::LogicalType::Timestamp(true, parquet::LogicalType::TimeUnit::MICROS)),
+               error_log);
+      }
+      break;
+    }
+
+    case TypeID::kTimestampNs: {
+      if (Ensure(node->logical_type()->is_timestamp(),
+                 LogicalTypeErrorMessage(field.type,
+                                         parquet::LogicalType::Timestamp(false, parquet::LogicalType::TimeUnit::NANOS)),
+                 error_log)) {
+        auto timestamp_node = std::static_pointer_cast<const parquet::TimestampLogicalType>(node->logical_type());
+        Ensure(!timestamp_node->is_adjusted_to_utc() &&
+                   timestamp_node->time_unit() == parquet::LogicalType::TimeUnit::NANOS,
+               LogicalTypeErrorMessage(field.type,
+                                       parquet::LogicalType::Timestamp(false, parquet::LogicalType::TimeUnit::NANOS)),
+               error_log);
+      }
+      break;
+    }
+
+    case TypeID::kTimestamptzNs: {
+      if (Ensure(node->logical_type()->is_timestamp(),
+                 LogicalTypeErrorMessage(field.type,
+                                         parquet::LogicalType::Timestamp(true, parquet::LogicalType::TimeUnit::NANOS)),
+                 error_log)) {
+        auto timestamp_node = std::static_pointer_cast<const parquet::TimestampLogicalType>(node->logical_type());
+        Ensure(timestamp_node->is_adjusted_to_utc() &&
+                   timestamp_node->time_unit() == parquet::LogicalType::TimeUnit::NANOS,
+               LogicalTypeErrorMessage(field.type,
+                                       parquet::LogicalType::Timestamp(true, parquet::LogicalType::TimeUnit::NANOS)),
                error_log);
       }
       break;
