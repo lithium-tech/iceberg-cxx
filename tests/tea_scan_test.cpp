@@ -7,16 +7,12 @@
 #include <fstream>
 
 #include "gtest/gtest.h"
+#include "iceberg/common/fs/filesystem_wrapper.h"
 #include "iceberg/experimental_representations.h"
 #include "iceberg/type.h"
 
 namespace iceberg {
 namespace {
-
-class FileSystemWrapper : public arrow::fs::SubTreeFileSystem {
- public:
-  explicit FileSystemWrapper(std::shared_ptr<arrow::fs::FileSystem> fs) : arrow::fs::SubTreeFileSystem("", fs) {}
-};
 
 class ReplacingFilesystem : public FileSystemWrapper {
  public:
