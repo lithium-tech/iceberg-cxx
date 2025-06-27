@@ -21,6 +21,7 @@
 #include "avro/Schema.hh"
 #include "avro/Types.hh"
 #include "avro/ValidSchema.hh"
+#include "iceberg/avro_manifest_entry_reader.h"
 #include "iceberg/type.h"
 #include "rapidjson/document.h"
 
@@ -948,7 +949,7 @@ Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserialize
   }
 
   auto istream = avro::istreamInputStream(input);
-  avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream));
+  YReader<avro::GenericDatum> data_file_reader(std::move(istream));
   Manifest result;
 
   result.metadata = data_file_reader.metadata();
