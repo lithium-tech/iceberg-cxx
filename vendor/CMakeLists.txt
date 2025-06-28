@@ -32,6 +32,12 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
+  yyjson
+  GIT_REPOSITORY ${GITHUB}/ibireme/yyjson.git
+  GIT_TAG 9e24d6bcead647231f81173cc5c6bb6c097c00e4 # 0.11.1
+)
+
+FetchContent_Declare(
   thrift
   GIT_REPOSITORY ${GITHUB}/apache/thrift.git
   GIT_TAG df626d768a87fe07fef215b4dde831185e6929d7 # v0.19.0
@@ -239,6 +245,7 @@ FetchContent_MakeAvailable(datasketches-cpp)
 
 FetchContent_MakeAvailable(hive-metastore)
 FetchContent_MakeAvailable(rapidjson)
+FetchContent_MakeAvailable(yyjson)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(OS_LINUX ON CACHE BOOL "")

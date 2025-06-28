@@ -22,7 +22,13 @@
 #include "avro/Types.hh"
 #include "avro/ValidSchema.hh"
 #include "iceberg/type.h"
+
+#if 0
 #include "rapidjson/document.h"
+namespace json = rapidjson;
+#else
+#include "iceberg/json/rapid_yyjson.h"
+#endif
 
 namespace {
 inline avro::LogicalType GetLogicalTypeFromDatum(const avro::GenericDatum& datum) {
@@ -957,7 +963,7 @@ Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserialize
   result.metadata.erase("avro.codec");
 
   if (!result.metadata.contains("schema-id") && result.metadata.contains("schema")) {
-    rapidjson::Document document;
+    json::Document document;
     const auto& schema = result.metadata["schema"];
     std::string schema_str(schema.begin(), schema.end());
     document.Parse(schema_str.c_str());

@@ -10,7 +10,7 @@ add_library(filter_representation STATIC
   visitor.h
 )
 
-target_link_libraries(filter_representation PUBLIC _rapidjson)
+target_link_libraries(filter_representation PUBLIC _rapidjson yyjson)
 target_link_libraries(filter_representation PRIVATE Arrow::arrow_static)
 target_include_directories(filter_representation PUBLIC ${CMAKE_SOURCE_DIR})
 
