@@ -1,11 +1,12 @@
 #include "iceberg/manifest_entry_stats_getter.h"
 
+#include <cstdint>
+#include <cstring>
+
 #include <iceberg/nested_field.h>
 #include <iceberg/schema.h>
 #include <iceberg/type.h>
 
-#include <cstdint>
-#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
