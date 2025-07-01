@@ -3,10 +3,7 @@ if(${ICECXX_COMPUTE})
   set(ICE_COMPUTE ice_compute)
 endif()
 
-add_library(iceberg_streams INTERFACE)
-
-target_include_directories(iceberg_streams INTERFACE ${CMAKE_SOURCE_DIR})
-target_link_libraries(iceberg_streams INTERFACE Arrow::arrow_static Parquet::parquet_static iceberg iceberg_common iceberg_positional_delete iceberg_equality_delete ${ICE_COMPUTE})
+add_subdirectory(iceberg)
 
 add_executable(iceberg_streams_ut
   # ut/builder_test.cpp # TODO(gmusya): cover
@@ -18,6 +15,7 @@ add_executable(iceberg_streams_ut
   ut/positional_delete_applier_test.cpp
   ut/projection_stream_test.cpp
   ut/row_group_reader_test.cpp
+  ut/parquet_stats_getter_test.cpp
 )
 
 target_link_libraries(iceberg_streams_ut PUBLIC iceberg_streams iceberg_test_utils gtest_main iceberg_common_fs ${CMAKE_DL_LIBS})

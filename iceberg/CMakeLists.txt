@@ -28,6 +28,8 @@ set(iceberg_cpp_files
   transforms.cpp
   transforms.h
   hash_utils.h
+  manifest_entry_stats_getter.cpp
+  manifest_entry_stats_getter.h
   sql_catalog.cpp
   sql_catalog.h
   transaction.cpp
@@ -56,7 +58,7 @@ add_subdirectory(test_utils)
 add_subdirectory(streams)
 
 # TODO(gmusya): use private linkage where possible
-target_link_libraries(iceberg-cpp PUBLIC _rapidjson _croaring _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static)
+target_link_libraries(iceberg-cpp PUBLIC _rapidjson _croaring _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static absl::strings)
 if (ICECXX_USE_REST)
   target_link_libraries(iceberg-cpp PUBLIC cpr)
 endif()
@@ -68,5 +70,6 @@ set_target_properties(iceberg-cpp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_executable(iceberg-cpp-test
   ut/puffin_test.cpp
+  ut/manifest_entry_stats_getter_test.cpp
 )
 target_link_libraries(iceberg-cpp-test iceberg-cpp gtest_main)
