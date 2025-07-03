@@ -91,7 +91,8 @@ EqualityDeletePtr MakeEqualityDelete(std::shared_ptr<arrow::Schema> schema, bool
       ptr->Reserve(num_rows);
       return ptr;
     } else {
-      throw arrow::Status::ExecutionError("Internal error in tea. Unexpected total_bit_width");
+      throw arrow::Status::ExecutionError("Internal error in " + std::string(__PRETTY_FUNCTION__) +
+                                          ": Unexpected total_bit_width");
     }
   }
 }

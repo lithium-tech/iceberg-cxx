@@ -194,7 +194,8 @@ void PositionalDeleteStream::Append(UrlDeleteRows& rows) {
 DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer) {
   if (last_query_.has_value()) {
     if (std::tie(last_query_->url, last_query_->end) > std::tie(url, begin)) {
-      throw std::runtime_error("PositionalDeleteStream::GetDeleted: internal error in tea.");
+      throw std::runtime_error("Internal error in " + std::string(__PRETTY_FUNCTION__) +
+                               ": queries must be disjoint and in ascending order");
     }
   }
   last_query_ = Query{.url = url, .begin = begin, .end = end};
