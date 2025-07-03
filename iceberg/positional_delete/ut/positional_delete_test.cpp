@@ -8,6 +8,7 @@
 #include "arrow/filesystem/filesystem.h"
 #include "gtest/gtest.h"
 #include "parquet/arrow/reader.h"
+#include "parquet/column_reader.h"
 #include "parquet/column_writer.h"
 #include "parquet/file_writer.h"
 
@@ -147,13 +148,70 @@ arrow::Result<std::unique_ptr<parquet::arrow::FileReader>> OpenUrl(std::shared_p
   return reader_builder.Build();
 }
 
+template <typename Reader, typename Value>
+void ReadValueNotNull(Reader& reader, Value& value) {
+  int64_t values_read;
+  int64_t rows_read = reader->ReadBatch(1, nullptr, nullptr, &value, &values_read);
+  if (rows_read != 1 || values_read != 1) {
+    throw arrow::Status::OK();
+  }
+}
+
+std::string StringFromByteArray(const parquet::ByteArray& value) noexcept {
+  return {reinterpret_cast<const char*>(value.ptr), value.len};
+}
+
+PositionalDeleteStream MakeStream(std::shared_ptr<FileSystem> fs, const std::string& path, int layer) {
+  return PositionalDeleteStream({{layer, {path}}}, [&](const std::string& url) {
+    return std::shared_ptr<parquet::arrow::FileReader>(OpenUrl(fs, url).ValueOrDie().release());
+  });
+}
+
 Status ReadFile(std::shared_ptr<FileSystem> fs, const std::string& path, UrlDeleteRows& rows,
                 uint64_t* count = nullptr) {
   try {
-    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-    ARROW_ASSIGN_OR_RAISE(arrow_reader, OpenUrl(fs, path));
+    auto pos_del_stream = MakeStream(fs, path, 0);
 
-    PositionalDeleteStream(std::move(arrow_reader), 0).Append(rows);
+    std::unique_ptr<parquet::arrow::FileReader> arrow_reader_local;
+    ARROW_ASSIGN_OR_RAISE(arrow_reader_local, OpenUrl(fs, path));
+
+    auto parquet_reader = arrow_reader_local->parquet_reader();
+
+    std::set<std::string> paths;
+
+    for (int i = 0; i < arrow_reader_local->num_row_groups(); ++i) {
+      auto row_group_reader = parquet_reader->RowGroup(i);
+      auto column0 = row_group_reader->Column(0);
+      auto column1 = row_group_reader->Column(1);
+
+      // Validate type of the columns.
+      if (column0->type() != parquet::Type::BYTE_ARRAY) {
+        throw arrow::Status::OK();
+      }
+      if (column1->type() != parquet::Type::INT64) {
+        throw arrow::Status::OK();
+      }
+
+      auto file_path_reader = std::static_pointer_cast<parquet::ByteArrayReader>(column0);
+
+      while (file_path_reader->HasNext()) {
+        parquet::ByteArray file_path_value;
+        ReadValueNotNull(file_path_reader, file_path_value);
+
+        paths.insert(StringFromByteArray(file_path_value));
+      }
+    }
+
+    for (const auto& path : paths) {
+      const auto& poses = pos_del_stream.GetDeleted(path, 0, INT64_MAX, 0);
+      rows[path].insert(rows[path].end(), poses.begin(), poses.end());
+    }
+
+    for (auto& [_, poses] : rows) {
+      std::sort(poses.begin(), poses.end());
+      // Remove possible duplicates.
+      poses.erase(std::unique(poses.begin(), poses.end()), poses.end());
+    }
 
     if (count) {
       *count = 0;
@@ -241,9 +299,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStream) {
   using Container = std::vector<std::vector<DataStringInt64>>;
   ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
 
-  std::unique_ptr<parquet::arrow::FileReader> arrow_reader = OpenUrl(fs_, path_).ValueOrDie();
-
-  PositionalDeleteStream stream(std::move(arrow_reader), 0);
+  auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
   ASSERT_EQ(stream.GetDeleted("path1", 2, 3, 0), (DeleteRows{}));
   ASSERT_EQ(stream.GetDeleted("path1", 3, 5, 0), (DeleteRows{{3, 4}}));
@@ -253,9 +309,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerGreater) {
   using Container = std::vector<std::vector<DataStringInt64>>;
   ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
 
-  std::unique_ptr<parquet::arrow::FileReader> arrow_reader = OpenUrl(fs_, path_).ValueOrDie();
-
-  PositionalDeleteStream stream(std::move(arrow_reader), 1);
+  auto stream = MakeStream(fs_, path_, 1);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
   ASSERT_EQ(stream.GetDeleted("path1", 2, 3, 0), (DeleteRows{}));
   ASSERT_EQ(stream.GetDeleted("path1", 3, 5, 0), (DeleteRows{{3, 4}}));
@@ -265,9 +319,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerLess) {
   using Container = std::vector<std::vector<DataStringInt64>>;
   ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
 
-  std::unique_ptr<parquet::arrow::FileReader> arrow_reader = OpenUrl(fs_, path_).ValueOrDie();
-
-  PositionalDeleteStream stream(std::move(arrow_reader), 0);
+  auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 1), (DeleteRows{}));
   ASSERT_EQ(stream.GetDeleted("path1", 2, 3, 1), (DeleteRows{}));
   ASSERT_EQ(stream.GetDeleted("path1", 3, 5, 1), (DeleteRows{}));
@@ -277,9 +329,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamWithSkips) {
   using Container = std::vector<std::vector<DataStringInt64>>;
   ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path2", 4}}}), Status::OK());
 
-  std::unique_ptr<parquet::arrow::FileReader> arrow_reader = OpenUrl(fs_, path_).ValueOrDie();
-
-  PositionalDeleteStream stream(std::move(arrow_reader), 0);
+  auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
   ASSERT_EQ(stream.GetDeleted("path1", 2, 3, 0), (DeleteRows{}));
   ASSERT_EQ(stream.GetDeleted("path2", 3, 5, 0), (DeleteRows{4}));
