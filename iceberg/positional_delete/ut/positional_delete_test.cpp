@@ -527,16 +527,14 @@ TEST(PositionalDeleteTest2, NoExtraBytesRead) {
 
   EXPECT_NO_THROW([&]() {
     logging_fs->Clear();
-    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
-    PositionalDeleteStream(std::move(arrow_reader), 0).GetDeleted("path3", 1, 2, 0);
+    MakeStream(logging_fs, path, 0).GetDeleted("path3", 1, 2, 0);
   }());
 
   EXPECT_EQ(metrics, logging_fs->GetCurrentMetrics());
 
   EXPECT_NO_THROW([&]() {
     logging_fs->Clear();
-    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
-    PositionalDeleteStream(std::move(arrow_reader), 0).GetDeleted("path1", 1, 2, 0);
+    MakeStream(logging_fs, path, 0).GetDeleted("path1", 1, 2, 0);
   }());
 
   EXPECT_NE(metrics, logging_fs->GetCurrentMetrics());

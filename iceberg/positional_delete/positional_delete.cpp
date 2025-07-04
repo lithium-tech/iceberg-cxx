@@ -15,20 +15,6 @@
 
 namespace iceberg {
 
-namespace {
-
-template <typename Type>
-std::shared_ptr<parquet::TypedStatistics<Type>> CastStats(
-    const std::unique_ptr<parquet::ColumnChunkMetaData>& column_metadata, int column_index) {
-  if (column_metadata->type() != Type::type_num) {
-    throw arrow::Status::ExecutionError("Unexpected column " + std::to_string(column_index) + " type ",
-                                        column_metadata->type());
-  }
-  return static_pointer_cast<parquet::TypedStatistics<Type>>(column_metadata->statistics());
-}
-
-}  // namespace
-
 static bool Equals(parquet::ByteArray a, parquet::ByteArray b) {
   if (a.len != b.len) {
     return false;
@@ -60,6 +46,16 @@ class PositionalDeleteStream::Reader {
       throw arrow::Status::ExecutionError("Unexpected number of columns in delete files: ", num_columns);
     }
 
+    if (file_metadata->schema()->Column(0)->physical_type() != parquet::Type::BYTE_ARRAY) {
+      throw arrow::Status::ExecutionError("Unexpected column 0 type " +
+                                          parquet::TypeToString(file_metadata->schema()->Column(0)->physical_type()));
+    }
+
+    if (file_metadata->schema()->Column(1)->physical_type() != parquet::Type::INT64) {
+      throw arrow::Status::ExecutionError("Unexpected column 1 type ",
+                                          parquet::TypeToString(file_metadata->schema()->Column(1)->physical_type()));
+    }
+
     num_row_groups_ = file_metadata->num_row_groups();
   }
 
@@ -79,8 +75,9 @@ class PositionalDeleteStream::Reader {
   bool Next() {
     while (true) {
       if (!file_path_reader_) {
-        file_path_reader_ = CastReader<parquet::ByteArrayType>(0);
-        pos_reader_ = CastReader<parquet::Int64Type>(1);
+        // already checked column types in the constructor
+        file_path_reader_ = std::static_pointer_cast<parquet::ByteArrayReader>(current_rowgroup_reader_->Column(0));
+        pos_reader_ = std::static_pointer_cast<parquet::Int64Reader>(current_rowgroup_reader_->Column(1));
       }
       if (file_path_reader_->HasNext()) {
         parquet::ByteArray file_path_value;
@@ -129,16 +126,6 @@ class PositionalDeleteStream::Reader {
     }
   }
 
-  template <typename Type>
-  std::shared_ptr<parquet::TypedColumnReader<Type>> CastReader(int column_index) {
-    auto column = current_rowgroup_reader_->Column(column_index);
-    if (column->type() != Type::type_num) {
-      throw arrow::Status::ExecutionError("Unexpected column " + std::to_string(column_index) + " type ",
-                                          column->type());
-    }
-    return std::static_pointer_cast<parquet::TypedColumnReader<Type>>(column);
-  }
-
   std::string_view StringFromByteArray(const parquet::ByteArray& value) const noexcept {
     return {reinterpret_cast<const char*>(value.ptr), value.len};
   }
@@ -182,8 +169,9 @@ std::pair<std::optional<std::string>, std::optional<int64_t>> PositionalDeleteSt
   if (!column_metadata0->is_stats_set() || !column_metadata1->is_stats_set()) {
     return res;
   }
-  auto str_stats = CastStats<parquet::ByteArrayType>(column_metadata0, 0);
-  auto int_stats = CastStats<parquet::Int64Type>(column_metadata1, 1);
+  // already checked column types in the reader's constructor
+  auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
+  auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
   if (!str_stats->HasMinMax()) {
     return res;
   }
@@ -208,8 +196,9 @@ PositionalDeleteStream::BasicRowGroupFilter::Result PositionalDeleteStream::Basi
   if (!column_metadata0->is_stats_set() || !column_metadata1->is_stats_set()) {
     return Result::kInter;
   }
-  auto str_stats = CastStats<parquet::ByteArrayType>(column_metadata0, 0);
-  auto int_stats = CastStats<parquet::Int64Type>(column_metadata1, 1);
+  // already checked column types in the reader's constructor
+  auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
+  auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
   if (!str_stats->HasMinMax()) {
     return Result::kInter;
   }
