@@ -64,7 +64,8 @@ class PositionalDeleteApplierTest : public ::testing::Test {
     auto fs_provider = std::make_shared<FileSystemProvider>(
         std::map<std::string, std::shared_ptr<IFileSystemGetter>>{{"file", std::make_shared<LocalFileSystemGetter>()}});
     auto positional_delete_applier = std::make_shared<PositionalDeleteApplier>(
-        input_stream, std::move(info), std::make_shared<FileReaderProvider>(fs_provider), counting_logger_);
+        input_stream, std::move(info), std::make_shared<FileReaderProvider>(fs_provider),
+        std::make_shared<PositionalDeleteStream::BasicRowGroupFilter>(), counting_logger_);
 
     std::vector<std::shared_ptr<IcebergBatch>> result_batches;
     while (true) {

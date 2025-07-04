@@ -9,6 +9,7 @@ target_link_libraries(iceberg_positional_delete PUBLIC Arrow::arrow_static Parqu
 
 add_executable(iceberg_positional_delete_test
   ut/positional_delete_test.cpp
+  ut/rowgroup_filter_test.cpp
 )
 
 target_link_libraries(iceberg_positional_delete_test PUBLIC iceberg_positional_delete iceberg_test_utils absl::base gtest_main ${CMAKE_DL_LIBS})

@@ -26,12 +26,48 @@ using UrlDeleteRows = std::map<std::string, DeleteRows>;
  */
 class PositionalDeleteStream {
   class Reader;
+  class ReaderHolder {
+   public:
+    explicit ReaderHolder(std::shared_ptr<Reader> reader);
+
+    std::shared_ptr<Reader> GetReader() const;
+
+    std::pair<std::optional<std::string>, std::optional<int64_t>> GetPosition() const;
+
+    bool IsStarted() const;
+
+   private:
+    std::shared_ptr<Reader> reader_;
+  };
 
  public:
+  struct Query {
+    std::string url;
+    int64_t begin;
+    int64_t end;
+  };
+  class RowGroupFilter {
+   public:
+    enum class Result {
+      kLess,
+      kInter,
+      kGreater,
+    };
+
+    virtual ~RowGroupFilter() = default;
+    virtual Result State(const parquet::RowGroupMetaData* metadata, const Query& query) = 0;
+  };
+
+  class BasicRowGroupFilter : public RowGroupFilter {
+   public:
+    Result State(const parquet::RowGroupMetaData* metadata, const Query& query) override;
+  };
+
   using Layer = int;
 
   PositionalDeleteStream(const std::map<Layer, std::vector<std::string>>& urls,
                          const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
+                         std::shared_ptr<RowGroupFilter> filter = std::make_shared<BasicRowGroupFilter>(),
                          std::shared_ptr<iceberg::ILogger> logger = nullptr);
 
   /**
@@ -44,20 +80,17 @@ class PositionalDeleteStream {
   DeleteRows GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer_number);
 
  private:
-  struct ReaderGreater {
-    bool operator()(std::shared_ptr<Reader> lhs, std::shared_ptr<Reader> rhs) const;
+  struct ReaderHolderGreater {
+    bool operator()(const ReaderHolder& lhs, const ReaderHolder& rhs) const;
   };
 
-  struct Query {
-    std::string url;
-    int64_t begin;
-    int64_t end;
-  };
+  void EnqueueIf(bool cond, ReaderHolder&& holder);
 
-  std::priority_queue<std::shared_ptr<Reader>, std::vector<std::shared_ptr<Reader>>, ReaderGreater> queue_;
+  std::priority_queue<ReaderHolder, std::vector<ReaderHolder>, ReaderHolderGreater> queue_;
   std::optional<Query> last_query_;
 
   std::shared_ptr<iceberg::ILogger> logger_;
+  std::shared_ptr<RowGroupFilter> filter_;
 };
 
 }  // namespace iceberg
