@@ -513,7 +513,7 @@ TEST_F(PositionalDeleteTest, ManyQueries) {
   EXPECT_EQ(pos_del_stream.GetDeleted("path2", 2, 4, 0), DeleteRows{3});
 }
 
-TEST(PositionalDeleteTest2, NoExtraBytesRead) {
+TEST(PositionalDeleteTest2, NoExtraBytesRead1) {
   using Container = std::vector<std::vector<DataStringInt64>>;
   std::string path;
   auto logging_fs = std::make_shared<LoggingFileSystem>("mock:///delete.parquet", &path);
@@ -538,6 +538,69 @@ TEST(PositionalDeleteTest2, NoExtraBytesRead) {
   }());
 
   EXPECT_NE(metrics, logging_fs->GetCurrentMetrics());
+}
+
+TEST(PositionalDeleteTest2, NoExtraBytesRead2) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  std::string path;
+  auto logging_fs = std::make_shared<LoggingFileSystem>("mock:///delete.parquet", &path);
+
+  ASSERT_EQ(logging_fs->CreateDir(path), Status::OK());
+
+  ASSERT_EQ(WriteFile(logging_fs, path + "/first", Container{{{"path1", 1}}, {{"path5", 5}}, {{"path7", 7}}}),
+            Status::OK());
+  ASSERT_EQ(WriteFile(logging_fs, path + "/second", Container{{{"path2", 2}}, {{"path3", 3}}, {{"path6", 6}}}),
+            Status::OK());
+  ASSERT_EQ(WriteFile(logging_fs, path + "/third", Container{{{"path4", 4}}, {{"path8", 8}}, {{"path9", 9}}}),
+            Status::OK());
+
+  logging_fs->Clear();
+  auto cb = [&](const std::string& url) {
+    auto arrow_reader = OpenUrl(logging_fs, url).ValueOrDie();
+    return std::shared_ptr<parquet::arrow::FileReader>(arrow_reader.release());
+  };
+  std::map<int, std::vector<std::string>> urls = {{0, {path + "/first", path + "/second", path + "/third"}}};
+  auto pos_del_stream = PositionalDeleteStream(urls, cb);
+  EXPECT_EQ(pos_del_stream.GetDeleted("path2", 0, INT64_MAX, 0), DeleteRows{2});
+  EXPECT_EQ(pos_del_stream.GetDeleted("path3", 0, INT64_MAX, 0), DeleteRows{3});
+  EXPECT_EQ(pos_del_stream.GetDeleted("path7", 0, INT64_MAX, 0), DeleteRows{7});
+  EXPECT_EQ(pos_del_stream.GetDeleted("path9", 0, INT64_MAX, 0), DeleteRows{9});
+
+  auto metrics = logging_fs->GetCurrentMetrics();
+  logging_fs->Clear();
+
+  auto Read = [&](const std::string& suffix, const std::vector<int>& indexes) {
+    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+    ARROW_ASSIGN_OR_RAISE(arrow_reader, OpenUrl(logging_fs, path + suffix));
+
+    auto parquet_reader = arrow_reader->parquet_reader();
+    for (const auto i : indexes) {
+      auto row_group_reader = parquet_reader->RowGroup(i);
+      auto column0 = row_group_reader->Column(0);
+      auto column1 = row_group_reader->Column(1);
+      if (column0->type() != parquet::Type::BYTE_ARRAY) {
+        throw arrow::Status::OK();
+      }
+      if (column1->type() != parquet::Type::INT64) {
+        throw arrow::Status::OK();
+      }
+
+      auto file_path_reader = std::static_pointer_cast<parquet::ByteArrayReader>(column0);
+      auto pos_reader = std::static_pointer_cast<parquet::Int64Reader>(column1);
+
+      parquet::ByteArray file_path_value;
+      int64_t pos;
+      ReadValueNotNull(file_path_reader, file_path_value);
+      ReadValueNotNull(pos_reader, pos);
+    }
+    return Status::OK();
+  };
+
+  ASSERT_OK(Read("/first", {2}));
+  ASSERT_OK(Read("/second", {0, 1}));
+  ASSERT_OK(Read("/third", {2}));
+
+  EXPECT_EQ(metrics, logging_fs->GetCurrentMetrics());
 }
 
 }  // namespace

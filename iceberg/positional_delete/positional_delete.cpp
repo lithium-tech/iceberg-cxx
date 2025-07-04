@@ -73,29 +73,25 @@ class PositionalDeleteStream::Reader {
    * Advance to the next record.
    */
   bool Next() {
-    while (true) {
-      if (!file_path_reader_) {
-        // already checked column types in the constructor
-        file_path_reader_ = std::static_pointer_cast<parquet::ByteArrayReader>(current_rowgroup_reader_->Column(0));
-        pos_reader_ = std::static_pointer_cast<parquet::Int64Reader>(current_rowgroup_reader_->Column(1));
-      }
-      if (file_path_reader_->HasNext()) {
-        parquet::ByteArray file_path_value;
-        int64_t pos;
-
-        ReadValueNotNull(file_path_reader_, file_path_value);
-        ReadValueNotNull(pos_reader_, pos);
-
-        if (!Equals(current_file_path_value_, file_path_value)) {
-          current_file_path_ = StringFromByteArray(file_path_value);
-        }
-        current_pos_ = pos;
-        return true;
-      }
-      if (!NextRowGroup()) {
-        return false;
-      }
+    if (!file_path_reader_) {
+      // already checked column types in the constructor
+      file_path_reader_ = std::static_pointer_cast<parquet::ByteArrayReader>(current_rowgroup_reader_->Column(0));
+      pos_reader_ = std::static_pointer_cast<parquet::Int64Reader>(current_rowgroup_reader_->Column(1));
     }
+    if (file_path_reader_->HasNext()) {
+      parquet::ByteArray file_path_value;
+      int64_t pos;
+
+      ReadValueNotNull(file_path_reader_, file_path_value);
+      ReadValueNotNull(pos_reader_, pos);
+
+      if (!Equals(current_file_path_value_, file_path_value)) {
+        current_file_path_ = StringFromByteArray(file_path_value);
+      }
+      current_pos_ = pos;
+      return true;
+    }
+    return NextRowGroup();
   }
 
   bool NextRowGroup() {
