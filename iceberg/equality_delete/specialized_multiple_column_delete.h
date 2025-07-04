@@ -158,9 +158,8 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
           new_value = std::bit_cast<uint64_t>(GetValue<arrow::TimestampArray>(arrays[id], row));
           break;
         default:
-          throw arrow::Status::ExecutionError(
-              "SpecializedDeleteMultipleColumn (Add): Internal error in tea. "
-              "Unexpected type");
+          throw arrow::Status::ExecutionError("Internal error in " + std::string(__PRETTY_FUNCTION__) +
+                                              ": Unexpected type");
       }
       result += new_value << current_shift;
       current_shift += bit_width_[id];
@@ -191,9 +190,8 @@ class SpecializedDeleteMultipleColumn final : public EqualityDelete {
           new_value = std::bit_cast<uint64_t>(GetValue<arrow::TimestampArray>(arrays[id], row));
           break;
         default:
-          throw arrow::Status::ExecutionError(
-              "SpecializedDeleteMultipleColumn (Add): Internal error in tea. "
-              "Unexpected type");
+          throw arrow::Status::ExecutionError("Internal error in " + std::string(__PRETTY_FUNCTION__) +
+                                              ": Unexpected type");
       }
       result += new_value << current_shift;
       current_shift += bit_width_[id];
