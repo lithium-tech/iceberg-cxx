@@ -190,10 +190,14 @@ std::string StringFromByteArray(const parquet::ByteArray& value) noexcept {
   return {reinterpret_cast<const char*>(value.ptr), value.len};
 }
 
-PositionalDeleteStream MakeStream(std::shared_ptr<FileSystem> fs, const std::string& path, int layer) {
-  return PositionalDeleteStream({{layer, {path}}}, [&](const std::string& url) {
+std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)> MakeCB(std::shared_ptr<FileSystem> fs) {
+  return [fs](const std::string& url) {
     return std::shared_ptr<parquet::arrow::FileReader>(OpenUrl(fs, url).ValueOrDie().release());
-  });
+  };
+}
+
+PositionalDeleteStream MakeStream(std::shared_ptr<FileSystem> fs, const std::string& path, int layer) {
+  return PositionalDeleteStream({{layer, {path}}}, MakeCB(fs));
 }
 
 Status ReadFile(std::shared_ptr<FileSystem> fs, const std::string& path, UrlDeleteRows& rows,
@@ -453,13 +457,9 @@ TEST_F(PositionalDeleteTest, NoStats) {
   ASSERT_EQ(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}}}, false), Status::OK());
   ASSERT_EQ(WriteFile(fs_, path_ + "/second", Container{{{"path2", 2}}}, false), Status::OK());
 
-  auto cb = [&](const std::string& url) {
-    auto arrow_reader = OpenUrl(fs_, url).ValueOrDie();
-    return std::shared_ptr<parquet::arrow::FileReader>(arrow_reader.release());
-  };
   std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/second", path_ + "/first"}}};
-  EXPECT_EQ(PositionalDeleteStream(urls, cb).GetDeleted("path1", 0, 2, 0), DeleteRows{1});
-  EXPECT_EQ(PositionalDeleteStream(urls, cb).GetDeleted("path2", 1, 3, 0), DeleteRows{2});
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 2, 0), DeleteRows{1});
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path2", 1, 3, 0), DeleteRows{2});
 }
 
 TEST_F(PositionalDeleteTest, MixedStats1) {
@@ -470,14 +470,10 @@ TEST_F(PositionalDeleteTest, MixedStats1) {
   ASSERT_EQ(WriteFile(fs_, path_ + "/second", Container{{{"path2", 2}}}), Status::OK());
   ASSERT_EQ(WriteFile(fs_, path_ + "/third", Container{{{"path3", 3}}}, false), Status::OK());
 
-  auto cb = [&](const std::string& url) {
-    auto arrow_reader = OpenUrl(fs_, url).ValueOrDie();
-    return std::shared_ptr<parquet::arrow::FileReader>(arrow_reader.release());
-  };
   std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second", path_ + "/third"}}};
-  EXPECT_EQ(PositionalDeleteStream(urls, cb).GetDeleted("path1", 0, 2, 0), DeleteRows{1});
-  EXPECT_EQ(PositionalDeleteStream(urls, cb).GetDeleted("path2", 1, 3, 0), DeleteRows{2});
-  EXPECT_EQ(PositionalDeleteStream(urls, cb).GetDeleted("path3", 2, 4, 0), DeleteRows{3});
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 2, 0), DeleteRows{1});
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path2", 1, 3, 0), DeleteRows{2});
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path3", 2, 4, 0), DeleteRows{3});
 }
 
 TEST_F(PositionalDeleteTest, MixedStats2) {
@@ -487,12 +483,8 @@ TEST_F(PositionalDeleteTest, MixedStats2) {
   ASSERT_EQ(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
   ASSERT_EQ(WriteFile(fs_, path_ + "/second", Container{{{"path1", 2}}}, false), Status::OK());
 
-  auto cb = [&](const std::string& url) {
-    auto arrow_reader = OpenUrl(fs_, url).ValueOrDie();
-    return std::shared_ptr<parquet::arrow::FileReader>(arrow_reader.release());
-  };
   std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second"}}};
-  EXPECT_EQ(PositionalDeleteStream(urls, cb).GetDeleted("path1", 0, 3, 0), DeleteRows({1, 2}));
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 3, 0), DeleteRows({1, 2}));
 }
 
 TEST_F(PositionalDeleteTest, ManyQueries) {
@@ -502,12 +494,8 @@ TEST_F(PositionalDeleteTest, ManyQueries) {
   ASSERT_EQ(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
   ASSERT_EQ(WriteFile(fs_, path_ + "/second", Container{{{"path1", 2}}}, false), Status::OK());
 
-  auto cb = [&](const std::string& url) {
-    auto arrow_reader = OpenUrl(fs_, url).ValueOrDie();
-    return std::shared_ptr<parquet::arrow::FileReader>(arrow_reader.release());
-  };
   std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second"}}};
-  auto pos_del_stream = PositionalDeleteStream(urls, cb);
+  auto pos_del_stream = PositionalDeleteStream(urls, MakeCB(fs_));
   EXPECT_EQ(pos_del_stream.GetDeleted("path1", 0, 3, 0), DeleteRows({1, 2}));
   EXPECT_EQ(pos_del_stream.GetDeleted("path2", 0, 2, 0), DeleteRows{});
   EXPECT_EQ(pos_del_stream.GetDeleted("path2", 2, 4, 0), DeleteRows{3});
@@ -555,12 +543,9 @@ TEST(PositionalDeleteTest2, NoExtraBytesRead2) {
             Status::OK());
 
   logging_fs->Clear();
-  auto cb = [&](const std::string& url) {
-    auto arrow_reader = OpenUrl(logging_fs, url).ValueOrDie();
-    return std::shared_ptr<parquet::arrow::FileReader>(arrow_reader.release());
-  };
+
   std::map<int, std::vector<std::string>> urls = {{0, {path + "/first", path + "/second", path + "/third"}}};
-  auto pos_del_stream = PositionalDeleteStream(urls, cb);
+  auto pos_del_stream = PositionalDeleteStream(urls, MakeCB(logging_fs));
   EXPECT_EQ(pos_del_stream.GetDeleted("path2", 0, INT64_MAX, 0), DeleteRows{2});
   EXPECT_EQ(pos_del_stream.GetDeleted("path3", 0, INT64_MAX, 0), DeleteRows{3});
   EXPECT_EQ(pos_del_stream.GetDeleted("path7", 0, INT64_MAX, 0), DeleteRows{7});
