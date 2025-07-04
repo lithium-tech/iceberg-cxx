@@ -163,34 +163,6 @@ PositionalDeleteStream::PositionalDeleteStream(
   }
 }
 
-PositionalDeleteStream::PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> e, Layer layer,
-                                               std::shared_ptr<iceberg::ILogger> logger)
-    : logger_(logger) {
-  if (logger) {
-    logger->Log(std::to_string(1), "metrics:positional:files_read");
-  }
-  auto reader = std::make_shared<Reader>(std::move(e), layer, logger);
-
-  if (reader->Next()) {
-    queue_.push(reader);
-  }
-}
-
-// TODO(gmusya): get rid of this method
-void PositionalDeleteStream::Append(UrlDeleteRows& rows) {
-  while (!queue_.empty()) {
-    const std::string url = queue_.top()->current_file_path();
-    const auto& poses = GetDeleted(url, 0, INT64_MAX, 0);
-    rows[url].insert(rows[url].end(), poses.begin(), poses.end());
-  }
-
-  for (auto& [_, poses] : rows) {
-    std::sort(poses.begin(), poses.end());
-    // Remove possible duplicates.
-    poses.erase(std::unique(poses.begin(), poses.end()), poses.end());
-  }
-}
-
 DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer) {
   if (last_query_.has_value()) {
     if (std::tie(last_query_->url, last_query_->end) > std::tie(url, begin)) {

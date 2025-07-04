@@ -34,15 +34,6 @@ class PositionalDeleteStream {
                          const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
                          std::shared_ptr<iceberg::ILogger> logger = nullptr);
 
-  // used only for testing purposes. DO NOT USE IN PRODUCTION CODE
-  // TODO(gmusya): remove this constructor
-  explicit PositionalDeleteStream(std::unique_ptr<parquet::arrow::FileReader> file, Layer delete_layer,
-                                  std::shared_ptr<iceberg::ILogger> logger = nullptr);
-
-  // used only for testing purposes. DO NOT USE IN PRODUCTION CODE
-  // TODO(gmusya): remove this method
-  void Append(UrlDeleteRows& rows);
-
   /**
    * Get deleted rows in range [begin, end).
    *
