@@ -331,68 +331,68 @@ class PositionalDeleteTest : public ::testing::Test {
 
 TEST_F(PositionalDeleteTest, ReadEmpty) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{}));
   UrlDeleteRows rows;
-  ASSERT_EQ(ReadFile(fs_, path_, rows), Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, UrlDeleteRows{});
 }
 
 TEST_F(PositionalDeleteTest, ReadMixedPath) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}));
   UrlDeleteRows rows;
-  ASSERT_EQ(ReadFile(fs_, path_, rows), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1}}, {"path2", {3}}}));
 }
 
 TEST_F(PositionalDeleteTest, ReadMultipleRowGroups) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}}, {{"path1", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}}, {{"path1", 3}}}));
   UrlDeleteRows rows;
-  ASSERT_EQ(ReadFile(fs_, path_, rows), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1, 3}}}));
 }
 
 TEST_F(PositionalDeleteTest, ReadUpdate) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 3}}}));
   UrlDeleteRows rows = {{"path1", {1}}};
-  ASSERT_EQ(ReadFile(fs_, path_, rows), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1, 3}}}));
 }
 
 TEST_F(PositionalDeleteTest, MergeUpdates) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 3}, {"path1", 6}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 3}, {"path1", 6}}}));
   UrlDeleteRows rows = {{"path1", {1, 4, 5}}, {"path2", {2}}};
-  ASSERT_EQ(ReadFile(fs_, path_, rows), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1, 3, 4, 5, 6}}, {"path2", {2}}}));
 }
 
 TEST_F(PositionalDeleteTest, WrongColumnNumber) {
   using Container = std::vector<std::vector<DataInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{3}}}));
   UrlDeleteRows rows;
   ASSERT_NE(ReadFile(fs_, path_, rows), arrow::Status::OK());
 }
 
 TEST_F(PositionalDeleteTest, WrongFirstColumnType) {
   using Container = std::vector<std::vector<DataInt64Int64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{3, 25}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{3, 25}}}));
   UrlDeleteRows rows;
   ASSERT_NE(ReadFile(fs_, path_, rows), arrow::Status::OK());
 }
 
 TEST_F(PositionalDeleteTest, WrongSecondColumnType) {
   using Container = std::vector<std::vector<DataStringString>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"aba", "caba"}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"aba", "caba"}}}));
   UrlDeleteRows rows;
   ASSERT_NE(ReadFile(fs_, path_, rows), arrow::Status::OK());
 }
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStream) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}));
 
   auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
@@ -402,7 +402,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStream) {
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerGreater) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}));
 
   auto stream = MakeStream(fs_, path_, 1);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
@@ -412,7 +412,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerGreater) {
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerLess) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}));
 
   auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 1), (DeleteRows{}));
@@ -422,7 +422,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerLess) {
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStreamWithSkips) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path2", 4}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path2", 4}}}));
 
   auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
@@ -432,30 +432,30 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamWithSkips) {
 
 TEST_F(PositionalDeleteTest, Count) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}));
   UrlDeleteRows rows;
   uint64_t count = 0;
-  ASSERT_EQ(ReadFile(fs_, path_, rows, &count), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows, &count));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1}}, {"path2", {3}}}));
   EXPECT_EQ(count, 2);
 }
 
 TEST_F(PositionalDeleteTest, DoNotCountTwice) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}));
   UrlDeleteRows rows{{"path1", {1}}};
   uint64_t count = 1;
-  ASSERT_EQ(ReadFile(fs_, path_, rows, &count), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows, &count));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1}}, {"path2", {3}}}));
   EXPECT_EQ(count, 2);
 }
 
 TEST_F(PositionalDeleteTest, NoStats) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(fs_->CreateDir(path_), Status::OK());
+  ASSERT_OK(fs_->CreateDir(path_));
 
-  ASSERT_EQ(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}}}, false), Status::OK());
-  ASSERT_EQ(WriteFile(fs_, path_ + "/second", Container{{{"path2", 2}}}, false), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}}}, false));
+  ASSERT_OK(WriteFile(fs_, path_ + "/second", Container{{{"path2", 2}}}, false));
 
   std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/second", path_ + "/first"}}};
   EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 2, 0), DeleteRows{1});
@@ -464,11 +464,11 @@ TEST_F(PositionalDeleteTest, NoStats) {
 
 TEST_F(PositionalDeleteTest, MixedStats1) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(fs_->CreateDir(path_), Status::OK());
+  ASSERT_OK(fs_->CreateDir(path_));
 
-  ASSERT_EQ(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}}}, false), Status::OK());
-  ASSERT_EQ(WriteFile(fs_, path_ + "/second", Container{{{"path2", 2}}}), Status::OK());
-  ASSERT_EQ(WriteFile(fs_, path_ + "/third", Container{{{"path3", 3}}}, false), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}}}, false));
+  ASSERT_OK(WriteFile(fs_, path_ + "/second", Container{{{"path2", 2}}}));
+  ASSERT_OK(WriteFile(fs_, path_ + "/third", Container{{{"path3", 3}}}, false));
 
   std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second", path_ + "/third"}}};
   EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 2, 0), DeleteRows{1});
@@ -478,10 +478,10 @@ TEST_F(PositionalDeleteTest, MixedStats1) {
 
 TEST_F(PositionalDeleteTest, MixedStats2) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(fs_->CreateDir(path_), Status::OK());
+  ASSERT_OK(fs_->CreateDir(path_));
 
-  ASSERT_EQ(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
-  ASSERT_EQ(WriteFile(fs_, path_ + "/second", Container{{{"path1", 2}}}, false), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}, {"path2", 3}}}));
+  ASSERT_OK(WriteFile(fs_, path_ + "/second", Container{{{"path1", 2}}}, false));
 
   std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second"}}};
   EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 3, 0), DeleteRows({1, 2}));
@@ -489,10 +489,10 @@ TEST_F(PositionalDeleteTest, MixedStats2) {
 
 TEST_F(PositionalDeleteTest, ManyQueries) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(fs_->CreateDir(path_), Status::OK());
+  ASSERT_OK(fs_->CreateDir(path_));
 
-  ASSERT_EQ(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
-  ASSERT_EQ(WriteFile(fs_, path_ + "/second", Container{{{"path1", 2}}}, false), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}, {"path2", 3}}}));
+  ASSERT_OK(WriteFile(fs_, path_ + "/second", Container{{{"path1", 2}}}, false));
 
   std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second"}}};
   auto pos_del_stream = PositionalDeleteStream(urls, MakeCB(fs_));
@@ -533,14 +533,11 @@ TEST(PositionalDeleteTest2, NoExtraBytesRead2) {
   std::string path;
   auto logging_fs = std::make_shared<LoggingFileSystem>("mock:///delete.parquet", &path);
 
-  ASSERT_EQ(logging_fs->CreateDir(path), Status::OK());
+  ASSERT_OK(logging_fs->CreateDir(path));
 
-  ASSERT_EQ(WriteFile(logging_fs, path + "/first", Container{{{"path1", 1}}, {{"path5", 5}}, {{"path7", 7}}}),
-            Status::OK());
-  ASSERT_EQ(WriteFile(logging_fs, path + "/second", Container{{{"path2", 2}}, {{"path3", 3}}, {{"path6", 6}}}),
-            Status::OK());
-  ASSERT_EQ(WriteFile(logging_fs, path + "/third", Container{{{"path4", 4}}, {{"path8", 8}}, {{"path9", 9}}}),
-            Status::OK());
+  ASSERT_OK(WriteFile(logging_fs, path + "/first", Container{{{"path1", 1}}, {{"path5", 5}}, {{"path7", 7}}}));
+  ASSERT_OK(WriteFile(logging_fs, path + "/second", Container{{{"path2", 2}}, {{"path3", 3}}, {{"path6", 6}}}));
+  ASSERT_OK(WriteFile(logging_fs, path + "/third", Container{{{"path4", 4}}, {{"path8", 8}}, {{"path9", 9}}}));
 
   logging_fs->Clear();
 
