@@ -261,6 +261,9 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     auto r = holder.GetReader();
     queue_.pop();
 
+    // Row Group will be skipped if there is no filter, or filter returns kInter, meaning
+    // query intersects with the row group data or we have too little information to decide
+
     if (!holder.IsStarted()) {
       if (filter_) {
         auto res = filter_->State(r->current_row_group_metadata(), last_query_.value());

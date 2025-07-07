@@ -32,6 +32,7 @@ class PositionalDeleteStream {
 
     std::shared_ptr<Reader> GetReader() const;
 
+    // returns the minimal possible record that can be read from this reader
     std::pair<std::optional<std::string>, std::optional<int64_t>> GetPosition() const;
 
     bool IsStarted() const;
@@ -55,6 +56,10 @@ class PositionalDeleteStream {
     };
 
     virtual ~RowGroupFilter() = default;
+
+    // must return kLess if row group can be skipped without affecting the data for this and future queries
+    // must return kGreater if all records in the reader are greater than the requested range
+    // must returh kInter otherwise
     virtual Result State(const parquet::RowGroupMetaData* metadata, const Query& query) = 0;
   };
 
