@@ -55,24 +55,17 @@ class PositionalDeleteStream {
       kGreater,
     };
 
-    virtual ~RowGroupFilter() = default;
-
-    // must return kLess if row group can be skipped without affecting the data for this and future queries
-    // must return kGreater if all records in the reader are greater than the requested range
-    // must returh kInter otherwise
-    virtual Result State(const parquet::RowGroupMetaData* metadata, const Query& query) = 0;
-  };
-
-  class BasicRowGroupFilter : public RowGroupFilter {
-   public:
-    Result State(const parquet::RowGroupMetaData* metadata, const Query& query) override;
+    // return kLess if all records in the RowGroup are less than the requested range
+    // return kGreater if all records in the RowGroup (so in the reader as well) are greater than the requested range
+    // return kInter otherwise
+    // Note that if the statistics are not set and no assumptions can be made, the function will also return kInter
+    static Result State(const parquet::RowGroupMetaData* metadata, const Query& query);
   };
 
   using Layer = int;
 
   PositionalDeleteStream(const std::map<Layer, std::vector<std::string>>& urls,
                          const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
-                         std::shared_ptr<RowGroupFilter> filter = std::make_shared<BasicRowGroupFilter>(),
                          std::shared_ptr<iceberg::ILogger> logger = nullptr);
 
   /**
@@ -95,7 +88,6 @@ class PositionalDeleteStream {
   std::optional<Query> last_query_;
 
   std::shared_ptr<iceberg::ILogger> logger_;
-  std::shared_ptr<RowGroupFilter> filter_;
 };
 
 }  // namespace iceberg

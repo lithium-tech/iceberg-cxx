@@ -76,7 +76,8 @@ std::shared_ptr<FileMetaData> GetFileMetadata(const std::vector<Stats<std::strin
   return meta_builder->Finish();
 }
 
-using Result = PositionalDeleteStream::BasicRowGroupFilter::Result;
+using RowGroupFilter = PositionalDeleteStream::RowGroupFilter;
+using Result = RowGroupFilter::Result;
 
 TEST(RowGroupFilter, NoStrStats) {
   const std::string path = "a";
@@ -85,8 +86,8 @@ TEST(RowGroupFilter, NoStrStats) {
   std::vector<Stats<int64_t>> int_stats = {{true, 1, 2}};
 
   auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}), Result::kInter);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}),
+            Result::kInter);
 }
 
 TEST(RowGroupFilter, NoIntStats) {
@@ -96,8 +97,8 @@ TEST(RowGroupFilter, NoIntStats) {
   std::vector<Stats<int64_t>> int_stats = {{false, 1, 2}};
 
   auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}), Result::kInter);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}),
+            Result::kInter);
 }
 
 TEST(RowGroupFilter, PathOutOfRange) {
@@ -105,9 +106,10 @@ TEST(RowGroupFilter, PathOutOfRange) {
   std::vector<Stats<int64_t>> int_stats = {{true, 1, 2}};
 
   auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"a", 3, 5}), Result::kGreater);
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"d", 3, 5}), Result::kLess);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"a", 3, 5}),
+            Result::kGreater);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{"d", 3, 5}),
+            Result::kLess);
 }
 
 TEST(RowGroupFilter, NoIntMinMax) {
@@ -117,8 +119,8 @@ TEST(RowGroupFilter, NoIntMinMax) {
   std::vector<Stats<int64_t>> int_stats = {{true, std::nullopt, std::nullopt}};
 
   auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}), Result::kInter);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}),
+            Result::kInter);
 }
 
 TEST(RowGroupFilter, ManyPaths) {
@@ -128,8 +130,8 @@ TEST(RowGroupFilter, ManyPaths) {
   std::vector<Stats<int64_t>> int_stats = {{true, 1, 2}};
 
   auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}), Result::kInter);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 3, 5}),
+            Result::kInter);
 }
 
 TEST(RowGroupFilter, IntMinMax) {
@@ -139,10 +141,12 @@ TEST(RowGroupFilter, IntMinMax) {
   std::vector<Stats<int64_t>> int_stats = {{true, 3, 5}};
 
   auto metadata = GetFileMetadata(str_stats, int_stats);
-  PositionalDeleteStream::BasicRowGroupFilter filter;
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 6, 7}), Result::kLess);
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 2, 4}), Result::kInter);
-  EXPECT_EQ(filter.State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 1, 3}), Result::kGreater);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 6, 7}),
+            Result::kLess);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 2, 4}),
+            Result::kInter);
+  EXPECT_EQ(RowGroupFilter::State(metadata->RowGroup(0).get(), PositionalDeleteStream::Query{path, 1, 3}),
+            Result::kGreater);
 }
 
 }  // namespace

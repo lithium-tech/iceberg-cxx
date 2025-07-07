@@ -154,29 +154,26 @@ PositionalDeleteStream::ReaderHolder::ReaderHolder(std::shared_ptr<PositionalDel
 
 std::pair<std::optional<std::string>, std::optional<int64_t>> PositionalDeleteStream::ReaderHolder::GetPosition()
     const {
-  std::pair<std::optional<std::string>, std::optional<int64_t>> res(reader_->current_file_path(),
-                                                                    reader_->current_pos());
   if (IsStarted()) {
-    return res;
+    return std::make_pair(reader_->current_file_path(), reader_->current_pos());
   }
-
   auto column_metadata0 = reader_->current_row_group_metadata()->ColumnChunk(0);
   auto column_metadata1 = reader_->current_row_group_metadata()->ColumnChunk(1);
   if (!column_metadata0->is_stats_set() || !column_metadata1->is_stats_set()) {
-    return res;
+    return std::make_pair(std::nullopt, std::nullopt);
   }
   // already checked column types in the reader's constructor
   auto str_stats = static_pointer_cast<parquet::ByteArrayStatistics>(column_metadata0->statistics());
-  auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
   if (!str_stats->HasMinMax()) {
-    return res;
+    return std::make_pair(std::nullopt, std::nullopt);
   }
-  res.first = parquet::ByteArrayToString(str_stats->min());
+  std::string min_path = parquet::ByteArrayToString(str_stats->min());
 
-  if (int_stats->HasMinMax()) {
-    res.second = int_stats->min();
+  auto int_stats = static_pointer_cast<parquet::Int64Statistics>(column_metadata1->statistics());
+  if (!int_stats->HasMinMax()) {
+    return std::make_pair(std::move(min_path), std::nullopt);
   }
-  return res;
+  return std::make_pair(std::move(min_path), int_stats->min());
 }
 
 bool PositionalDeleteStream::ReaderHolderGreater::operator()(const ReaderHolder& lhs, const ReaderHolder& rhs) const {
@@ -185,7 +182,7 @@ bool PositionalDeleteStream::ReaderHolderGreater::operator()(const ReaderHolder&
 
 bool PositionalDeleteStream::ReaderHolder::IsStarted() const { return reader_->current_pos().has_value(); }
 
-PositionalDeleteStream::BasicRowGroupFilter::Result PositionalDeleteStream::BasicRowGroupFilter::State(
+PositionalDeleteStream::RowGroupFilter::Result PositionalDeleteStream::RowGroupFilter::State(
     const parquet::RowGroupMetaData* metadata, const Query& query) {
   auto column_metadata0 = metadata->ColumnChunk(0);
   auto column_metadata1 = metadata->ColumnChunk(1);
@@ -222,8 +219,8 @@ PositionalDeleteStream::BasicRowGroupFilter::Result PositionalDeleteStream::Basi
 PositionalDeleteStream::PositionalDeleteStream(
     const std::map<Layer, std::vector<std::string>>& urls,
     const std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)>& cb,
-    std::shared_ptr<RowGroupFilter> filter, std::shared_ptr<iceberg::ILogger> logger)
-    : filter_(filter), logger_(logger) {
+    std::shared_ptr<iceberg::ILogger> logger)
+    : logger_(logger) {
   for (const auto& [layer, urls_for_layer] : urls) {
     for (const auto& url : urls_for_layer) {
       if (logger) {
@@ -261,24 +258,20 @@ DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t be
     auto r = holder.GetReader();
     queue_.pop();
 
-    // Row Group will be skipped if there is no filter, or filter returns kInter, meaning
-    // query intersects with the row group data or we have too little information to decide
-
     if (!holder.IsStarted()) {
-      if (filter_) {
-        auto res = filter_->State(r->current_row_group_metadata(), last_query_.value());
-        if (res == RowGroupFilter::Result::kLess) {
-          if (logger_) {
-            logger_->Log(std::to_string(r->current_row_group_metadata()->num_rows()),
-                         "metrics:positional:rows_skipped");
-          }
-          EnqueueIf(r->NextRowGroup(), std::move(holder));
-          continue;
+      auto res = RowGroupFilter::State(r->current_row_group_metadata(), last_query_.value());
+      if (res == RowGroupFilter::Result::kLess) {
+        if (logger_) {
+          logger_->Log(std::to_string(r->current_row_group_metadata()->num_rows()), "metrics:positional:rows_skipped");
         }
-        if (res == RowGroupFilter::Result::kGreater) {
-          queue_.push(holder);
-          break;
-        }
+        EnqueueIf(r->NextRowGroup(), std::move(holder));
+        continue;
+      }
+      if (res == RowGroupFilter::Result::kGreater) {
+        // Note that ReaderHolder.GetPosition returns the minimal possible value in the reader,
+        // so if this RowGroup is greater than the query range then it is completed
+        queue_.push(holder);
+        break;
       }
       EnqueueIf(r->Next(), std::move(holder));
       continue;
