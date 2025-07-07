@@ -501,6 +501,16 @@ TEST_F(PositionalDeleteTest, ManyQueries) {
   EXPECT_EQ(pos_del_stream.GetDeleted("path2", 2, 4, 0), DeleteRows{3});
 }
 
+TEST_F(PositionalDeleteTest, MultipleDataFiles) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_EQ(WriteFile(fs_, "delete1.parquet", Container{{{"a", 100}, {"path1", 101}, {"b", 1}}}), Status::OK());
+  ASSERT_EQ(WriteFile(fs_, "delete2.parquet", Container{{{"a", 5}, {"a", 6}, {"b", 17}}}), Status::OK());
+
+  std::map<int, std::vector<std::string>> urls = {{0, {"delete1.parquet", "delete2.parquet"}}};
+  PositionalDeleteStream stream(urls, MakeCB(fs_));
+  ASSERT_EQ(stream.GetDeleted("a", 4, 7, 0), DeleteRows({5, 6}));
+}
+
 TEST(PositionalDeleteTest2, NoExtraBytesRead1) {
   using Container = std::vector<std::vector<DataStringInt64>>;
   std::string path;
