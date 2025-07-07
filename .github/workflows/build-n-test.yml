@@ -36,9 +36,12 @@ jobs:
         cd _build/tests/
         ../iceberg/iceberg-cpp-test
         ../iceberg/common/fs/iceberg_common_fs_test
+        ../iceberg/equality_delete/iceberg_equality_delete_test
+        ../iceberg/positional_delete/iceberg_positional_delete_test
         ../iceberg/filter/representation/filter_representation_ut
         ../iceberg/filter/stats_filter/stats_filter_ut
         ../iceberg/streams/compute/ice_compute_ut
+        ../iceberg/streams/iceberg_streams_ut
         ./iceberg_local_test
 
   build-macos:
@@ -69,7 +72,10 @@ jobs:
         cd _build/tests/
         ../iceberg/iceberg-cpp-test
         ../iceberg/common/fs/iceberg_common_fs_test
+        ../iceberg/equality_delete/iceberg_equality_delete_test
+        ../iceberg/positional_delete/iceberg_positional_delete_test
         ../iceberg/filter/representation/filter_representation_ut
         ../iceberg/filter/stats_filter/stats_filter_ut
         ../iceberg/streams/compute/ice_compute_ut
+        ../iceberg/streams/iceberg_streams_ut
         ./iceberg_local_test
