@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "iceberg/common/json_parse.h"
 #include "iceberg/nested_field.h"
 #include "iceberg/type.h"
 #include "rapidjson/document.h"
@@ -391,72 +392,6 @@ class WriterContext {
   auto& GetAllocator() { return allocator_; }
 };
 
-std::string ExtractStringField(const rapidjson::Value& document, const std::string& field_name) {
-  const char* c_str = field_name.c_str();
-  if (!document.HasMember(c_str)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
-  if (!document[c_str].IsString()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document[" + field_name + "].IsString())");
-  }
-  return std::string(document[c_str].GetString(), document[c_str].GetStringLength());
-}
-
-int64_t ExtractInt64Field(const rapidjson::Value& document, const std::string& field_name) {
-  const char* c_str = field_name.c_str();
-  if (!document.HasMember(c_str)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
-  if (!document[c_str].IsInt64()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document[" + field_name + "].IsString())");
-  }
-  return document[c_str].GetInt64();
-}
-
-std::optional<int32_t> ExtractOptionalInt32Field(const rapidjson::Value& document, const std::string& field_name) {
-  const char* c_str = field_name.c_str();
-  if (!document.HasMember(c_str)) {
-    return std::nullopt;
-  }
-  if (!document[c_str].IsInt()) {
-    return std::nullopt;
-  }
-  return document[c_str].GetInt();
-}
-
-std::optional<int64_t> ExtractOptionalInt64Field(const rapidjson::Value& document, const std::string& field_name) {
-  const char* c_str = field_name.c_str();
-  if (!document.HasMember(c_str)) {
-    return std::nullopt;
-  }
-  if (!document[c_str].IsInt64()) {
-    return std::nullopt;
-  }
-  return document[c_str].GetInt64();
-}
-
-int32_t ExtractInt32Field(const rapidjson::Value& document, const std::string& field_name) {
-  const char* c_str = field_name.c_str();
-  if (!document.HasMember(c_str)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
-  if (!document[c_str].IsInt()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document[" + field_name + "].IsString())");
-  }
-  return document[c_str].GetInt();
-}
-
-bool ExtractBooleanField(const rapidjson::Value& document, const std::string& field_name) {
-  const char* c_str = field_name.c_str();
-  if (!document.HasMember(c_str)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
-  if (!document[c_str].IsBool()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document[" + field_name + "].IsString())");
-  }
-  return document[c_str].GetBool();
-}
-
 std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value) {
   if (value.IsString()) {
     std::string str = value.GetString();
@@ -481,10 +416,10 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
       throw std::runtime_error(std::string(__FUNCTION__) + ": !value.HasMember(\"type\"");
     }
 
-    std::string type = ExtractStringField(value, Names::type);
+    std::string type = json_parse::ExtractStringField(value, Names::type);
     if (type == Names::list) {
-      int32_t element_field_id = ExtractInt32Field(value, Names::element_id);
-      bool element_required = ExtractBooleanField(value, Names::element_required);
+      int32_t element_field_id = json_parse::ExtractInt32Field(value, Names::element_id);
+      bool element_required = json_parse::ExtractBooleanField(value, Names::element_required);
 
       if (!value.HasMember(Names::element)) {
         throw std::runtime_error(std::string(__FUNCTION__) + ": !value.HasMember(\"element\"");
@@ -499,9 +434,9 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
 
 types::NestedField JsonToField(const rapidjson::Value& document) {
   types::NestedField result;
-  result.field_id = ExtractInt32Field(document, Names::id);
-  result.name = ExtractStringField(document, Names::name);
-  result.is_required = ExtractBooleanField(document, Names::required);
+  result.field_id = json_parse::ExtractInt32Field(document, Names::id);
+  result.name = json_parse::ExtractStringField(document, Names::name);
+  result.is_required = json_parse::ExtractBooleanField(document, Names::required);
 
   if (!document.HasMember(Names::type)) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": document.HasMember(\"type\")");
@@ -528,7 +463,7 @@ std::shared_ptr<Schema> JsonToSchema(const rapidjson::Value& document) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  int32_t schema_id = ExtractInt32Field(document, Names::schema_id);
+  int32_t schema_id = json_parse::ExtractInt32Field(document, Names::schema_id);
   std::vector<types::NestedField> fields = ExtractSchemaFields(document, Names::fields);
 
   return std::make_shared<Schema>(schema_id, fields);
@@ -546,10 +481,10 @@ std::vector<std::shared_ptr<Schema>> ExtractSchemas(const rapidjson::Value& docu
 }
 
 PartitionField JsonToPartitionField(const rapidjson::Value& document) {
-  return PartitionField{.source_id = ExtractInt32Field(document, Names::source_id),
-                        .field_id = ExtractInt32Field(document, Names::field_id),
-                        .name = ExtractStringField(document, Names::name),
-                        .transform = ExtractStringField(document, Names::transform)};
+  return PartitionField{.source_id = json_parse::ExtractInt32Field(document, Names::source_id),
+                        .field_id = json_parse::ExtractInt32Field(document, Names::field_id),
+                        .name = json_parse::ExtractStringField(document, Names::name),
+                        .transform = json_parse::ExtractStringField(document, Names::transform)};
 }
 
 std::vector<PartitionField> ExtractPartitionFields(const rapidjson::Value& document) {
@@ -569,7 +504,7 @@ std::shared_ptr<PartitionSpec> JsonPartitionSpec(const rapidjson::Value& documen
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  int32_t schema_id = ExtractInt32Field(document, Names::spec_id);
+  int32_t schema_id = json_parse::ExtractInt32Field(document, Names::spec_id);
   return std::make_shared<PartitionSpec>(PartitionSpec{schema_id, ExtractPartitionFields(document)});
 }
 
@@ -584,46 +519,21 @@ std::vector<std::shared_ptr<PartitionSpec>> ExtractPartitionSpecs(const rapidjso
   return result;
 }
 
-std::map<std::string, std::string> JsonToStringMap(const rapidjson::Value& document) {
-  std::map<std::string, std::string> result;
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
-  for (auto it = document.MemberBegin(); it != document.MemberEnd(); ++it) {
-    if (!it->name.IsString()) {
-      throw std::runtime_error(std::string(__FUNCTION__) + ": !it->name.IsString()");
-    }
-    if (!it->value.IsString()) {
-      throw std::runtime_error(std::string(__FUNCTION__) + ": !it->value.IsString()");
-    }
-    result.emplace(it->name.GetString(), it->value.GetString());
-  }
-  return result;
-}
-
-std::map<std::string, std::string> ExtractStringMap(const rapidjson::Value& document, const std::string& field_name) {
-  const char* c_str = field_name.c_str();
-  if (!document.HasMember(c_str)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
-  return JsonToStringMap(document[c_str]);
-}
-
 std::shared_ptr<Snapshot> JsonToSnapshot(const rapidjson::Value& document) {
   if (!document.IsObject()) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  int64_t snapshot_id = ExtractInt64Field(document, Names::snapshot_id);
-  std::optional<int64_t> parent_snapshot_id = ExtractOptionalInt64Field(document, Names::parent_snapshot_id);
-  int64_t sequence_number = ExtractInt64Field(document, Names::sequence_number);
-  int64_t timestamp_ms = ExtractInt64Field(document, Names::timestamp_ms);
-  std::string manifest_list = ExtractStringField(document, Names::manifest_list);
-  std::map<std::string, std::string> summary = ExtractStringMap(document, Names::summary);
+  int64_t snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id);
+  std::optional<int64_t> parent_snapshot_id = json_parse::ExtractOptionalInt64Field(document, Names::parent_snapshot_id);
+  int64_t sequence_number = json_parse::ExtractInt64Field(document, Names::sequence_number);
+  int64_t timestamp_ms = json_parse::ExtractInt64Field(document, Names::timestamp_ms);
+  std::string manifest_list = json_parse::ExtractStringField(document, Names::manifest_list);
+  std::map<std::string, std::string> summary = json_parse::ExtractStringMap(document, Names::summary);
   if (!summary.contains(Names::operation)) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !summary.contains(\"operation\")");
   }
-  std::optional<int64_t> schema_id = ExtractOptionalInt64Field(document, Names::schema_id);
+  std::optional<int64_t> schema_id = json_parse::ExtractOptionalInt64Field(document, Names::schema_id);
   return std::make_shared<Snapshot>(Snapshot{.snapshot_id = snapshot_id,
                                              .parent_snapshot_id = parent_snapshot_id,
                                              .sequence_number = sequence_number,
@@ -653,11 +563,11 @@ std::vector<int32_t> ExtractFieldIds(const rapidjson::Value& document) {
 
 BlobMetadata JsonToBlobMetadata(const rapidjson::Value& document) {
   BlobMetadata blob_metadata;
-  blob_metadata.type = ExtractStringField(document, Names::type);
-  blob_metadata.snapshot_id = ExtractInt64Field(document, Names::snapshot_id);
-  blob_metadata.sequence_number = ExtractInt64Field(document, Names::sequence_number);
+  blob_metadata.type = json_parse::ExtractStringField(document, Names::type);
+  blob_metadata.snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id);
+  blob_metadata.sequence_number = json_parse::ExtractInt64Field(document, Names::sequence_number);
   blob_metadata.field_ids = ExtractFieldIds(document);
-  blob_metadata.properties = ExtractStringMap(document, Names::properties);
+  blob_metadata.properties = json_parse::ExtractStringMap(document, Names::properties);
   return blob_metadata;
 }
 
@@ -678,10 +588,10 @@ Statistics JsonToStatistics(const rapidjson::Value& document) {
   }
 
   Statistics statistics;
-  statistics.statistics_path = ExtractStringField(document, Names::statistics_path);
-  statistics.snapshot_id = ExtractInt64Field(document, Names::snapshot_id);
-  statistics.file_size_in_bytes = ExtractInt64Field(document, Names::file_size_in_bytes);
-  statistics.file_footer_size_in_bytes = ExtractInt64Field(document, Names::file_footer_size_in_bytes);
+  statistics.statistics_path = json_parse::ExtractStringField(document, Names::statistics_path);
+  statistics.snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id);
+  statistics.file_size_in_bytes = json_parse::ExtractInt64Field(document, Names::file_size_in_bytes);
+  statistics.file_footer_size_in_bytes = json_parse::ExtractInt64Field(document, Names::file_footer_size_in_bytes);
   statistics.blob_metadata = ExtractBlobMetadata(document);
 
   // TODO(gmusya): handle key metadata
@@ -705,8 +615,8 @@ SnapshotLog JsonToSnapshotLogEntry(const rapidjson::Value& document) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  int64_t timestamp_ms = ExtractInt64Field(document, Names::timestamp_ms);
-  int64_t snapshot_id = ExtractInt64Field(document, Names::snapshot_id);
+  int64_t timestamp_ms = json_parse::ExtractInt64Field(document, Names::timestamp_ms);
+  int64_t snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id);
 
   return {timestamp_ms, snapshot_id};
 }
@@ -727,8 +637,8 @@ MetadataLog JsonToMetadataLogEntry(const rapidjson::Value& document) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  int64_t timestamp_ms = ExtractInt64Field(document, Names::timestamp_ms);
-  std::string metadata_file = ExtractStringField(document, Names::metadata_file);
+  int64_t timestamp_ms = json_parse::ExtractInt64Field(document, Names::timestamp_ms);
+  std::string metadata_file = json_parse::ExtractStringField(document, Names::metadata_file);
 
   return {timestamp_ms, std::move(metadata_file)};
 }
@@ -749,7 +659,7 @@ std::optional<std::map<std::string, std::string>> ExtractProperties(const rapidj
   if (!document.HasMember(field_name)) {
     return std::nullopt;
   }
-  return JsonToStringMap(document[field_name]);
+  return json_parse::JsonToStringMap(document[field_name]);
 }
 
 SortField JsonToSortField(const rapidjson::Value& document) {
@@ -758,11 +668,11 @@ SortField JsonToSortField(const rapidjson::Value& document) {
   }
 
   // TODO(chertus): lower_case
-  auto str_direction = ExtractStringField(document, Names::direction);
-  auto str_null_order = ExtractStringField(document, Names::null_order);
+  auto str_direction = json_parse::ExtractStringField(document, Names::direction);
+  auto str_null_order = json_parse::ExtractStringField(document, Names::null_order);
   return SortField{
-      .transform = ExtractStringField(document, Names::transform),
-      .source_id = ExtractInt32Field(document, Names::source_id),
+      .transform = json_parse::ExtractStringField(document, Names::transform),
+      .source_id = json_parse::ExtractInt32Field(document, Names::source_id),
       .direction =
           ((str_direction == Names::asc || str_direction == "ASC") ? SortDirection::kAsc : SortDirection::kDesc),
       .null_order = ((str_null_order == Names::nulls_first) ? NullOrder::kNullsFirst : NullOrder::kNullsLast)};
@@ -773,7 +683,7 @@ std::shared_ptr<SortOrder> JsonToSortOrders(const rapidjson::Value& document) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  int32_t order_id = ExtractInt32Field(document, Names::order_id);
+  int32_t order_id = json_parse::ExtractInt32Field(document, Names::order_id);
   std::vector<SortField> fields;
   ProcessArray(document[Names::fields],
                [&fields](const rapidjson::Value& elem) mutable { fields.emplace_back(JsonToSortField(elem)); });
@@ -796,11 +706,11 @@ SnapshotRef JsonToRef(const rapidjson::Value& document) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  return SnapshotRef{.snapshot_id = ExtractInt64Field(document, Names::snapshot_id),
-                     .type = ExtractStringField(document, Names::type),
-                     .min_snapshots_to_keep = ExtractOptionalInt32Field(document, Names::min_snapshots_to_keep),
-                     .max_snapshot_age_ms = ExtractOptionalInt64Field(document, Names::max_snapshot_age_ms),
-                     .max_ref_age_ms = ExtractOptionalInt64Field(document, Names::max_ref_age_ms)};
+  return SnapshotRef{.snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id),
+                     .type = json_parse::ExtractStringField(document, Names::type),
+                     .min_snapshots_to_keep = json_parse::ExtractOptionalInt32Field(document, Names::min_snapshots_to_keep),
+                     .max_snapshot_age_ms = json_parse::ExtractOptionalInt64Field(document, Names::max_snapshot_age_ms),
+                     .max_ref_age_ms = json_parse::ExtractOptionalInt64Field(document, Names::max_ref_age_ms)};
 }
 
 std::map<std::string, SnapshotRef> JsonToRefsMap(const rapidjson::Value& document) {
@@ -999,23 +909,23 @@ std::shared_ptr<TableMetadataV2> TableMetadataV2Builder::Build() {
 
 static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Document& document) {
   TableMetadataV2Builder builder;
-  builder.table_uuid = ExtractStringField(document, Names::table_uuid);
-  builder.location = ExtractStringField(document, Names::location);
-  builder.last_sequence_number = ExtractInt64Field(document, Names::last_sequence_number);
-  builder.last_updated_ms = ExtractInt64Field(document, Names::last_updated_ms);
-  builder.last_column_id = ExtractInt32Field(document, Names::last_column_id);
+  builder.table_uuid = json_parse::ExtractStringField(document, Names::table_uuid);
+  builder.location = json_parse::ExtractStringField(document, Names::location);
+  builder.last_sequence_number = json_parse::ExtractInt64Field(document, Names::last_sequence_number);
+  builder.last_updated_ms = json_parse::ExtractInt64Field(document, Names::last_updated_ms);
+  builder.last_column_id = json_parse::ExtractInt32Field(document, Names::last_column_id);
   builder.schemas = ExtractSchemas(document);
-  builder.current_schema_id = ExtractInt32Field(document, Names::current_schema_id);
+  builder.current_schema_id = json_parse::ExtractInt32Field(document, Names::current_schema_id);
   builder.partition_specs = ExtractPartitionSpecs(document);
-  builder.default_spec_id = ExtractInt32Field(document, Names::default_spec_id);
-  builder.last_partition_id = ExtractInt32Field(document, Names::last_partition_id);
+  builder.default_spec_id = json_parse::ExtractInt32Field(document, Names::default_spec_id);
+  builder.last_partition_id = json_parse::ExtractInt32Field(document, Names::last_partition_id);
   builder.properties = ExtractProperties(document);
-  builder.current_snapshot_id = ExtractOptionalInt64Field(document, Names::current_snapshot_id);
+  builder.current_snapshot_id = json_parse::ExtractOptionalInt64Field(document, Names::current_snapshot_id);
   builder.snapshots = ExtractSnapshots(document);
   builder.snapshot_log = ExtractSnapshotLog(document);
   builder.metadata_log = ExtractMetadataLog(document);
   builder.sort_orders = ExtractSortOrders(document);
-  builder.default_sort_order_id = ExtractInt32Field(document, Names::default_sort_order_id);
+  builder.default_sort_order_id = json_parse::ExtractInt32Field(document, Names::default_sort_order_id);
   builder.refs = ExtractRefs(document);
   builder.statistics = ExtractStatistics(document);
   return builder.Build();
