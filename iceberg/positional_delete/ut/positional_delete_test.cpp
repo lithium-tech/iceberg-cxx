@@ -6,7 +6,12 @@
 #include <vector>
 
 #include "arrow/filesystem/filesystem.h"
+#include "arrow/filesystem/mockfs.h"
+#include "arrow/filesystem/path_util.h"
+#include "arrow/filesystem/util_internal.h"
 #include "gtest/gtest.h"
+#include "iceberg/common/fs/filesystem_wrapper.h"
+#include "iceberg/test_utils/assertions.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_reader.h"
 #include "parquet/column_writer.h"
@@ -30,8 +35,8 @@ struct DataStringInt64 {
 
   static std::shared_ptr<GroupNode> SetupSchema() {
     parquet::schema::NodeVector fields = {
-        PrimitiveNode::Make("file_path", Repetition::REQUIRED, LogicalType::String(), Type::BYTE_ARRAY),
-        PrimitiveNode::Make("pos", Repetition::REQUIRED, LogicalType::None(), Type::INT64)};
+        PrimitiveNode::Make(column_names[0], Repetition::REQUIRED, LogicalType::String(), Type::BYTE_ARRAY),
+        PrimitiveNode::Make(column_names[1], Repetition::REQUIRED, LogicalType::None(), Type::INT64)};
     return std::static_pointer_cast<GroupNode>(GroupNode::Make("schema", Repetition::REQUIRED, fields));
   }
 
@@ -47,7 +52,11 @@ struct DataStringInt64 {
       pos_writer->WriteBatch(1, nullptr, nullptr, &row.pos);
     }
   }
+
+  static const std::vector<std::string> column_names;
 };
+
+const std::vector<std::string> DataStringInt64::column_names = {"file_path", "pos"};
 
 struct DataInt64Int64 {
   int64_t pos1;
@@ -55,8 +64,8 @@ struct DataInt64Int64 {
 
   static std::shared_ptr<GroupNode> SetupSchema() {
     parquet::schema::NodeVector fields = {
-        PrimitiveNode::Make("pos1", Repetition::REQUIRED, LogicalType::None(), Type::INT64),
-        PrimitiveNode::Make("pos2", Repetition::REQUIRED, LogicalType::None(), Type::INT64)};
+        PrimitiveNode::Make(column_names[0], Repetition::REQUIRED, LogicalType::None(), Type::INT64),
+        PrimitiveNode::Make(column_names[1], Repetition::REQUIRED, LogicalType::None(), Type::INT64)};
     return std::static_pointer_cast<GroupNode>(GroupNode::Make("schema", Repetition::REQUIRED, fields));
   }
 
@@ -71,7 +80,11 @@ struct DataInt64Int64 {
       pos2_writer->WriteBatch(1, nullptr, nullptr, &row.pos2);
     }
   }
+
+  static const std::vector<std::string> column_names;
 };
+
+const std::vector<std::string> DataInt64Int64::column_names = {"pos1", "pos2"};
 
 struct DataStringString {
   std::string file_path1;
@@ -79,8 +92,8 @@ struct DataStringString {
 
   static std::shared_ptr<GroupNode> SetupSchema() {
     parquet::schema::NodeVector fields = {
-        PrimitiveNode::Make("file_path1", Repetition::REQUIRED, LogicalType::String(), Type::BYTE_ARRAY),
-        PrimitiveNode::Make("file_path2", Repetition::REQUIRED, LogicalType::String(), Type::BYTE_ARRAY)};
+        PrimitiveNode::Make(column_names[0], Repetition::REQUIRED, LogicalType::String(), Type::BYTE_ARRAY),
+        PrimitiveNode::Make(column_names[1], Repetition::REQUIRED, LogicalType::String(), Type::BYTE_ARRAY)};
     return std::static_pointer_cast<GroupNode>(GroupNode::Make("schema", Repetition::REQUIRED, fields));
   }
 
@@ -97,14 +110,18 @@ struct DataStringString {
       file_path2_writer->WriteBatch(1, nullptr, nullptr, &file_path_value);
     }
   }
+
+  static const std::vector<std::string> column_names;
 };
+
+const std::vector<std::string> DataStringString::column_names = {"file_path1", "file_path2"};
 
 struct DataInt64 {
   int64_t pos;
 
   static std::shared_ptr<GroupNode> SetupSchema() {
     parquet::schema::NodeVector fields = {
-        PrimitiveNode::Make("pos", Repetition::REQUIRED, LogicalType::None(), Type::INT64)};
+        PrimitiveNode::Make(column_names[0], Repetition::REQUIRED, LogicalType::None(), Type::INT64)};
     return std::static_pointer_cast<GroupNode>(GroupNode::Make("schema", Repetition::REQUIRED, fields));
   }
 
@@ -114,7 +131,11 @@ struct DataInt64 {
       pos_writer->WriteBatch(1, nullptr, nullptr, &row.pos);
     }
   }
+
+  static const std::vector<std::string> column_names;
 };
+
+const std::vector<std::string> DataInt64::column_names = {"pos"};
 
 template <typename Data>
 void WriteToFile(const std::vector<std::vector<Data>>& row_groups, ParquetFileWriter* writer) {
@@ -127,10 +148,18 @@ void WriteToFile(const std::vector<std::vector<Data>>& row_groups, ParquetFileWr
 
 template <typename Data>
 arrow::Status WriteFile(std::shared_ptr<FileSystem> fs, const std::string& path,
-                        const std::vector<std::vector<Data>>& row_groups) {
+                        const std::vector<std::vector<Data>>& row_groups, bool set_statistics = true) {
   ARROW_ASSIGN_OR_RAISE(auto out_stream, fs->OpenOutputStream(path));
   auto schema = Data::SetupSchema();
-  auto file_writer = parquet::ParquetFileWriter::Open(out_stream, schema);
+
+  auto props_builder = parquet::WriterProperties::Builder();
+  props_builder.enable_statistics();
+  if (!set_statistics) {
+    for (const auto& name : Data::column_names) {
+      props_builder.disable_statistics(name);
+    }
+  }
+  auto file_writer = parquet::ParquetFileWriter::Open(out_stream, schema, props_builder.build());
   WriteToFile(row_groups, file_writer.get());
   file_writer->Close();
   return out_stream->Close();
@@ -161,10 +190,14 @@ std::string StringFromByteArray(const parquet::ByteArray& value) noexcept {
   return {reinterpret_cast<const char*>(value.ptr), value.len};
 }
 
-PositionalDeleteStream MakeStream(std::shared_ptr<FileSystem> fs, const std::string& path, int layer) {
-  return PositionalDeleteStream({{layer, {path}}}, [&](const std::string& url) {
+std::function<std::shared_ptr<parquet::arrow::FileReader>(const std::string&)> MakeCB(std::shared_ptr<FileSystem> fs) {
+  return [fs](const std::string& url) {
     return std::shared_ptr<parquet::arrow::FileReader>(OpenUrl(fs, url).ValueOrDie().release());
-  });
+  };
+}
+
+PositionalDeleteStream MakeStream(std::shared_ptr<FileSystem> fs, const std::string& path, int layer) {
+  return PositionalDeleteStream({{layer, {path}}}, MakeCB(fs));
 }
 
 Status ReadFile(std::shared_ptr<FileSystem> fs, const std::string& path, UrlDeleteRows& rows,
@@ -225,6 +258,68 @@ Status ReadFile(std::shared_ptr<FileSystem> fs, const std::string& path, UrlDele
   return arrow::Status::OK();
 }
 
+struct Metrics {
+  uint64_t requests = 0;
+  uint64_t bytes_read = 0;
+  uint64_t files_opened = 0;
+
+  bool operator==(const Metrics& other) const = default;
+};
+
+class LoggingInputFile : public InputFileWrapper {
+ public:
+  LoggingInputFile(std::shared_ptr<arrow::io::RandomAccessFile> file, Metrics& metrics)
+      : InputFileWrapper(file), metrics_(metrics) {}
+
+  arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::ReadAt(position, nbytes, out);
+  }
+
+  arrow::Result<int64_t> Read(int64_t nbytes, void* out) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::Read(nbytes, out);
+  }
+
+  arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override {
+    TakeRequestIntoAccount(nbytes);
+    return InputFileWrapper::Read(nbytes);
+  }
+
+ private:
+  void TakeRequestIntoAccount(int64_t bytes) {
+    ++metrics_.requests;
+    metrics_.bytes_read += bytes;
+  }
+
+  Metrics& metrics_;
+};
+
+class LoggingFileSystem : public arrow::fs::internal::MockFileSystem {
+ public:
+  LoggingFileSystem(const std::string& uri, std::string* path,
+                    const arrow::io::IOContext& io_context = arrow::io::default_io_context())
+      : arrow::fs::internal::MockFileSystem(arrow::fs::TimePoint(), io_context) {
+    if (path != nullptr) {
+      auto fsuri = arrow::fs::internal::ParseFileSystemUri(uri).ValueOrDie();
+      *path = std::string(arrow::fs::internal::RemoveLeadingSlash(fsuri.path()));
+    }
+  }
+
+  arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenInputFile(const std::string& path) override {
+    ++metrics_.files_opened;
+    ARROW_ASSIGN_OR_RAISE(auto file, arrow::fs::internal::MockFileSystem::OpenInputFile(path));
+    return std::make_shared<LoggingInputFile>(file, metrics_);
+  }
+
+  Metrics GetCurrentMetrics() const { return metrics_; }
+
+  void Clear() { metrics_ = {}; }
+
+ private:
+  Metrics metrics_{};
+};
+
 class PositionalDeleteTest : public ::testing::Test {
  protected:
   void SetUp() override { fs_ = arrow::fs::FileSystemFromUri(uri_, &path_).ValueOrDie(); }
@@ -236,68 +331,68 @@ class PositionalDeleteTest : public ::testing::Test {
 
 TEST_F(PositionalDeleteTest, ReadEmpty) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{}));
   UrlDeleteRows rows;
-  ASSERT_EQ(ReadFile(fs_, path_, rows), Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, UrlDeleteRows{});
 }
 
 TEST_F(PositionalDeleteTest, ReadMixedPath) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}));
   UrlDeleteRows rows;
-  ASSERT_EQ(ReadFile(fs_, path_, rows), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1}}, {"path2", {3}}}));
 }
 
 TEST_F(PositionalDeleteTest, ReadMultipleRowGroups) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}}, {{"path1", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}}, {{"path1", 3}}}));
   UrlDeleteRows rows;
-  ASSERT_EQ(ReadFile(fs_, path_, rows), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1, 3}}}));
 }
 
 TEST_F(PositionalDeleteTest, ReadUpdate) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 3}}}));
   UrlDeleteRows rows = {{"path1", {1}}};
-  ASSERT_EQ(ReadFile(fs_, path_, rows), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1, 3}}}));
 }
 
 TEST_F(PositionalDeleteTest, MergeUpdates) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 3}, {"path1", 6}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 3}, {"path1", 6}}}));
   UrlDeleteRows rows = {{"path1", {1, 4, 5}}, {"path2", {2}}};
-  ASSERT_EQ(ReadFile(fs_, path_, rows), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1, 3, 4, 5, 6}}, {"path2", {2}}}));
 }
 
 TEST_F(PositionalDeleteTest, WrongColumnNumber) {
   using Container = std::vector<std::vector<DataInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{3}}}));
   UrlDeleteRows rows;
   ASSERT_NE(ReadFile(fs_, path_, rows), arrow::Status::OK());
 }
 
 TEST_F(PositionalDeleteTest, WrongFirstColumnType) {
   using Container = std::vector<std::vector<DataInt64Int64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{3, 25}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{3, 25}}}));
   UrlDeleteRows rows;
   ASSERT_NE(ReadFile(fs_, path_, rows), arrow::Status::OK());
 }
 
 TEST_F(PositionalDeleteTest, WrongSecondColumnType) {
   using Container = std::vector<std::vector<DataStringString>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"aba", "caba"}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"aba", "caba"}}}));
   UrlDeleteRows rows;
   ASSERT_NE(ReadFile(fs_, path_, rows), arrow::Status::OK());
 }
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStream) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}));
 
   auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
@@ -307,7 +402,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStream) {
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerGreater) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}));
 
   auto stream = MakeStream(fs_, path_, 1);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
@@ -317,7 +412,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerGreater) {
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerLess) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path1", 4}}}));
 
   auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 1), (DeleteRows{}));
@@ -327,7 +422,7 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamLayerLess) {
 
 TEST_F(PositionalDeleteTest, GetDeletedFromStreamWithSkips) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path2", 4}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path1", 3}, {"path2", 4}}}));
 
   auto stream = MakeStream(fs_, path_, 0);
   ASSERT_EQ(stream.GetDeleted("path1", 1, 2, 0), (DeleteRows{1}));
@@ -337,22 +432,167 @@ TEST_F(PositionalDeleteTest, GetDeletedFromStreamWithSkips) {
 
 TEST_F(PositionalDeleteTest, Count) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}));
   UrlDeleteRows rows;
   uint64_t count = 0;
-  ASSERT_EQ(ReadFile(fs_, path_, rows, &count), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows, &count));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1}}, {"path2", {3}}}));
   EXPECT_EQ(count, 2);
 }
 
 TEST_F(PositionalDeleteTest, DoNotCountTwice) {
   using Container = std::vector<std::vector<DataStringInt64>>;
-  ASSERT_EQ(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}), Status::OK());
+  ASSERT_OK(WriteFile(fs_, path_, Container{{{"path1", 1}, {"path2", 3}}}));
   UrlDeleteRows rows{{"path1", {1}}};
   uint64_t count = 1;
-  ASSERT_EQ(ReadFile(fs_, path_, rows, &count), arrow::Status::OK());
+  ASSERT_OK(ReadFile(fs_, path_, rows, &count));
   EXPECT_EQ(rows, (UrlDeleteRows{{"path1", {1}}, {"path2", {3}}}));
   EXPECT_EQ(count, 2);
+}
+
+TEST_F(PositionalDeleteTest, NoStats) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_OK(fs_->CreateDir(path_));
+
+  ASSERT_OK(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}}}, false));
+  ASSERT_OK(WriteFile(fs_, path_ + "/second", Container{{{"path2", 2}}}, false));
+
+  std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/second", path_ + "/first"}}};
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 2, 0), DeleteRows{1});
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path2", 1, 3, 0), DeleteRows{2});
+}
+
+TEST_F(PositionalDeleteTest, MixedStats1) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_OK(fs_->CreateDir(path_));
+
+  ASSERT_OK(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}}}, false));
+  ASSERT_OK(WriteFile(fs_, path_ + "/second", Container{{{"path2", 2}}}));
+  ASSERT_OK(WriteFile(fs_, path_ + "/third", Container{{{"path3", 3}}}, false));
+
+  std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second", path_ + "/third"}}};
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 2, 0), DeleteRows{1});
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path2", 1, 3, 0), DeleteRows{2});
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path3", 2, 4, 0), DeleteRows{3});
+}
+
+TEST_F(PositionalDeleteTest, MixedStats2) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_OK(fs_->CreateDir(path_));
+
+  ASSERT_OK(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}, {"path2", 3}}}));
+  ASSERT_OK(WriteFile(fs_, path_ + "/second", Container{{{"path1", 2}}}, false));
+
+  std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second"}}};
+  EXPECT_EQ(PositionalDeleteStream(urls, MakeCB(fs_)).GetDeleted("path1", 0, 3, 0), DeleteRows({1, 2}));
+}
+
+TEST_F(PositionalDeleteTest, ManyQueries) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_OK(fs_->CreateDir(path_));
+
+  ASSERT_OK(WriteFile(fs_, path_ + "/first", Container{{{"path1", 1}, {"path2", 3}}}));
+  ASSERT_OK(WriteFile(fs_, path_ + "/second", Container{{{"path1", 2}}}, false));
+
+  std::map<int, std::vector<std::string>> urls = {{0, {path_ + "/first", path_ + "/second"}}};
+  auto pos_del_stream = PositionalDeleteStream(urls, MakeCB(fs_));
+  EXPECT_EQ(pos_del_stream.GetDeleted("path1", 0, 3, 0), DeleteRows({1, 2}));
+  EXPECT_EQ(pos_del_stream.GetDeleted("path2", 0, 2, 0), DeleteRows{});
+  EXPECT_EQ(pos_del_stream.GetDeleted("path2", 2, 4, 0), DeleteRows{3});
+}
+
+TEST_F(PositionalDeleteTest, MultipleDataFiles) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  ASSERT_EQ(WriteFile(fs_, "delete1.parquet", Container{{{"a", 100}, {"path1", 101}, {"b", 1}}}), Status::OK());
+  ASSERT_EQ(WriteFile(fs_, "delete2.parquet", Container{{{"a", 5}, {"a", 6}, {"b", 17}}}), Status::OK());
+
+  std::map<int, std::vector<std::string>> urls = {{0, {"delete1.parquet", "delete2.parquet"}}};
+  PositionalDeleteStream stream(urls, MakeCB(fs_));
+  ASSERT_EQ(stream.GetDeleted("a", 4, 7, 0), DeleteRows({5, 6}));
+}
+
+TEST(PositionalDeleteTest2, NoExtraBytesRead1) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  std::string path;
+  auto logging_fs = std::make_shared<LoggingFileSystem>("mock:///delete.parquet", &path);
+  ASSERT_OK(WriteFile(logging_fs, path, Container{{{"path1", 1}, {"path2", 3}}}));
+  EXPECT_NO_THROW([&]() {
+    logging_fs->Clear();
+    auto arrow_reader = OpenUrl(logging_fs, path).ValueOrDie();
+    arrow_reader->num_row_groups();
+  }());
+  auto metrics = logging_fs->GetCurrentMetrics();
+
+  EXPECT_NO_THROW([&]() {
+    logging_fs->Clear();
+    MakeStream(logging_fs, path, 0).GetDeleted("path3", 1, 2, 0);
+  }());
+
+  EXPECT_EQ(metrics, logging_fs->GetCurrentMetrics());
+
+  EXPECT_NO_THROW([&]() {
+    logging_fs->Clear();
+    MakeStream(logging_fs, path, 0).GetDeleted("path1", 1, 2, 0);
+  }());
+
+  EXPECT_NE(metrics, logging_fs->GetCurrentMetrics());
+}
+
+TEST(PositionalDeleteTest2, NoExtraBytesRead2) {
+  using Container = std::vector<std::vector<DataStringInt64>>;
+  std::string path;
+  auto logging_fs = std::make_shared<LoggingFileSystem>("mock:///delete.parquet", &path);
+
+  ASSERT_OK(logging_fs->CreateDir(path));
+
+  ASSERT_OK(WriteFile(logging_fs, path + "/first", Container{{{"path1", 1}}, {{"path5", 5}}, {{"path7", 7}}}));
+  ASSERT_OK(WriteFile(logging_fs, path + "/second", Container{{{"path2", 2}}, {{"path3", 3}}, {{"path6", 6}}}));
+  ASSERT_OK(WriteFile(logging_fs, path + "/third", Container{{{"path4", 4}}, {{"path8", 8}}, {{"path9", 9}}}));
+
+  logging_fs->Clear();
+
+  std::map<int, std::vector<std::string>> urls = {{0, {path + "/first", path + "/second", path + "/third"}}};
+  auto pos_del_stream = PositionalDeleteStream(urls, MakeCB(logging_fs));
+  EXPECT_EQ(pos_del_stream.GetDeleted("path2", 0, INT64_MAX, 0), DeleteRows{2});
+  EXPECT_EQ(pos_del_stream.GetDeleted("path3", 0, INT64_MAX, 0), DeleteRows{3});
+  EXPECT_EQ(pos_del_stream.GetDeleted("path7", 0, INT64_MAX, 0), DeleteRows{7});
+  EXPECT_EQ(pos_del_stream.GetDeleted("path9", 0, INT64_MAX, 0), DeleteRows{9});
+
+  auto metrics = logging_fs->GetCurrentMetrics();
+  logging_fs->Clear();
+
+  auto Read = [&](const std::string& suffix, const std::vector<int>& indexes) {
+    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+    ARROW_ASSIGN_OR_RAISE(arrow_reader, OpenUrl(logging_fs, path + suffix));
+
+    auto parquet_reader = arrow_reader->parquet_reader();
+    for (const auto i : indexes) {
+      auto row_group_reader = parquet_reader->RowGroup(i);
+      auto column0 = row_group_reader->Column(0);
+      auto column1 = row_group_reader->Column(1);
+      if (column0->type() != parquet::Type::BYTE_ARRAY) {
+        throw arrow::Status::OK();
+      }
+      if (column1->type() != parquet::Type::INT64) {
+        throw arrow::Status::OK();
+      }
+
+      auto file_path_reader = std::static_pointer_cast<parquet::ByteArrayReader>(column0);
+      auto pos_reader = std::static_pointer_cast<parquet::Int64Reader>(column1);
+
+      parquet::ByteArray file_path_value;
+      int64_t pos;
+      ReadValueNotNull(file_path_reader, file_path_value);
+      ReadValueNotNull(pos_reader, pos);
+    }
+    return Status::OK();
+  };
+
+  ASSERT_OK(Read("/first", {2}));
+  ASSERT_OK(Read("/second", {0, 1}));
+  ASSERT_OK(Read("/third", {2}));
+
+  EXPECT_EQ(metrics, logging_fs->GetCurrentMetrics());
 }
 
 }  // namespace
