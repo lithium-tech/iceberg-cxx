@@ -1,0 +1,14 @@
+diff --git a/lang/c++/include/avro/NodeImpl.hh b/lang/c++/include/avro/NodeImpl.hh
+index 2038c9d5c..3e46c41f2 100644
+--- a/lang/c++/include/avro/NodeImpl.hh
++++ b/lang/c++/include/avro/NodeImpl.hh
+@@ -341,6 +341,9 @@ public:
+     }
+ 
+     const GenericDatum &defaultValueAt(size_t index) override {
++        if (fieldsDefaultValues_.size() <= index) {
++            throw Exception("No default value for field {}", index);
++        }
+         return fieldsDefaultValues_[index];
+     }
+ 
