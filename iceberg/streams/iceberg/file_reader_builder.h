@@ -31,6 +31,7 @@
 #include "iceberg/streams/iceberg/mapper.h"
 #include "iceberg/streams/iceberg/plan.h"
 #include "iceberg/streams/iceberg/row_group_filter.h"
+#include "iceberg/streams/iceberg/schema_name_mapper.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/type_fwd.h"
 
@@ -66,12 +67,14 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   FileReaderBuilder(std::vector<int> field_ids_to_retrieve, std::shared_ptr<const EqualityDeletes> equality_deletes,
                     std::shared_ptr<const FieldIdMapper> mapper,
                     std::shared_ptr<const IFileReaderProvider> file_reader_provider,
-                    std::shared_ptr<const IRowGroupFilter> rg_filter, std::shared_ptr<ILogger> logger = nullptr)
+                    std::shared_ptr<const IRowGroupFilter> rg_filter, const std::string* schema_name_mapping,
+                    std::shared_ptr<ILogger> logger = nullptr)
       : field_ids_to_retrieve_(std::move(field_ids_to_retrieve)),
         equality_deletes_(equality_deletes),
         mapper_(mapper),
         file_reader_provider_(file_reader_provider),
         rg_filter_(rg_filter),
+        schema_name_mapping_(schema_name_mapping),
         logger_(logger) {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
@@ -209,26 +212,38 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
 
     std::vector<ParquetColumnInfo> column_infos;
 
-    for (const auto& field_id_to_find : field_ids) {
-      bool found = false;
+    std::optional<SchemaNameMapper> schema_name_mapper;
 
+    auto find_field_id = [&](int field_id) {
       for (int i = 0; i < field_count; ++i) {
         auto field = group_node->field(i);
         Ensure(field != nullptr, std::string(__PRETTY_FUNCTION__) + ": field is nullptr");
 
         const int current_field_id = field->field_id();
-        if (field_id_to_find == current_field_id) {
-          found = true;
-          auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
-          column_infos.emplace_back(field_id_to_find, i, field->name(), std::move(result_name));
-          break;
+        if (field_id == current_field_id) {
+          auto result_name = mapper_->FieldIdToColumnName(field_id);
+          column_infos.emplace_back(field_id, i, field->name(), std::move(result_name));
+          return true;
         }
       }
+      return false;
+    };
 
-      if (!found) {
-        auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
-        column_infos.emplace_back(field_id_to_find, std::nullopt, "", std::move(result_name));
+    for (const auto& field_id_to_find : field_ids) {
+      if (find_field_id(field_id_to_find)) {
+        continue;
       }
+      auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
+      if (!schema_name_mapping_) {
+        column_infos.emplace_back(field_id_to_find, std::nullopt, "", std::move(result_name));
+        continue;
+      }
+      if (!schema_name_mapper) {
+        schema_name_mapper = SchemaNameMapper(*schema_name_mapping_);
+      }
+      
+
+      column_infos.emplace_back(field_id_to_find, std::nullopt, "", std::move(result_name));
     }
 
     return column_infos;
@@ -269,6 +284,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::shared_ptr<const FieldIdMapper> mapper_;
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::shared_ptr<const IRowGroupFilter> rg_filter_;
+  const std::string* schema_name_mapping_;
   std::shared_ptr<ILogger> logger_;
 };
 
