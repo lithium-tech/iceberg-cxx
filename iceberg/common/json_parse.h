@@ -5,9 +5,7 @@
 #include <string>
 
 #include "rapidjson/document.h"
-#include "rapidjson/istreamwrapper.h"
 #include "rapidjson/rapidjson.h"
-#include "rapidjson/stringbuffer.h"
 
 namespace iceberg::json_parse {
 

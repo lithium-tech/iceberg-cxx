@@ -525,7 +525,8 @@ std::shared_ptr<Snapshot> JsonToSnapshot(const rapidjson::Value& document) {
   }
 
   int64_t snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id);
-  std::optional<int64_t> parent_snapshot_id = json_parse::ExtractOptionalInt64Field(document, Names::parent_snapshot_id);
+  std::optional<int64_t> parent_snapshot_id =
+      json_parse::ExtractOptionalInt64Field(document, Names::parent_snapshot_id);
   int64_t sequence_number = json_parse::ExtractInt64Field(document, Names::sequence_number);
   int64_t timestamp_ms = json_parse::ExtractInt64Field(document, Names::timestamp_ms);
   std::string manifest_list = json_parse::ExtractStringField(document, Names::manifest_list);
@@ -706,11 +707,12 @@ SnapshotRef JsonToRef(const rapidjson::Value& document) {
     throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
   }
 
-  return SnapshotRef{.snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id),
-                     .type = json_parse::ExtractStringField(document, Names::type),
-                     .min_snapshots_to_keep = json_parse::ExtractOptionalInt32Field(document, Names::min_snapshots_to_keep),
-                     .max_snapshot_age_ms = json_parse::ExtractOptionalInt64Field(document, Names::max_snapshot_age_ms),
-                     .max_ref_age_ms = json_parse::ExtractOptionalInt64Field(document, Names::max_ref_age_ms)};
+  return SnapshotRef{
+      .snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id),
+      .type = json_parse::ExtractStringField(document, Names::type),
+      .min_snapshots_to_keep = json_parse::ExtractOptionalInt32Field(document, Names::min_snapshots_to_keep),
+      .max_snapshot_age_ms = json_parse::ExtractOptionalInt64Field(document, Names::max_snapshot_age_ms),
+      .max_ref_age_ms = json_parse::ExtractOptionalInt64Field(document, Names::max_ref_age_ms)};
 }
 
 std::map<std::string, SnapshotRef> JsonToRefsMap(const rapidjson::Value& document) {
