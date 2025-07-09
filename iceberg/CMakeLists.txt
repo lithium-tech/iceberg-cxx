@@ -1,5 +1,6 @@
 set(iceberg_cpp_files
   catalog.h
+  avro_manifest_entry_reader.cpp
   deletion_vector.cpp
   deletion_vector.h
   manifest_entry.cpp
