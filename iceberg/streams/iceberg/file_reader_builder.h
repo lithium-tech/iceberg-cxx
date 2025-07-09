@@ -187,6 +187,51 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
     return input_file;
   }
 
+  class GroupNodeWrapper {
+   public:
+    GroupNodeWrapper(const parquet::schema::GroupNode* node, const std::string* schema_name_mapping) : node_(node) {
+      Ensure(node_, std::string(__PRETTY_FUNCTION__) + ": group_node is nullptr");
+      for (int i = 0; i < GetFieldCount(); ++i) {
+        Ensure(node_->field(i) != nullptr, std::string(__PRETTY_FUNCTION__) + ": field is nullptr");
+      }
+      std::optional<SchemaNameMapper> schema_name_mapper;
+      for (int i = 0; i < GetFieldCount(); ++i) {
+        if (node_->field(i)->field_id() >= 0) {
+          continue;
+        }
+        if (!schema_name_mapper.has_value()) {
+          if (!schema_name_mapping) {
+            throw std::runtime_error("parquet field ids are not set and no schema name mapping provided");
+          }
+          schema_name_mapper = SchemaNameMapper(*schema_name_mapping);
+          schema_name_mapper->GetRootNode().Validate();
+        }
+        auto field_name = node_->field(i)->name();
+        auto field_id = schema_name_mapper->GetRootNode().GetFieldIdByName(field_name);
+        if (!field_id.has_value()) {
+          throw std::runtime_error("parquet field ids are not set and no schema name mapping provided");
+        }
+        index_to_field_id_[i] = field_id.value();
+      }
+    }
+
+    int GetRealFieldId(int index) const {
+      auto it = index_to_field_id_.find(index);
+      if (it == index_to_field_id_.end()) {
+        return node_->field(index)->field_id();
+      }
+      return it->second;
+    }
+
+    int GetFieldCount() const { return node_->field_count(); }
+
+    std::string GetName(int index) const { return node_->field(index)->name(); }
+
+   private:
+    const parquet::schema::GroupNode* node_;
+    std::unordered_map<int, int> index_to_field_id_;
+  };
+
   struct ParquetColumnInfo {
     int field_id;
 
@@ -205,45 +250,28 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
     const auto& schema = metadata.schema();
     Ensure(schema != nullptr, std::string(__PRETTY_FUNCTION__) + ": schema is nullptr");
 
-    const auto& group_node = schema->group_node();
-    Ensure(group_node != nullptr, std::string(__PRETTY_FUNCTION__) + ": group_node is nullptr");
+    GroupNodeWrapper group_node_wrapper(schema->group_node(), schema_name_mapping_);
 
-    const auto field_count = group_node->field_count();
+    const auto field_count = group_node_wrapper.GetFieldCount();
 
     std::vector<ParquetColumnInfo> column_infos;
 
-    std::optional<SchemaNameMapper> schema_name_mapper;
+    for (const auto& field_id_to_find : field_ids) {
+      bool found = false;
 
-    auto find_field_id = [&](int field_id) {
       for (int i = 0; i < field_count; ++i) {
-        auto field = group_node->field(i);
-        Ensure(field != nullptr, std::string(__PRETTY_FUNCTION__) + ": field is nullptr");
-
-        const int current_field_id = field->field_id();
-        if (field_id == current_field_id) {
-          auto result_name = mapper_->FieldIdToColumnName(field_id);
-          column_infos.emplace_back(field_id, i, field->name(), std::move(result_name));
-          return true;
+        if (field_id_to_find == group_node_wrapper.GetRealFieldId(i)) {
+          found = true;
+          auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
+          column_infos.emplace_back(field_id_to_find, i, group_node_wrapper.GetName(i), std::move(result_name));
+          break;
         }
       }
-      return false;
-    };
 
-    for (const auto& field_id_to_find : field_ids) {
-      if (find_field_id(field_id_to_find)) {
-        continue;
-      }
-      auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
-      if (!schema_name_mapping_) {
+      if (!found) {
+        auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
         column_infos.emplace_back(field_id_to_find, std::nullopt, "", std::move(result_name));
-        continue;
       }
-      if (!schema_name_mapper) {
-        schema_name_mapper = SchemaNameMapper(*schema_name_mapping_);
-      }
-      
-
-      column_infos.emplace_back(field_id_to_find, std::nullopt, "", std::move(result_name));
     }
 
     return column_infos;

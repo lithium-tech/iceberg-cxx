@@ -8,6 +8,7 @@
 #include "iceberg/streams/iceberg/data_entries_meta_stream.h"
 #include "iceberg/streams/iceberg/equality_delete_applier.h"
 #include "iceberg/streams/iceberg/plan.h"
+#include "iceberg/streams/ut/batch_maker.h"
 #include "iceberg/test_utils/assertions.h"
 #include "iceberg/test_utils/column.h"
 #include "iceberg/test_utils/optional_vector.h"
@@ -28,7 +29,7 @@ TEST(FileReaderBuilder, Trivial) {
       std::map<std::string, std::shared_ptr<IFileSystemGetter>>{{"file", std::make_shared<LocalFileSystemGetter>()}});
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider), nullptr);
+                                        std::make_shared<FileReaderProvider>(fs_provider), nullptr, nullptr);
 
   ScopedTempDir dir;
   std::string data_path = "file://" + (dir.path() / "data.parquet").generic_string();
@@ -55,6 +56,47 @@ TEST(FileReaderBuilder, Trivial) {
   EXPECT_EQ(batch->GetLayer(), 12);
   EXPECT_EQ(batch->GetPartition(), 13);
 }
+
+/*TEST(FileReaderBuilder, SchemaNameMapping) {
+  auto equality_deletes = std::make_shared<EqualityDeletes>(EqualityDeletes{});
+
+  std::vector<int> field_ids_to_retrieve = {1, 2};
+
+  auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}});
+
+  auto fs_provider = std::make_shared<FileSystemProvider>(
+      std::map<std::string, std::shared_ptr<IFileSystemGetter>>{{"file", std::make_shared<LocalFileSystemGetter>()}});
+
+  const std::string schema_name_mapping =
+      "[ { \"field-id\": 1, \"names\": [\"col1\"] },"
+      " { \"field-id\": 3, \"names\": [\"col2\"] } ]";
+
+  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes, field_id_mapper,
+                                        std::make_shared<FileReaderProvider>(fs_provider), nullptr,
+                                        &schema_name_mapping);
+
+  ScopedTempDir dir;
+  std::string data_path = "file://" + (dir.path() / "data.parquet").generic_string();
+
+  auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
+  auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
+
+  auto column1 = MakeInt32Column("xxx", 1, col1_data);
+  auto column2 = MakeInt32Column("yyy", 3, col2_data);
+  ASSERT_OK(WriteToFile({column1, column2}, data_path));
+
+  PartitionLayerFile state(PartitionLayer(13, 12), data_path);
+
+  AnnotatedDataPath annotated_data_path(state, {AnnotatedDataPath::Segment{.offset = 0, .length = 1}});
+
+  auto reader = file_reader_builder.Build(annotated_data_path);
+
+  auto batch = reader->ReadNext();
+  ASSERT_TRUE(batch);
+
+  EXPECT_TRUE(batch->GetRecordBatch()->Equals(
+      *MakeBatch({MakeInt32ArrowColumn(col1_data), MakeInt32ArrowColumn(col2_data)}, {"col1", "col2"})));
+}*/
 
 }  // namespace
 }  // namespace iceberg

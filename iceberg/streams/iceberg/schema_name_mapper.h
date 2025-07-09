@@ -7,23 +7,49 @@ class SchemaNameMapper {
  public:
   class Node {
    public:
-    Node(const rapidjson::Value& doc) : doc_(doc) {}
-
-    std::optional<int32_t> GetFieldIdByName(const std::string& name) const {
-      size_t sz = doc_.Size(); // automatically checks that doc_ is an array
-      for (size_t i = 0; i < sz; ++i) {
-        if (!doc_[i].HasMember(names)) {
-            throw std::runtime_error("");
-        }
-        if (!doc_[i][names].IsArray()) {
-
-        }
-        
+    Node(const rapidjson::Value& doc) : doc_(doc) {
+      if (!doc_.IsArray()) {
+        throw std::runtime_error(std::string(__FUNCTION__) + ": !doc.IsArray()");
       }
     }
 
-    void Validate() const {
+    // call Validate() first, if you are not sure that schema_name_mapping is valid
+    std::optional<int32_t> GetFieldIdByName(const std::string& name) const {
+      const size_t sz = doc_.Size();
+      for (size_t i = 0; i < sz; ++i) {
+        const rapidjson::Value& names_array = doc_[i][names];
+        const size_t names_sz = names_array.Size();
+        for (size_t j = 0; j < names_sz; ++j) {
+          if (names_array[j].GetString() == name) {
+            return json_parse::ExtractOptionalInt32Field(doc_[i], field_id);
+          }
+        }
+      }
+      return std::nullopt;
+    }
 
+    // Checks that the structure is correct and all names at this level are unique
+    void Validate() const {
+      const size_t sz = doc_.Size();
+      std::unordered_set<std::string> all_names;
+      for (size_t i = 0; i < sz; ++i) {
+        if (!doc_[i].HasMember(names)) {
+            throw std::runtime_error(std::string(__FUNCTION__) + ": \"names\" is a required field in schema.name-mapping.default");
+        }
+        const rapidjson::Value& names_array = doc_[i][names];
+        if (!names_array.IsArray()) {
+          throw std::runtime_error(std::string(__FUNCTION__) + ": \"names\" is not an array");
+        }
+        const size_t names_sz = names_array.Size();
+        for (size_t j = 0; j < names_sz; ++j) {
+          if (!names_array[j].IsString()) {
+            throw std::runtime_error(std::string(__FUNCTION__) + ": \"names\" is not an array of strings");
+          }
+          if (!all_names.insert(names_array[j].GetString()).second) {
+            throw std::runtime_error(std::string(__FUNCTION__) + ": names are not unique");
+          }
+        }
+      }
     }
 
    private:
