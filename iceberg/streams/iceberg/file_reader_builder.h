@@ -208,10 +208,9 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
         }
         auto field_name = node_->field(i)->name();
         auto field_id = schema_name_mapper->GetRootNode().GetFieldIdByName(field_name);
-        if (!field_id.has_value()) {
-          throw std::runtime_error("parquet field ids are not set and no schema name mapping provided");
+        if (field_id.has_value()) {
+          index_to_field_id_[i] = field_id.value();
         }
-        index_to_field_id_[i] = field_id.value();
       }
     }
 
