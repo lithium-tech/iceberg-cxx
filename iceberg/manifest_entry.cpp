@@ -561,7 +561,7 @@ NodePtr MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec,
   result->AddField("split_offsets", std::make_shared<myavro::OptionalNode>(
                                         std::make_shared<myavro::ArrayNode>(std::make_shared<myavro::LongNode>())));
   // AddField(schema, "equality_ids", MakeSchemaOptional(MakeSchemaArray(MakeSchemaInt())));
-  result->AddField("sort_order_id", std::make_shared<myavro::IntNode>());
+  result->AddField("sort_order_id", std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::IntNode>()));
   // AddField(schema, "referenced_data_file", MakeSchemaOptional(MakeSchemaString()));
   if (cfg.datafile_config.extract_column_sizes) {
     auto column_sizes_entry = std::make_shared<myavro::RecordNode>("k117_v118");
