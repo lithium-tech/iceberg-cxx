@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_set>
+
 #include "iceberg/common/json_parse.h"
 
 namespace iceberg {
@@ -34,7 +36,8 @@ class SchemaNameMapper {
       std::unordered_set<std::string> all_names;
       for (size_t i = 0; i < sz; ++i) {
         if (!doc_[i].HasMember(names)) {
-            throw std::runtime_error(std::string(__FUNCTION__) + ": \"names\" is a required field in schema.name-mapping.default");
+          throw std::runtime_error(std::string(__FUNCTION__) +
+                                   ": \"names\" is a required field in schema.name-mapping.default");
         }
         const rapidjson::Value& names_array = doc_[i][names];
         if (!names_array.IsArray()) {
@@ -58,8 +61,8 @@ class SchemaNameMapper {
 
   SchemaNameMapper(const std::string& json) {
     doc_.Parse(json.c_str(), json.size());
-    if (!doc_.IsObject()) {
-      throw std::runtime_error("schema.name-mapping.default is not a JSON object");
+    if (doc_.HasParseError()) {
+      throw std::runtime_error("schema.name-mapping.default is not a valid JSON");
     }
   }
 
