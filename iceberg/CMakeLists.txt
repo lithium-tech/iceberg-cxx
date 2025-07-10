@@ -42,6 +42,8 @@ set(iceberg_cpp_files
   tea_scan_hashers.h
   experimental_representations.cpp
   experimental_representations.h
+  myavro.cpp
+  myavro.h
 )
 
 if (ICECXX_USE_REST)

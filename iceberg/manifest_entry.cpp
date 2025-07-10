@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "iceberg/myavro.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/metadata.h"
 #include "parquet/statistics.h"
@@ -39,6 +40,7 @@ inline avro::LogicalType GetLogicalTypeFromDatum(const avro::GenericDatum& datum
 }  // namespace
 
 namespace iceberg {
+using NodePtr = std::shared_ptr<myavro::Node>;
 
 std::vector<int64_t> SplitOffsets(std::shared_ptr<parquet::FileMetaData> parquet_meta) {
   std::vector<int64_t> split_offsets;
@@ -438,65 +440,6 @@ class ManifestEntryDeserializer {
   ManifestEntryDeserializerConfig config_;
 };
 
-void AddField(avro::RecordSchema& result_schema, const std::string& field_name, const avro::ValidSchema& field_schema,
-              const std::optional<std::string>& doc = std::nullopt) {
-  if (doc.has_value()) {
-    field_schema.root()->setDoc(*doc);
-  }
-  result_schema.root()->addName(field_name);
-  result_schema.root()->addLeaf(field_schema.root());
-}
-
-avro::ValidSchema MakeSchemaOptional(const avro::ValidSchema& schema) {
-  avro::UnionSchema result;
-  result.addType(avro::NullSchema());
-  result.root()->addLeaf(schema.root());
-  return avro::ValidSchema(result);
-}
-
-avro::ValidSchema MakeSchemaPair(const std::string& name, const avro::ValidSchema& key,
-                                 const avro::ValidSchema& other) {
-  avro::RecordSchema schema(name);
-  AddField(schema, "key", key);
-  AddField(schema, "value", other);
-  return avro::ValidSchema(schema);
-}
-
-avro::ValidSchema MakeSchemaArray(const avro::ValidSchema& element) {
-  avro::NodePtr arr(new avro::NodeArray);
-  arr->addLeaf(element.root());
-  return avro::ValidSchema(arr);
-}
-
-avro::ValidSchema MakeSchemaMap(const std::string& element_name, const avro::ValidSchema& key,
-                                const avro::ValidSchema& other) {
-  return MakeSchemaArray(MakeSchemaPair(element_name, key, other));
-}
-
-avro::ValidSchema MakeSchemaBool() { return avro::ValidSchema(avro::BoolSchema()); }
-avro::ValidSchema MakeSchemaInt() { return avro::ValidSchema(avro::IntSchema()); }
-avro::ValidSchema MakeSchemaDate() {
-  auto schema = avro::IntSchema();
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::DATE));
-  return avro::ValidSchema(schema);
-}
-avro::ValidSchema MakeSchemaTime() {
-  auto schema = avro::LongSchema();
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::TIME_MICROS));
-  return avro::ValidSchema(schema);
-}
-avro::ValidSchema MakeSchemaTimestamp() {
-  auto schema = avro::LongSchema();
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::TIMESTAMP_MICROS));
-  return avro::ValidSchema(schema);
-}
-
-avro::ValidSchema MakeSchemaTimestampNs() {
-  auto schema = avro::LongSchema();
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::TIMESTAMP_NANOS));
-  return avro::ValidSchema(schema);
-}
-
 constexpr int MinimumBytesToStoreDecimalUnsafe(int precision) {
   int bytes = 1;
   __uint128_t minimum_nonrepresentable_value =
@@ -536,33 +479,7 @@ constexpr int MinimumBytesToStoreDecimal(int precision) {
   return MinimumBytesToStoreDecimalUnsafe(precision);
 }
 
-avro::ValidSchema MakeSchemaDecimal(int precision, int scale) {
-  auto schema = avro::FixedSchema(MinimumBytesToStoreDecimal(precision),
-                                  "decimal_" + std::to_string(precision) + "_" + std::to_string(scale));
-  avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
-  logical_type.setPrecision(precision);
-  logical_type.setScale(scale);
-  schema.root()->setLogicalType(logical_type);
-  return avro::ValidSchema(schema);
-}
-avro::ValidSchema MakeSchemaFixed(int size) { return avro::ValidSchema(avro::FixedSchema(size, "fixed")); }
-avro::ValidSchema MakeSchemaUuid() {
-  auto schema = avro::FixedSchema(16, "uuid_fixed");
-// UUID is serialized without logical type
 #if 0
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::UUID));
-#endif
-  return avro::ValidSchema(schema);
-}
-avro::ValidSchema MakeSchemaLong() { return avro::ValidSchema(avro::LongSchema()); }
-avro::ValidSchema MakeSchemaFloat() { return avro::ValidSchema(avro::FloatSchema()); }
-avro::ValidSchema MakeSchemaDouble() { return avro::ValidSchema(avro::DoubleSchema()); }
-avro::ValidSchema MakeSchemaString() { return avro::ValidSchema(avro::StringSchema()); }
-avro::ValidSchema MakeSchemaBytes() { return avro::ValidSchema(avro::BytesSchema()); }
-avro::ValidSchema MakeSchemaFixed(int size, const std::string& name) {
-  return avro::ValidSchema(avro::FixedSchema(size, name));
-}
-
 avro::ValidSchema MakeSchemaPartition(const std::vector<PartitionKeyField>& partition_spec) {
   avro::RecordSchema schema("r102");
   for (const auto& field : partition_spec) {
@@ -625,43 +542,86 @@ avro::ValidSchema MakeSchemaPartition(const std::vector<PartitionKeyField>& part
   }
   return avro::ValidSchema(schema);
 }
+#endif
 
-avro::ValidSchema MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec) {
-  avro::RecordSchema schema("r2");
-  AddField(schema, "file_path", MakeSchemaString());
-  AddField(schema, "file_format", MakeSchemaString());
-  AddField(schema, "content", MakeSchemaInt());
-  AddField(schema, "file_size_in_bytes", MakeSchemaLong());
-  AddField(schema, "record_count", MakeSchemaLong());
-  AddField(schema, "split_offsets", MakeSchemaOptional(MakeSchemaArray(MakeSchemaLong())));
-  AddField(schema, "equality_ids", MakeSchemaOptional(MakeSchemaArray(MakeSchemaInt())));
-  AddField(schema, "sort_order_id", MakeSchemaOptional(MakeSchemaInt()));
-  AddField(schema, "referenced_data_file", MakeSchemaOptional(MakeSchemaString()));
-  AddField(schema, "column_sizes", MakeSchemaOptional(MakeSchemaMap("k117_v118", MakeSchemaInt(), MakeSchemaLong())));
-  AddField(schema, "value_counts", MakeSchemaOptional(MakeSchemaMap("k119_v120", MakeSchemaInt(), MakeSchemaLong())));
-  AddField(schema, "null_value_counts",
-           MakeSchemaOptional(MakeSchemaMap("k121_v122", MakeSchemaInt(), MakeSchemaLong())));
-  AddField(schema, "lower_bounds", MakeSchemaOptional(MakeSchemaMap("k126_v127", MakeSchemaInt(), MakeSchemaBytes())));
-  AddField(schema, "upper_bounds", MakeSchemaOptional(MakeSchemaMap("k129_v130", MakeSchemaInt(), MakeSchemaBytes())));
-  AddField(schema, "partition", MakeSchemaPartition(partition_spec));
-  return avro::ValidSchema(schema);
+NodePtr MakeSchemaPartition(const std::vector<PartitionKeyField>& partition_spec) {
+  auto result = std::make_shared<myavro::RecordNode>("r102", 102);
+  return result;
 }
 
-avro::ValidSchema MakeSchemaManifestEntry(const std::vector<PartitionKeyField>& partition_spec) {
-  avro::RecordSchema schema("manifest_entry");
-  AddField(schema, "status", MakeSchemaInt());
-  AddField(schema, "snapshot_id", MakeSchemaOptional(MakeSchemaLong()));
-  AddField(schema, "sequence_number", MakeSchemaOptional(MakeSchemaLong()));
-  AddField(schema, "file_sequence_number", MakeSchemaOptional(MakeSchemaLong()));
-  AddField(schema, "data_file", MakeSchemaDataFile(partition_spec));
+NodePtr MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec,
+                           const ManifestEntryDeserializerConfig& cfg = {}) {
+  auto result = std::make_shared<myavro::RecordNode>("r2");
+  result->AddField("content", std::make_shared<myavro::IntNode>(134));
+  result->AddField("file_path", std::make_shared<myavro::StringNode>(100));
+  result->AddField("file_format", std::make_shared<myavro::StringNode>(101));
+  result->AddField("partition", MakeSchemaPartition(partition_spec));
+  result->AddField("record_count", std::make_shared<myavro::LongNode>(103));
+  result->AddField("file_size_in_bytes", std::make_shared<myavro::LongNode>(104));
+  result->AddField("split_offsets", std::make_shared<myavro::OptionalNode>(
+                                        std::make_shared<myavro::ArrayNode>(std::make_shared<myavro::LongNode>())));
+  // AddField(schema, "equality_ids", MakeSchemaOptional(MakeSchemaArray(MakeSchemaInt())));
+  result->AddField("sort_order_id", std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::IntNode>()));
+  // AddField(schema, "referenced_data_file", MakeSchemaOptional(MakeSchemaString()));
+  if (cfg.datafile_config.extract_column_sizes) {
+    auto column_sizes_entry = std::make_shared<myavro::RecordNode>("k117_v118");
+    column_sizes_entry->AddField("key", std::make_shared<myavro::IntNode>(117));
+    column_sizes_entry->AddField("value", std::make_shared<myavro::LongNode>(118));
+    result->AddField("column_sizes",
+                     std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::ArrayNode>(column_sizes_entry)));
+  }
+  if (cfg.datafile_config.extract_value_counts) {
+    auto value_counts_entry = std::make_shared<myavro::RecordNode>("k119_v120");
+    value_counts_entry->AddField("key", std::make_shared<myavro::IntNode>(119));
+    value_counts_entry->AddField("value", std::make_shared<myavro::LongNode>(120));
+    result->AddField("value_counts",
+                     std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::ArrayNode>(value_counts_entry)));
+  }
+  if (cfg.datafile_config.extract_null_value_counts) {
+    auto null_value_counts_entry = std::make_shared<myavro::RecordNode>("k121_v122");
+    null_value_counts_entry->AddField("key", std::make_shared<myavro::IntNode>(121));
+    null_value_counts_entry->AddField("value", std::make_shared<myavro::LongNode>(122));
+    result->AddField("null_value_counts", std::make_shared<myavro::OptionalNode>(
+                                              std::make_shared<myavro::ArrayNode>(null_value_counts_entry)));
+  }
+  if (cfg.datafile_config.extract_lower_bounds) {
+    auto lower_bounds_entry = std::make_shared<myavro::RecordNode>("k126_v127");
+    lower_bounds_entry->AddField("key", std::make_shared<myavro::IntNode>(126));
+    lower_bounds_entry->AddField("value", std::make_shared<myavro::BytesNode>(127));
+    result->AddField("lower_bounds",
+                     std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::ArrayNode>(lower_bounds_entry)));
+  }
+  if (cfg.datafile_config.extract_upper_bounds) {
+    auto upper_bounds_entry = std::make_shared<myavro::RecordNode>("k129_v130");
+    upper_bounds_entry->AddField("key", std::make_shared<myavro::IntNode>(129));
+    upper_bounds_entry->AddField("value", std::make_shared<myavro::BytesNode>(130));
+    result->AddField("upper_bounds",
+                     std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::ArrayNode>(upper_bounds_entry)));
+  }
+  // AddField(schema, "partition", MakeSchemaPartition(partition_spec));
 
-  return avro::ValidSchema(schema);
+  return result;
+}
+
+NodePtr MakeSchemaManifestEntry(const std::vector<PartitionKeyField>& partition_spec,
+                                const ManifestEntryDeserializerConfig& cfg = {}) {
+  auto result = std::make_shared<myavro::RecordNode>("manifest_entry");
+
+  result->AddField("status", std::make_shared<myavro::IntNode>(0));
+  result->AddField("snapshot_id", std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::LongNode>(1)));
+  result->AddField("sequence_number", std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::LongNode>(3)));
+  result->AddField("file_sequence_number",
+                   std::make_shared<myavro::OptionalNode>(std::make_shared<myavro::LongNode>(4)));
+  result->AddField("data_file", MakeSchemaDataFile(partition_spec, cfg));
+
+  return result;
 }
 
 void AddMember(avro::GenericRecord& result, const std::string& key, avro::GenericDatum&& value) {
   result.setFieldAt(result.fieldIndex(std::string(key)), value);
 }
 
+#if 0
 avro::GenericDatum SerializeBool(bool value) { return avro::GenericDatum(value); }
 avro::GenericDatum SerializeInt(int value) { return avro::GenericDatum(value); }
 avro::GenericDatum SerializeLong(int64_t value) { return avro::GenericDatum(value); }
@@ -939,8 +899,14 @@ avro::GenericDatum SerializeManifestEntry(const std::vector<PartitionKeyField>& 
   AddMember(record, "data_file", SerializeDataFile(partition_spec, entry.data_file));
   return result;
 }
-
+#endif
 }  // namespace
+
+avro::ValidSchema AvroSchemaFromNode(NodePtr node) {
+  return avro::compileJsonSchemaFromString(myavro::ToJsonString(node));
+}
+
+#define NEW_CODE 1
 
 Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserializerConfig& config) {
   if (!input) {
@@ -948,7 +914,13 @@ Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserialize
   }
 
   auto istream = avro::istreamInputStream(input);
+#ifdef NEW_CODE
+  auto schema = AvroSchemaFromNode(MakeSchemaManifestEntry({}, config));
+
+  avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream), schema);
+#else
   avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream));
+#endif
   Manifest result;
 
   result.metadata = data_file_reader.metadata();
@@ -969,7 +941,11 @@ Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserialize
   }
   ManifestEntryDeserializer deserializer(config);
   while (true) {
+#ifdef NEW_CODE
+    avro::GenericDatum manifest_entry(schema);
+#else
     avro::GenericDatum manifest_entry(data_file_reader.dataSchema());
+#endif
     if (data_file_reader.read(manifest_entry)) {
       ManifestEntry entry = deserializer.Deserialize(manifest_entry);
       result.entries.emplace_back(std::move(entry));
@@ -987,6 +963,7 @@ Manifest ReadManifestEntries(const std::string& data, const ManifestEntryDeseria
 
 std::string WriteManifestEntries(const Manifest& manifest, const std::vector<PartitionKeyField>& partition_spec) {
   static constexpr size_t bufferSize = 1024 * 1024;
+#if 0
 
   std::stringstream ss;
   auto ostream = avro::ostreamOutputStream(ss, bufferSize);
@@ -1000,6 +977,9 @@ std::string WriteManifestEntries(const Manifest& manifest, const std::vector<Par
   writer.close();
 
   return ss.str();
+
+#endif
+  return "";
 }
 
 void FillManifestSplitOffsets(std::vector<ManifestEntry>& data, std::shared_ptr<arrow::fs::FileSystem> fs) {
