@@ -5,6 +5,21 @@
 #include "iceberg/common/json_parse.h"
 
 namespace iceberg {
+
+template <typename T>
+class UniqueSet {
+public:
+
+  void Insert(const T& t) {
+    if (!set_.insert(t).second) {
+      throw std::runtime_error(std::string(__FUNCTION__) + ": duplicate element");
+    }
+  }
+
+private:
+  std::unordered_set<T> set_;
+};
+
 class SchemaNameMapper {
  public:
   class Node {
@@ -33,7 +48,7 @@ class SchemaNameMapper {
     // Checks that the structure is correct and all names at this level are unique
     void Validate() const {
       const size_t sz = doc_.Size();
-      std::unordered_set<std::string> all_names;
+      UniqueSet<std::string> all_names;
       for (size_t i = 0; i < sz; ++i) {
         if (!doc_[i].HasMember(names)) {
           throw std::runtime_error(std::string(__FUNCTION__) +
@@ -48,9 +63,7 @@ class SchemaNameMapper {
           if (!names_array[j].IsString()) {
             throw std::runtime_error(std::string(__FUNCTION__) + ": \"names\" is not an array of strings");
           }
-          if (!all_names.insert(names_array[j].GetString()).second) {
-            throw std::runtime_error(std::string(__FUNCTION__) + ": names are not unique");
-          }
+          all_names.Insert(names_array[j].GetString());
         }
       }
     }

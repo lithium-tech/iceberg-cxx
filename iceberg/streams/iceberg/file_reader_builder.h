@@ -197,9 +197,11 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
       if (!schema_name_mapping) {
         return;
       }
+      UniqueSet<int> field_ids_set;
       std::optional<SchemaNameMapper> schema_name_mapper;
       for (int i = 0; i < GetFieldCount(); ++i) {
         if (node_->field(i)->field_id() >= 0) {
+          field_ids_set.Insert(node_->field(i)->field_id());
           continue;
         }
         if (!schema_name_mapper.has_value()) {
@@ -210,6 +212,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
         auto field_id = schema_name_mapper->GetRootNode().GetFieldIdByName(field_name);
         if (field_id.has_value()) {
           index_to_field_id_[i] = field_id.value();
+          field_ids_set.Insert(field_id.value());
         }
       }
     }
