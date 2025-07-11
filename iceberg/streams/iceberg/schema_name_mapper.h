@@ -8,15 +8,14 @@ namespace iceberg {
 
 template <typename T>
 class UniqueSet {
-public:
-
+ public:
   void Insert(const T& t) {
     if (!set_.insert(t).second) {
       throw std::runtime_error(std::string(__FUNCTION__) + ": duplicate element");
     }
   }
 
-private:
+ private:
   std::unordered_set<T> set_;
 };
 
