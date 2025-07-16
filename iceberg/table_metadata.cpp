@@ -412,7 +412,7 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
     if (str.starts_with("fixed")) {
       std::stringstream ss(str);
       ss.ignore(std::string("fixed[").size());
-      int32_t size = -1;
+      int32_t size;
       ss >> size;
       return std::make_shared<types::FixedType>(size);
     }

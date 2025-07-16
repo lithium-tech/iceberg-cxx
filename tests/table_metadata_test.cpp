@@ -255,6 +255,14 @@ TEST(Metadata, WithBucketPartitioning) {
   }
 }
 
+TEST(Metadata, WithFixedType) {
+  std::ifstream input("warehouse/MockMetadataWithFixed.json");
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(metadata);
+  EXPECT_EQ(metadata->GetCurrentSchema()->Columns()[1].type->ToString(), "fixed(12)");
+}
+
 TEST(Metadata, EmptyTableUUID) {
   try {
     iceberg::TableMetadataV2(
