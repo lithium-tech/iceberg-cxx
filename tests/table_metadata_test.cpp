@@ -81,7 +81,7 @@ void Check(const TableMetadataV2& metadata) {
   EXPECT_EQ(snapshots[1]->sequence_number, 2);
   EXPECT_EQ(snapshots[1]->timestamp_ms, 1713951995410);
   EXPECT_EQ(snapshots[1]->summary, expected_summary_for_snapshot_0);
-  EXPECT_EQ(snapshots[2]->schema_id, 0);
+  EXPECT_EQ(snapshots[1]->schema_id, 0);
   EXPECT_EQ(snapshots[2]->snapshot_id, 7558608030923099867);
   EXPECT_EQ(snapshots[2]->parent_snapshot_id, 5231658854638766100);
   EXPECT_EQ(snapshots[2]->sequence_number, 3);
