@@ -409,6 +409,13 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
       ss >> scale;
       return std::make_shared<types::DecimalType>(precision, scale);
     }
+    if (str.starts_with("fixed")) {
+      std::stringstream ss(str);
+      ss.ignore(std::string("fixed[").size());
+      int32_t size = -1;
+      ss >> size;
+      return std::make_shared<types::FixedType>(size);
+    }
     throw std::runtime_error(std::string(__FUNCTION__) + ": unknown type '" + str + "'");
   }
   if (value.IsObject()) {
