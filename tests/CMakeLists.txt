@@ -7,6 +7,7 @@ set(iceberg_local_test_files
     tea_scan_test.cpp
     snapshot_test.cpp
     schema_validation_test.cpp
+    streams_test.cpp
     referenced_data_file_test.cpp
     run_tests.cpp
     compat/partitions_test.cpp
@@ -22,7 +23,7 @@ if (ICECXX_USE_REST)
 endif()
 
 add_executable(iceberg_local_test ${iceberg_local_test_files})
-target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp iceberg-tools ${CMAKE_DL_LIBS})
+target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp iceberg-tools iceberg_streams iceberg_common_fs ${CMAKE_DL_LIBS})
 if (ICECXX_USE_REST)
     target_link_libraries(iceberg_local_test PUBLIC cpr)
 endif()
