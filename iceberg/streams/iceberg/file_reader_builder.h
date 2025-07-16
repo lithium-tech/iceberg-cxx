@@ -26,6 +26,7 @@
 #include "iceberg/streams/arrow/projection_stream.h"
 #include "iceberg/streams/iceberg/data_entries_meta_stream.h"
 #include "iceberg/streams/iceberg/data_scan.h"
+#include "iceberg/streams/iceberg/default_value_applier.h"
 #include "iceberg/streams/iceberg/equality_delete_applier.h"
 #include "iceberg/streams/iceberg/iceberg_batch.h"
 #include "iceberg/streams/iceberg/mapper.h"
@@ -68,6 +69,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
                     std::shared_ptr<const FieldIdMapper> mapper,
                     std::shared_ptr<const IFileReaderProvider> file_reader_provider,
                     std::shared_ptr<const IRowGroupFilter> rg_filter, std::optional<std::string>&& schema_name_mapping,
+                    std::shared_ptr<const std::map<int, Literal>> default_value_map,
                     std::shared_ptr<ILogger> logger = nullptr)
       : field_ids_to_retrieve_(std::move(field_ids_to_retrieve)),
         equality_deletes_(equality_deletes),
@@ -75,10 +77,12 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
         file_reader_provider_(file_reader_provider),
         rg_filter_(rg_filter),
         schema_name_mapping_(std::move(schema_name_mapping)),
+        default_value_map_(default_value_map),
         logger_(logger) {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
     Ensure(file_reader_provider_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
+    Ensure(default_value_map_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": default_value_map is nullptr");
   }
 
   IcebergStreamPtr Build(const AnnotatedDataPath& annotated_data_path) override {
@@ -176,7 +180,19 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
       return result;
     }();
 
+    std::vector<std::pair<int, std::string>> remaining_field_ids_with_names = [&]() {
+      std::vector<std::pair<int, std::string>> result;
+      for (const auto& col : cols) {
+        if (!col.column_position.has_value()) {
+          result.push_back(std::make_pair(col.field_id, col.result_name));
+        }
+      }
+      return result;
+    }();
+
     result = std::make_shared<ProjectionStream>(parquet_name_to_result_name, result);
+
+    result = std::make_shared<DefaultValueApplier>(result, default_value_map_, std::move(remaining_field_ids_with_names));
 
     return std::make_shared<ArrowStreamWrapper>(result, annotated_data_path.GetPartitionLayerFile());
   }
@@ -228,6 +244,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::shared_ptr<const IRowGroupFilter> rg_filter_;
   std::optional<std::string> schema_name_mapping_;
+  std::shared_ptr<const std::map<int, Literal>> default_value_map_;
   std::shared_ptr<ILogger> logger_;
 };
 

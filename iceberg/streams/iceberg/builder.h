@@ -35,6 +35,8 @@ class IcebergScanBuilder {
 
     auto mapper = MakeMapper(schema);
 
+    auto default_value_map = MakeDefaultValueMap(schema);
+
     // this class takes an AnnotatedDataPath as input and returns IcebergStream
     // (which reads some columns from row groups matching rg-filter of data file)
     auto stream_builder =
@@ -72,6 +74,20 @@ class IcebergScanBuilder {
     // arrow::RecordBatch store names, not field ids
     // this class helps with mapping from parquet field id to arrow::RecordBatch names
     return std::make_shared<FieldIdMapper>(std::move(field_id_to_column_name));
+  }
+
+  static std::shared_ptr<const std::map<int, Literal>> MakeDefaultValueMap(const iceberg::Schema& schema) {
+     std::map<int, Literal> field_id_to_default_value;
+    for (const auto& col : schema.Columns()) {
+      if (col.initial_default.has_value()) {
+        field_id_to_default_value.insert({col.field_id, col.initial_default.value()});
+      }
+    }
+
+    // all mappings must use field ids, not names
+    // arrow::RecordBatch store names, not field ids
+    // this class helps with mapping from parquet field id to arrow::RecordBatch names
+    return std::make_shared<const std::map<int, Literal>>(std::move(field_id_to_default_value));
   }
 
   static std::shared_ptr<IcebergStream> MakeFinalProjection(const FieldIdMapper& mapper,

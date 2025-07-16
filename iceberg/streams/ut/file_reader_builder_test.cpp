@@ -40,7 +40,8 @@ TEST_F(FileReaderBuilderTest, Trivial) {
   auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {3, "col123"}});
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt);
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
+                                        std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int64_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{1, 2, 3, 4};
@@ -76,7 +77,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMapping) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping);
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -109,7 +110,7 @@ TEST_F(FileReaderBuilderTest, FieldIdFirst) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping);
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -141,7 +142,7 @@ TEST_F(FileReaderBuilderTest, FieldIDsAreNotInjective) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping);
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -168,7 +169,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingMissingColumn) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping);
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -199,7 +200,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingWithArray) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping);
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
 
   ArrayContainer col1_data = {
       .arrays = {OptionalVector<int32_t>{3, 1}, OptionalVector<int32_t>{4}, OptionalVector<int32_t>{9, 2, 5}}};
@@ -234,5 +235,137 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingWithArray) {
   }
 }
 
+TEST_F(FileReaderBuilderTest, DefaultValue) {
+  std::vector<int> field_ids_to_retrieve = {1, 2};
+
+  auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}});
+
+  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
+                                        std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
+                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+
+  auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
+  auto col2_data = OptionalVector<int32_t>{10, 10, 10, 10};
+
+  auto column1 = MakeInt32Column("xxx", 1, col1_data);
+  ASSERT_OK(WriteToFile({column1}, data_path_));
+
+  PartitionLayerFile state(PartitionLayer(13, 12), data_path_);
+
+  AnnotatedDataPath annotated_data_path(state, {AnnotatedDataPath::Segment{.offset = 4, .length = 1}});
+
+  auto reader = file_reader_builder.Build(annotated_data_path);
+
+  auto batch = reader->ReadNext();
+  ASSERT_TRUE(batch);
+
+  EXPECT_TRUE(batch->GetRecordBatch()->Equals(
+      *MakeBatch({MakeInt32ArrowColumn(col1_data), MakeInt32ArrowColumn(col2_data)}, {"col1", "col2"})));
+}
+
+TEST_F(FileReaderBuilderTest, ColumnFirst) {
+  std::vector<int> field_ids_to_retrieve = {1, 2};
+
+  auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}});
+
+  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
+                                        std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
+                                            {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
+                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+
+  auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
+  auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
+
+  auto column1 = MakeInt32Column("xxx", 1, col1_data);
+  auto column2 = MakeInt32Column("yyy", 2, col2_data);
+  ASSERT_OK(WriteToFile({column1, column2}, data_path_));
+
+  PartitionLayerFile state(PartitionLayer(13, 12), data_path_);
+
+  AnnotatedDataPath annotated_data_path(state, {AnnotatedDataPath::Segment{.offset = 4, .length = 1}});
+
+  auto reader = file_reader_builder.Build(annotated_data_path);
+
+  auto batch = reader->ReadNext();
+  ASSERT_TRUE(batch);
+
+  EXPECT_TRUE(batch->GetRecordBatch()->Equals(
+      *MakeBatch({MakeInt32ArrowColumn(col1_data), MakeInt32ArrowColumn(col2_data)}, {"col1", "col2"})));
+}
+
+TEST_F(FileReaderBuilderTest, SchemaNameMappingFirst) {
+  std::vector<int> field_ids_to_retrieve = {1, 2};
+
+  auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}});
+
+  const std::string schema_name_mapping =
+      "[ { \"field-id\": 2, \"names\": [\"yyy\"] },"
+      " { \"field-id\": 1, \"names\": [\"xxx\"] } ]";
+
+  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
+                                        &schema_name_mapping,
+                                        std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
+                                            {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
+                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+
+  auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
+  auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
+
+  auto column1 = MakeInt32Column("xxx", -1, col1_data);
+  auto column2 = MakeInt32Column("yyy", -1, col2_data);
+  ASSERT_OK(WriteToFile({column1, column2}, data_path_));
+
+  PartitionLayerFile state(PartitionLayer(13, 12), data_path_);
+
+  AnnotatedDataPath annotated_data_path(state, {AnnotatedDataPath::Segment{.offset = 4, .length = 1}});
+
+  auto reader = file_reader_builder.Build(annotated_data_path);
+
+  auto batch = reader->ReadNext();
+  ASSERT_TRUE(batch);
+
+  EXPECT_TRUE(batch->GetRecordBatch()->Equals(
+      *MakeBatch({MakeInt32ArrowColumn(col1_data), MakeInt32ArrowColumn(col2_data)}, {"col1", "col2"})));
+}
+
+TEST_F(FileReaderBuilderTest, Combination) {
+  std::vector<int> field_ids_to_retrieve = {1, 2, 3};
+
+  auto field_id_mapper =
+      std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}, {3, "col3"}});
+
+  const std::string schema_name_mapping = "[ { \"field-id\": 2, \"names\": [\"xxx\"] } ]";
+
+  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
+                                        &schema_name_mapping,
+                                        std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
+                                            {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
+                                            {3, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+
+  auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
+  auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
+  auto col3_data = OptionalVector<int32_t>{10, 10, 10, 10};
+
+  auto column1 = MakeInt32Column("abc", 1, col1_data);
+  auto column2 = MakeInt32Column("xxx", -1, col2_data);
+  ASSERT_OK(WriteToFile({column1, column2}, data_path_));
+
+  PartitionLayerFile state(PartitionLayer(13, 12), data_path_);
+
+  AnnotatedDataPath annotated_data_path(state, {AnnotatedDataPath::Segment{.offset = 4, .length = 1}});
+
+  auto reader = file_reader_builder.Build(annotated_data_path);
+
+  auto batch = reader->ReadNext();
+  ASSERT_TRUE(batch);
+
+  EXPECT_TRUE(batch->GetRecordBatch()->Equals(
+      *MakeBatch({MakeInt32ArrowColumn(col1_data), MakeInt32ArrowColumn(col2_data), MakeInt32ArrowColumn(col3_data)},
+                 {"col1", "col2", "col3"})));
+}
 }  // namespace
 }  // namespace iceberg
