@@ -465,13 +465,7 @@ TEST(ManifestEntryTest, TestPartitionedManyTypes) {
       ice_tea::PartitionKeyField("col_timestamp", std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
       ice_tea::PartitionKeyField("col_timestamptz", std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
       ice_tea::PartitionKeyField("col_string", std::make_shared<types::PrimitiveType>(TypeID::kString)),
-
-#if 0
-    ice_tea::PartitionKeyField("col_uuid", std::make_shared<types::PrimitiveType>(TypeID::kUuid)),
-#else
-      ice_tea::PartitionKeyField("col_uuid", std::make_shared<types::FixedType>(16)),
-#endif
-
+      ice_tea::PartitionKeyField("col_uuid", std::make_shared<types::PrimitiveType>(TypeID::kUuid)),
       ice_tea::PartitionKeyField("col_varbinary", std::make_shared<types::PrimitiveType>(TypeID::kBinary))};
 
   using PF = DataFile::PartitionKey;
@@ -498,7 +492,7 @@ TEST(ManifestEntryTest, TestPartitionedManyTypes) {
           PF("col_timestamp", 1740960000000000, std::make_shared<types::PrimitiveType>(TypeID::kTimestamp)),
           PF("col_timestamptz", 1740960000000000, std::make_shared<types::PrimitiveType>(TypeID::kTimestamptz)),
           PF("col_string", "some-string", std::make_shared<types::PrimitiveType>(TypeID::kString)),
-          PF("col_uuid", expected_uuid, std::make_shared<types::FixedType>(16)),
+          PF("col_uuid", expected_uuid, std::make_shared<types::PrimitiveType>(TypeID::kUuid)),
           PF("col_varbinary", expected_col_fixed_value, std::make_shared<types::PrimitiveType>(TypeID::kBinary)),
       }};
 

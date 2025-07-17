@@ -322,6 +322,8 @@ DataFile::PartitionTuple Deserialize(const avro::GenericDatum& datum) {
         result.fields.emplace_back(
             name, std::move(fixed),
             std::make_shared<types::DecimalType>(logical_type.precision(), logical_type.scale()));
+      } else if (logical_type.type() == avro::LogicalType::UUID) {
+        result.fields.emplace_back(name, std::move(fixed), std::make_shared<types::PrimitiveType>(TypeID::kUuid));
       } else {
         result.fields.emplace_back(name, std::move(fixed), std::make_shared<types::FixedType>(fixed.bytes.size()));
       }
@@ -548,10 +550,7 @@ avro::ValidSchema MakeSchemaDecimal(int precision, int scale) {
 avro::ValidSchema MakeSchemaFixed(int size) { return avro::ValidSchema(avro::FixedSchema(size, "fixed")); }
 avro::ValidSchema MakeSchemaUuid() {
   auto schema = avro::FixedSchema(16, "uuid_fixed");
-// UUID is serialized without logical type
-#if 0
   schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::UUID));
-#endif
   return avro::ValidSchema(schema);
 }
 avro::ValidSchema MakeSchemaLong() { return avro::ValidSchema(avro::LongSchema()); }
