@@ -211,7 +211,13 @@ int main(int argc, char** argv) {
     auto data_stream = iceberg::IcebergScanBuilder::MakeIcebergStream(
         meta_stream, pos_del_info, std::make_shared<iceberg::EqualityDeletes>(std::move(eq_del_info)),
         std::move(eq_del_config), nullptr, *table_metadata->GetCurrentSchema(), {1},
-        std::make_shared<iceberg::FileReaderProvider>(fs_provider));
+        std::make_shared<iceberg::FileReaderProvider>(fs_provider), [table_metadata]() -> const std::string* {
+          auto it = table_metadata->properties.find("schema.name-mapping.default");
+          if (it == table_metadata->properties.end()) {
+            return nullptr;
+          }
+          return &it->second;
+        }());
 
     while (true) {
       auto batch = data_stream->ReadNext();

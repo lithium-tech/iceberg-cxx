@@ -31,6 +31,7 @@
 #include "iceberg/streams/iceberg/mapper.h"
 #include "iceberg/streams/iceberg/plan.h"
 #include "iceberg/streams/iceberg/row_group_filter.h"
+#include "iceberg/streams/iceberg/schema_name_mapper.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/type_fwd.h"
 
@@ -66,12 +67,14 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   FileReaderBuilder(std::vector<int> field_ids_to_retrieve, std::shared_ptr<const EqualityDeletes> equality_deletes,
                     std::shared_ptr<const FieldIdMapper> mapper,
                     std::shared_ptr<const IFileReaderProvider> file_reader_provider,
-                    std::shared_ptr<const IRowGroupFilter> rg_filter, std::shared_ptr<ILogger> logger = nullptr)
+                    std::shared_ptr<const IRowGroupFilter> rg_filter, const std::string* schema_name_mapping,
+                    std::shared_ptr<ILogger> logger = nullptr)
       : field_ids_to_retrieve_(std::move(field_ids_to_retrieve)),
         equality_deletes_(equality_deletes),
         mapper_(mapper),
         file_reader_provider_(file_reader_provider),
         rg_filter_(rg_filter),
+        schema_name_mapping_(schema_name_mapping),
         logger_(logger) {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
@@ -184,6 +187,53 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
     return input_file;
   }
 
+  class GroupNodeWrapper {
+   public:
+    GroupNodeWrapper(const parquet::schema::GroupNode* node, const std::string* schema_name_mapping) : node_(node) {
+      Ensure(node_, std::string(__PRETTY_FUNCTION__) + ": group_node is nullptr");
+      for (int i = 0; i < GetFieldCount(); ++i) {
+        Ensure(node_->field(i) != nullptr, std::string(__PRETTY_FUNCTION__) + ": field is nullptr");
+      }
+      if (!schema_name_mapping) {
+        return;
+      }
+      UniqueSet<int> field_ids_set;
+      std::optional<SchemaNameMapper> schema_name_mapper;
+      for (int i = 0; i < GetFieldCount(); ++i) {
+        if (node_->field(i)->field_id() >= 0) {
+          field_ids_set.Insert(node_->field(i)->field_id());
+          continue;
+        }
+        if (!schema_name_mapper.has_value()) {
+          schema_name_mapper = SchemaNameMapper(*schema_name_mapping);
+          schema_name_mapper->GetRootNode().Validate();
+        }
+        auto field_name = node_->field(i)->name();
+        auto field_id = schema_name_mapper->GetRootNode().GetFieldIdByName(field_name);
+        if (field_id.has_value()) {
+          index_to_field_id_[i] = field_id.value();
+          field_ids_set.Insert(field_id.value());
+        }
+      }
+    }
+
+    int GetRealFieldId(int index) const {
+      auto it = index_to_field_id_.find(index);
+      if (it == index_to_field_id_.end()) {
+        return node_->field(index)->field_id();
+      }
+      return it->second;
+    }
+
+    int GetFieldCount() const { return node_->field_count(); }
+
+    std::string GetName(int index) const { return node_->field(index)->name(); }
+
+   private:
+    const parquet::schema::GroupNode* node_;
+    std::unordered_map<int, int> index_to_field_id_;
+  };
+
   struct ParquetColumnInfo {
     int field_id;
 
@@ -202,10 +252,9 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
     const auto& schema = metadata.schema();
     Ensure(schema != nullptr, std::string(__PRETTY_FUNCTION__) + ": schema is nullptr");
 
-    const auto& group_node = schema->group_node();
-    Ensure(group_node != nullptr, std::string(__PRETTY_FUNCTION__) + ": group_node is nullptr");
+    GroupNodeWrapper group_node_wrapper(schema->group_node(), schema_name_mapping_);
 
-    const auto field_count = group_node->field_count();
+    const auto field_count = group_node_wrapper.GetFieldCount();
 
     std::vector<ParquetColumnInfo> column_infos;
 
@@ -213,14 +262,10 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
       bool found = false;
 
       for (int i = 0; i < field_count; ++i) {
-        auto field = group_node->field(i);
-        Ensure(field != nullptr, std::string(__PRETTY_FUNCTION__) + ": field is nullptr");
-
-        const int current_field_id = field->field_id();
-        if (field_id_to_find == current_field_id) {
+        if (field_id_to_find == group_node_wrapper.GetRealFieldId(i)) {
           found = true;
           auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
-          column_infos.emplace_back(field_id_to_find, i, field->name(), std::move(result_name));
+          column_infos.emplace_back(field_id_to_find, i, group_node_wrapper.GetName(i), std::move(result_name));
           break;
         }
       }
@@ -269,6 +314,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::shared_ptr<const FieldIdMapper> mapper_;
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::shared_ptr<const IRowGroupFilter> rg_filter_;
+  const std::string* schema_name_mapping_;
   std::shared_ptr<ILogger> logger_;
 };
 
