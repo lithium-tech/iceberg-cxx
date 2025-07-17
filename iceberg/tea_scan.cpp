@@ -198,9 +198,6 @@ struct Transforms {
     for (const auto& column : schema->Columns()) {
       if (column.field_id == source_id) {
         return [&]() -> std::shared_ptr<const types::Type> {
-          if (column.type->TypeId() == TypeID::kUuid) {
-            return std::make_shared<types::FixedType>(16);
-          }
           if (column.type->TypeId() == TypeID::kTimestamptz) {
             return std::make_shared<types::PrimitiveType>(TypeID::kTimestamp);
           }
