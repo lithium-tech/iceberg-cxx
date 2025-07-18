@@ -203,7 +203,7 @@ bool MetadataTree::AddSnapshot(const std::shared_ptr<Snapshot>& snap, const std:
           throw std::runtime_error("No manifest file '" + man_file_path.string() + "'");
         }
         std::ifstream list_input(man_file_path);
-        auto man = std::make_shared<Manifest>(iceberg::ice_tea::ReadManifestEntries(list_input));
+        auto man = std::make_shared<Manifest>(iceberg::ice_tea::ReadManifestEntries(list_input, {}));
 
         manifests.emplace(man_path.filename(), std::move(man));
       }

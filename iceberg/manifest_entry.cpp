@@ -918,9 +918,53 @@ avro::GenericDatum SerializeManifestEntry(const std::vector<PartitionKeyField>& 
   return result;
 }
 
+avro::NodePtr Find(avro::NodePtr root, const std::string& name) {
+  size_t leaves = root->leaves();
+  for (size_t i = 0; i < leaves; ++i) {
+    if (root->nameAt(i) == name) {
+      return root->leafAt(i);
+    }
+  }
+
+  return nullptr;
+}
+
+void ValidatePartitionSpec(const std::vector<PartitionKeyField>& partition_spec, avro::NodePtr root) {
+  avro::NodePtr data_file = Find(root, "data_file");
+  if (!data_file) {
+    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": data_file is not found in avro.schema");
+  }
+
+  avro::NodePtr partition = Find(data_file, "partition");
+  if (!partition) {
+    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": partition is not found in avro.schema");
+  }
+
+  if (partition_spec.size() != partition->leaves()) {
+    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": partition_spec has " +
+                             std::to_string(partition_spec.size()) + ", but partition in avro contains " +
+                             std::to_string(partition->leaves()) + " fields");
+  }
+
+  // TODO(gmusya): improve test coverage
+  std::map<std::string, int> name_to_leaf;
+  for (int i = 0; i < partition->names(); ++i) {
+    name_to_leaf[partition->nameAt(i)] = i;
+  }
+  for (const auto& spec_field : partition_spec) {
+    if (!name_to_leaf.contains(spec_field.name)) {
+      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": partition_spec has field '" + spec_field.name +
+                               "', but partition in avro does not");
+    }
+
+    // TODO(gmusya): validate logical types
+  }
+}
+
 }  // namespace
 
-Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserializerConfig& config) {
+Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKeyField>& partition_spec,
+                             const ManifestEntryDeserializerConfig& config) {
   if (!input) {
     throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": input is invalid");
   }
@@ -928,6 +972,8 @@ Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserialize
   auto istream = avro::istreamInputStream(input);
   avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream));
   Manifest result;
+
+  ValidatePartitionSpec(partition_spec, data_file_reader.dataSchema().root());
 
   result.metadata = data_file_reader.metadata();
 
@@ -958,9 +1004,10 @@ Manifest ReadManifestEntries(std::istream& input, const ManifestEntryDeserialize
   return result;
 }
 
-Manifest ReadManifestEntries(const std::string& data, const ManifestEntryDeserializerConfig& config) {
+Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionKeyField>& partition_spec,
+                             const ManifestEntryDeserializerConfig& config) {
   std::stringstream ss(data);
-  return ReadManifestEntries(ss, config);
+  return ReadManifestEntries(ss, partition_spec, config);
 }
 
 std::string WriteManifestEntries(const Manifest& manifest, const std::vector<PartitionKeyField>& partition_spec) {

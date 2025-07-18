@@ -12,7 +12,7 @@ Manifest ReadManifest(const std::string& path) {
   std::stringstream ss;
   ss << input.rdbuf();
   std::string data = ss.str();
-  return ice_tea::ReadManifestEntries(data);
+  return ice_tea::ReadManifestEntries(data, {});
 }
 
 tools::RestrictionsTableMetadata DefaultRestrictionsTableMetadata() {

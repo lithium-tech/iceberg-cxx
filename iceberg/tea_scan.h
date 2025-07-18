@@ -105,11 +105,18 @@ class IcebergEntriesStream {
 class AllEntriesStream : public IcebergEntriesStream {
  public:
   AllEntriesStream(std::shared_ptr<arrow::fs::FileSystem> fs, std::queue<ManifestFile> manifest_files,
-                   const ManifestEntryDeserializerConfig& config = {})
-      : fs_(fs), manifest_files_(std::move(manifest_files)), config_(config) {}
+                   const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs = {},
+                   std::shared_ptr<iceberg::Schema> schema = {}, const ManifestEntryDeserializerConfig& config = {})
+      : fs_(fs),
+        manifest_files_(std::move(manifest_files)),
+        partition_specs_(partition_specs),
+        schema_(schema),
+        config_(config) {}
 
   static std::shared_ptr<AllEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                 const std::string& manifest_list_path,
+                                                const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs = {},
+                                                std::shared_ptr<iceberg::Schema> schema = nullptr,
                                                 const ManifestEntryDeserializerConfig& config = {});
 
   static std::shared_ptr<AllEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
@@ -126,6 +133,8 @@ class AllEntriesStream : public IcebergEntriesStream {
   ManifestFile current_manifest_file;
   std::queue<ManifestEntry> entries_for_current_manifest_file_;
 
+  std::shared_ptr<iceberg::Schema> schema_;
+  const std::vector<std::shared_ptr<PartitionSpec>> partition_specs_;
   ManifestEntryDeserializerConfig config_;
 };
 

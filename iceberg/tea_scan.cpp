@@ -7,7 +7,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -22,8 +21,6 @@
 #include "iceberg/result.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"
-#include "iceberg/tea_column_stats.h"
-#include "iceberg/tea_scan_hashers.h"
 #include "iceberg/type.h"
 
 namespace iceberg::ice_tea {
@@ -282,9 +279,10 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
 
 using SequenceNumber = int64_t;
 
-std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                         const std::string& manifest_list_path,
-                                                         const ManifestEntryDeserializerConfig& config) {
+std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
+    std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& manifest_list_path,
+    const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, std::shared_ptr<iceberg::Schema> schema,
+    const ManifestEntryDeserializerConfig& config) {
   const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
 
   std::stringstream ss(manifest_metadatas_content);
@@ -292,7 +290,7 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
   std::queue<ManifestFile> manifest_files_queue(std::deque<ManifestFile>(
       std::make_move_iterator(manifest_metadatas.begin()), std::make_move_iterator(manifest_metadatas.end())));
 
-  return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue), config);
+  return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue), partition_specs, schema, config);
 }
 
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
@@ -304,7 +302,8 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
   }
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
-  return AllEntriesStream::Make(fs, manifest_list_path, config);
+  return AllEntriesStream::Make(fs, manifest_list_path, table_metadata->partition_specs,
+                                table_metadata->GetCurrentSchema(), config);
 }
 
 std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
@@ -337,8 +336,14 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
 
     const std::string manifest_path = current_manifest_file.path;
     const std::string entries_content = ValueSafe(ReadFile(fs_, manifest_path));
-    Manifest manifest = ice_tea::ReadManifestEntries(entries_content, config_);
 
+    auto maybe_partition_spec =
+        GetFieldsFromPartitionSpec(*partition_specs_.at(current_manifest_file.partition_spec_id), schema_);
+    if (!maybe_partition_spec) {
+      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
+                               std::to_string(current_manifest_file.partition_spec_id));
+    }
+    Manifest manifest = ice_tea::ReadManifestEntries(entries_content, maybe_partition_spec.value(), config_);
     // it is impossible to construct queue from iterators before C++23
     entries_for_current_manifest_file_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(
         std::make_move_iterator(manifest.entries.begin()), std::make_move_iterator(manifest.entries.end())));
