@@ -53,7 +53,7 @@ TEST(ReferencedDataFile, ManifestEntry) {
   }
 
   std::string data = ice_tea::WriteManifestEntries(manifest);
-  auto result = ice_tea::ReadManifestEntries(data);
+  auto result = ice_tea::ReadManifestEntries(data, {});
 
   ASSERT_EQ(result.entries.size(), 1);
   ASSERT_TRUE(result.entries[0].data_file.referenced_data_file.has_value());
@@ -98,7 +98,7 @@ TEST(ReferencedDataFile, GetScanMetadata) {
     }
 
     std::string data = ice_tea::WriteManifestEntries(manifest);
-    auto result = ice_tea::ReadManifestEntries(data);
+    auto result = ice_tea::ReadManifestEntries(data, {});
     std::ofstream f(dir.path() / "manifest.avro", std::ios_base::binary);
     f.write(data.data(), data.size());
     f.close();

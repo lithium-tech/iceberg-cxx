@@ -214,8 +214,10 @@ struct ManifestEntryDeserializerConfig {
   DataFileDeserializerConfig datafile_config = {};
 };
 
-Manifest ReadManifestEntries(std::istream& istream, const ManifestEntryDeserializerConfig& config = {});
-Manifest ReadManifestEntries(const std::string& data, const ManifestEntryDeserializerConfig& config = {});
+Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionKeyField>& partition_spec,
+                             const ManifestEntryDeserializerConfig& config = {});
+Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionKeyField>& partition_spec,
+                             const ManifestEntryDeserializerConfig& config = {});
 std::string WriteManifestEntries(const Manifest& manifest_entries,
                                  const std::vector<PartitionKeyField>& partition_spec = {});
 

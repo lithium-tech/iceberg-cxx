@@ -62,7 +62,7 @@ TEST(ManifestEntryTest, Test) {
   ss << input.rdbuf();
   std::string data = ss.str();
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, {});
   Check(manifest.entries);
 }
 
@@ -72,12 +72,12 @@ TEST(ManifestEntryTest, ReadWriteRead) {
   ss << input.rdbuf();
   std::string data = ss.str();
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, {});
   auto metadata = manifest.metadata;
   Check(manifest.entries);
 
   std::string serialized = ice_tea::WriteManifestEntries(manifest);
-  manifest = ice_tea::ReadManifestEntries(serialized);
+  manifest = ice_tea::ReadManifestEntries(serialized, {});
   Check(manifest.entries);
 
   EXPECT_EQ(metadata, manifest.metadata);
@@ -95,7 +95,7 @@ TEST(ManifestEntryTest, Test2) {
   ss << input.rdbuf();
   std::string data = ss.str();
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, {});
   const auto& entries = manifest.entries;
   EXPECT_EQ(entries.size(), 1);
   const auto& entry = entries[0];
@@ -136,7 +136,7 @@ TEST(ManifestEntryTest, ExtractNotAllFields) {
   config.extract_file_sequence_number = false;
   config.datafile_config = datafile_config;
 
-  Manifest manifest = ice_tea::ReadManifestEntries(input, config);
+  Manifest manifest = ice_tea::ReadManifestEntries(input, {}, config);
 
   EXPECT_EQ(manifest.entries.size(), 6);
   const auto& entry = manifest.entries[0];
@@ -175,7 +175,7 @@ TEST(ManifestEntryTest, ExtractNotAllFields) {
 TEST(ManifestEntryTest, FillSplitOffsets) {
   std::ifstream input("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
 
-  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input).entries;
+  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input, {}).entries;
 
   // Clear offsets
   for (auto& entry : entries) {
@@ -189,7 +189,7 @@ TEST(ManifestEntryTest, FillSplitOffsets) {
   ss_copy << input_copy.rdbuf();
   std::string data_copy = ss_copy.str();
 
-  Manifest entries_original = ice_tea::ReadManifestEntries(data_copy);
+  Manifest entries_original = ice_tea::ReadManifestEntries(data_copy, {});
 
   for (size_t i = 0; i < entries.size(); ++i) {
     EXPECT_EQ(entries[i].data_file.split_offsets, entries_original.entries[i].data_file.split_offsets);
@@ -198,7 +198,7 @@ TEST(ManifestEntryTest, FillSplitOffsets) {
 
 TEST(ManifestEntryTest, FillSplitOffsets2) {
   std::ifstream input("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
-  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input).entries;
+  std::vector<ManifestEntry> entries = ice_tea::ReadManifestEntries(input, {}).entries;
 
   // Clear offsets
   for (auto& entry : entries) {
@@ -217,7 +217,7 @@ TEST(ManifestEntryTest, FillSplitOffsets2) {
   ice_tea::FillManifestSplitOffsets(entries, metadata);
 
   std::ifstream input_copy("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
-  std::vector<ManifestEntry> entries_original = ice_tea::ReadManifestEntries(input_copy).entries;
+  std::vector<ManifestEntry> entries_original = ice_tea::ReadManifestEntries(input_copy, {}).entries;
 
   for (size_t i = 0; i < entries.size(); ++i) {
     EXPECT_EQ(entries[i].data_file.split_offsets, entries_original[i].data_file.split_offsets);
@@ -226,16 +226,16 @@ TEST(ManifestEntryTest, FillSplitOffsets2) {
 
 TEST(ManifestEntryTest, ReadBrokenFiles) {
   std::ifstream input_empty("metadata/empty.avro");
-  EXPECT_THROW(ice_tea::ReadManifestEntries(input_empty), std::runtime_error);
+  EXPECT_THROW(ice_tea::ReadManifestEntries(input_empty, {}), std::runtime_error);
 
   std::ifstream input_broken1("metadata/broken1.avro");
-  EXPECT_THROW(ice_tea::ReadManifestEntries(input_broken1), std::runtime_error);
+  EXPECT_THROW(ice_tea::ReadManifestEntries(input_broken1, {}), std::runtime_error);
 
   std::ifstream input_broken2("metadata/broken2.avro");
-  EXPECT_THROW(ice_tea::ReadManifestEntries(input_broken2), std::runtime_error);
+  EXPECT_THROW(ice_tea::ReadManifestEntries(input_broken2, {}), std::runtime_error);
 
   std::ifstream input_ok("metadata/02ce7cec-31fd-4de7-8811-02ce7cec44a9-m0.avro");
-  EXPECT_NO_THROW(ice_tea::ReadManifestEntries(input_ok));
+  EXPECT_NO_THROW(ice_tea::ReadManifestEntries(input_ok, {}));
 }
 
 bool IsLess(const ContentFile::PartitionKey& lhs, const ContentFile::PartitionKey& rhs) {
@@ -303,7 +303,7 @@ TEST(ManifestEntryTest, TestPartitioned) {
       ice_tea::PartitionKeyField("c1", std::make_shared<types::PrimitiveType>(TypeID::kInt)),
       ice_tea::PartitionKeyField("c2", std::make_shared<types::PrimitiveType>(TypeID::kDate))};
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 6);
   std::vector<DataFile::PartitionTuple> infos;
   for (size_t i = 0; i < 6; ++i) {
@@ -334,7 +334,7 @@ TEST(ManifestEntryTest, TestPartitioned) {
 
   data = ice_tea::WriteManifestEntries(manifest, fields);
   std::vector<DataFile::PartitionTuple> new_infos;
-  manifest = ice_tea::ReadManifestEntries(data);
+  manifest = ice_tea::ReadManifestEntries(data, fields);
   for (size_t i = 0; i < 6; ++i) {
     new_infos.emplace_back(manifest.entries[i].data_file.partition_tuple);
   }
@@ -355,7 +355,7 @@ TEST(ManifestEntryTest, TestPartitionedWithNull) {
       ice_tea::PartitionKeyField("c1", std::make_shared<types::PrimitiveType>(TypeID::kInt)),
       ice_tea::PartitionKeyField("c2", std::make_shared<types::PrimitiveType>(TypeID::kDate))};
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 4);
   std::vector<DataFile::PartitionTuple> infos;
   for (size_t i = 0; i < 4; ++i) {
@@ -385,7 +385,7 @@ TEST(ManifestEntryTest, TestPartitionedWithNull) {
 
   data = ice_tea::WriteManifestEntries(manifest, fields);
   std::vector<DataFile::PartitionTuple> new_infos;
-  manifest = ice_tea::ReadManifestEntries(data);
+  manifest = ice_tea::ReadManifestEntries(data, fields);
   for (size_t i = 0; i < 4; ++i) {
     new_infos.emplace_back(manifest.entries[i].data_file.partition_tuple);
   }
@@ -407,7 +407,7 @@ class ManifestYearPartitioningTest : public ::testing::Test {
     std::vector<ice_tea::PartitionKeyField> fields = {
         ice_tea::PartitionKeyField("c2_year", std::make_shared<types::PrimitiveType>(TypeID::kInt))};
 
-    Manifest manifest = ice_tea::ReadManifestEntries(data);
+    Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
     std::sort(manifest.entries.begin(), manifest.entries.end(), [&](const auto& lhs, const auto& rhs) {
       return lhs.data_file.record_count < rhs.data_file.record_count;
     });
@@ -424,7 +424,7 @@ class ManifestYearPartitioningTest : public ::testing::Test {
     data = ice_tea::WriteManifestEntries(manifest, fields);
 
     std::vector<DataFile::PartitionTuple> new_infos;
-    manifest = ice_tea::ReadManifestEntries(data);
+    manifest = ice_tea::ReadManifestEntries(data, fields);
     std::sort(manifest.entries.begin(), manifest.entries.end(), [&](const auto& lhs, const auto& rhs) {
       return lhs.data_file.record_count < rhs.data_file.record_count;
     });
@@ -497,14 +497,14 @@ TEST(ManifestEntryTest, TestPartitionedManyTypes) {
       }};
 
   std::sort(expected_partition_info.fields.begin(), expected_partition_info.fields.end(), IsLess);
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 1);
   auto info = manifest.entries[0].data_file.partition_tuple;
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 
   data = ice_tea::WriteManifestEntries(manifest, fields);
   std::vector<DataFile::PartitionTuple> new_infos;
-  manifest = ice_tea::ReadManifestEntries(data);
+  manifest = ice_tea::ReadManifestEntries(data, fields);
   info = manifest.entries[0].data_file.partition_tuple;
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }
@@ -534,7 +534,7 @@ TEST(ManifestEntryTest, DecimalPartitioning) {
                  PF("col_decimal_19_2", expected_decimal_19, std::make_shared<types::DecimalType>(19, 2)),
                  PF("col_decimal_38_2", expected_decimal_38, std::make_shared<types::DecimalType>(38, 2))}};
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 1);
   auto info = manifest.entries[0].data_file.partition_tuple;
 
@@ -543,7 +543,7 @@ TEST(ManifestEntryTest, DecimalPartitioning) {
 
   data = ice_tea::WriteManifestEntries(manifest, fields);
   std::vector<DataFile::PartitionTuple> new_infos;
-  manifest = ice_tea::ReadManifestEntries(data);
+  manifest = ice_tea::ReadManifestEntries(data, fields);
   info = manifest.entries[0].data_file.partition_tuple;
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }
@@ -582,7 +582,7 @@ TEST(ManifestEntryTest, TestBucketPartitioning) {
           PF("col_varbinary_bucket", 724, std::make_shared<types::PrimitiveType>(TypeID::kInt)),
       }};
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 1);
   auto info = manifest.entries[0].data_file.partition_tuple;
   std::sort(expected_partition_info.fields.begin(), expected_partition_info.fields.end(), IsLess);
@@ -590,7 +590,7 @@ TEST(ManifestEntryTest, TestBucketPartitioning) {
 
   data = ice_tea::WriteManifestEntries(manifest, fields);
   std::vector<DataFile::PartitionTuple> new_infos;
-  manifest = ice_tea::ReadManifestEntries(data);
+  manifest = ice_tea::ReadManifestEntries(data, fields);
   info = manifest.entries[0].data_file.partition_tuple;
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }
@@ -609,7 +609,7 @@ TEST(ManifestEntryTest, MonthTimestamptzPartitioning) {
   DataFile::PartitionTuple expected_partition_info{
       .fields = {PF("c2_month", 662, std::make_shared<types::PrimitiveType>(TypeID::kInt))}};
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 3);
   auto info = manifest.entries[1].data_file.partition_tuple;
 
@@ -618,7 +618,7 @@ TEST(ManifestEntryTest, MonthTimestamptzPartitioning) {
 
   data = ice_tea::WriteManifestEntries(manifest, fields);
   std::vector<DataFile::PartitionTuple> new_infos;
-  manifest = ice_tea::ReadManifestEntries(data);
+  manifest = ice_tea::ReadManifestEntries(data, fields);
   info = manifest.entries[1].data_file.partition_tuple;
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }
@@ -637,7 +637,7 @@ TEST(ManifestEntryTest, DayTimestamptzPartitioning) {
   DataFile::PartitionTuple expected_partition_info{
       .fields = {PF("c2_day", 20150, std::make_shared<types::PrimitiveType>(TypeID::kDate))}};
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 3);
   auto info = manifest.entries[1].data_file.partition_tuple;
 
@@ -646,7 +646,7 @@ TEST(ManifestEntryTest, DayTimestamptzPartitioning) {
 
   data = ice_tea::WriteManifestEntries(manifest, fields);
   std::vector<DataFile::PartitionTuple> new_infos;
-  manifest = ice_tea::ReadManifestEntries(data);
+  manifest = ice_tea::ReadManifestEntries(data, fields);
   info = manifest.entries[1].data_file.partition_tuple;
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }
@@ -665,7 +665,7 @@ TEST(ManifestEntryTest, HourTimestamptzPartitioning) {
   DataFile::PartitionTuple expected_partition_info{
       .fields = {PF("c2_hour", 474863, std::make_shared<types::PrimitiveType>(TypeID::kInt))}};
 
-  Manifest manifest = ice_tea::ReadManifestEntries(data);
+  Manifest manifest = ice_tea::ReadManifestEntries(data, fields);
   ASSERT_EQ(manifest.entries.size(), 3);
   auto info = manifest.entries[0].data_file.partition_tuple;
 
@@ -674,7 +674,7 @@ TEST(ManifestEntryTest, HourTimestamptzPartitioning) {
 
   data = ice_tea::WriteManifestEntries(manifest, fields);
   std::vector<DataFile::PartitionTuple> new_infos;
-  manifest = ice_tea::ReadManifestEntries(data);
+  manifest = ice_tea::ReadManifestEntries(data, fields);
   info = manifest.entries[0].data_file.partition_tuple;
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }

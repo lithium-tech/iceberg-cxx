@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
           throw std::runtime_error("");
         }
         auto content = maybe_content.MoveValueUnsafe();
-        manifests.push_back(iceberg::ice_tea::ReadManifestEntries(content));
+        manifests.push_back(iceberg::ice_tea::ReadManifestEntries(content, {}));
       }
       validator.ValidateManifests(manifests);
     } else if (mode == "table_metadata") {
