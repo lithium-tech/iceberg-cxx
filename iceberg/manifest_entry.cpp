@@ -5,16 +5,6 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include "parquet/arrow/reader.h"
-#include "parquet/metadata.h"
-#include "parquet/statistics.h"
-
-// Unfortunately, there is no adequate way to extract logical type from GenericDatum other than this
-// clang-format off
-#define protected public
-#include "avro/GenericDatum.hh"
-// clang-format on
-
 #include "avro/Compiler.hh"
 #include "avro/DataFile.hh"
 #include "avro/Generic.hh"
@@ -22,21 +12,10 @@
 #include "avro/Types.hh"
 #include "avro/ValidSchema.hh"
 #include "iceberg/type.h"
+#include "parquet/arrow/reader.h"
+#include "parquet/metadata.h"
+#include "parquet/statistics.h"
 #include "rapidjson/document.h"
-
-namespace {
-inline avro::LogicalType GetLogicalTypeFromDatum(const avro::GenericDatum& datum) {
-  return (datum.type_ == avro::AVRO_UNION) ?
-#if __cplusplus >= 201703L
-                                           std::any_cast<avro::GenericUnion>(&datum.value_)->datum().logicalType()
-                                           :
-#else
-                                           boost::any_cast<avro::GenericUnion>(&datum.value_)->datum().logicalType()
-                                           :
-#endif
-                                           datum.logicalType_;
-}
-}  // namespace
 
 namespace iceberg {
 
@@ -267,7 +246,7 @@ DataFile::PartitionTuple Deserialize(const avro::GenericDatum& datum) {
     auto name = schema->nameAt(i);
 
     const auto& field = record.fieldAt(record.fieldIndex(name));
-    const auto logical_type = GetLogicalTypeFromDatum(field);
+    const auto logical_type = field.logicalType();
 
     if (field.type() == avro::AVRO_NULL) {
       result.fields.emplace_back(name);
