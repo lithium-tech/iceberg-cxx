@@ -1,4 +1,6 @@
 set(iceberg_cpp_files
+  avro_schema.cpp
+  avro_schema.h
   catalog.h
   deletion_vector.cpp
   deletion_vector.h
