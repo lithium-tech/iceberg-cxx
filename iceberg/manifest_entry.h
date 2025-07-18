@@ -215,9 +215,9 @@ struct ManifestEntryDeserializerConfig {
 };
 
 Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionKeyField>& partition_spec,
-                             const ManifestEntryDeserializerConfig& config = {});
+                             const ManifestEntryDeserializerConfig& config = {}, bool use_reader_schema = true);
 Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionKeyField>& partition_spec,
-                             const ManifestEntryDeserializerConfig& config = {});
+                             const ManifestEntryDeserializerConfig& config = {}, bool use_reader_schema = true);
 std::string WriteManifestEntries(const Manifest& manifest_entries,
                                  const std::vector<PartitionKeyField>& partition_spec = {});
 
