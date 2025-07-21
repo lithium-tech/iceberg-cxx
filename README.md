@@ -2,11 +2,11 @@ Apache Iceberg C++ library
 
 # Apache Iceberg™ C++
 
-Yet another C++ implementation of [Apache Iceberg™](https://iceberg.apache.org/).
+You do not need Java to use [Apache Iceberg™](https://iceberg.apache.org/).
 
-We started it before [iceberg-cpp](https://github.com/apache/iceberg-cpp) appears. The library was a part of
-closed source project for reading Iceberg data via some opensource DBMS we use.
-Now we are happy to share results of our work with community to make the best Apache Iceberg™ C++ library together.
+It's an alternative for [iceberg-cpp](https://github.com/apache/iceberg-cpp).
+The library is a part of our extention for Greenplum that allows it to read Iceberg data from S3 compatible storage using HMS and Nessie catalogs.
+The extention is not opensourced yet. But we're thinking about it.
 
 ## Supported features
 
@@ -14,28 +14,28 @@ Source https://iceberg.apache.org/status/
 
 ### Data types
 
-| Data type  | Iceberg version | Cxx | Java | Go | Python | Rust |
-|--------------------------|---|-----|-----|-----|-----|-----|
-| boolean                  | 2 | +   | +   | +   | +   | +   |
-| int                      | 2 | +   | +   | +   | +   | +   |
-| float                    | 2 | +   | +   | +   | +   | +   |
-| double                   | 2 | +   | +   | +   | +   | +   |
-| decimal                  | 2 | +   | +   | +   | +   | +   |
-| date                     | 2 | +   | +   | +   | +   | +   |
-| time                     | 2 | +   | +   | +   | +   | +   |
-| timestamp                | 2 | +   | +   | +   | +   | +   |
-| timestamptz              | 2 | +   | +   | +   | +   | +   |
-| timestamp_ns             | 3 | +   | +   | +   | +   | +   |
-| timestamptz_ns           | 3 | +   | +   | +   | +   | +   |
-| string                   | 2 | +   | +   | +   | +   | +   |
-| uuid                     | 2 | +   | +   | +   | +   | +   |
-| fixed                    | 2 | +   | +   | +   | +   | +   |
-| binary                   | 2 | +   | +   | +   | +   | +   |
-| variant                  | 3 | -   | +   | +   | +   | +   |
-| list                     | 2 | +   | +   | +   | +   | +   |
-| map                      | 2 | -   | +   | +   | +   | +   |
-| struct                   | 2 | -   | +   | +   | +   | +   |
-| unknown                  | 3 | +   | ?   | ?   | ?   | ?   |
+| Data type  | Iceberg version | Cxx | Java |
+|--------------------------|---|-----|-----|
+| boolean                  | 2 | +   | +   |
+| int                      | 2 | +   | +   |
+| float                    | 2 | +   | +   |
+| double                   | 2 | +   | +   |
+| decimal                  | 2 | +   | +   |
+| date                     | 2 | +   | +   |
+| time                     | 2 | +   | +   |
+| timestamp                | 2 | +   | +   |
+| timestamptz              | 2 | +   | +   |
+| timestamp_ns             | 3 | +   | +   |
+| timestamptz_ns           | 3 | +   | +   |
+| string                   | 2 | +   | +   |
+| uuid                     | 2 | +   | +   |
+| fixed                    | 2 | +   | +   |
+| binary                   | 2 | +   | +   |
+| variant                  | 3 | -   | +   |
+| list                     | 2 | +   | +   |
+| map                      | 2 | -   | +   |
+| struct                   | 2 | -   | +   |
+| unknown                  | 3 | +   | ?   |
 
 #### Datetime types restrictions
 
@@ -47,22 +47,22 @@ For `date` underlying type is `int32`. For `time*` it's `int64`.
 
 ### Data files format
 
-| File format   | Cxx | Java | Go | Python | Rust |
-|---------------|-----|-----|-----|-----|-----|
-| Parquet       | +   | +   | +   | +   | +   |
-| ORC           | -   | +   | -   | -   | -   |
-| Puffin        | +   | +   | -   | -   | -   |
-| Avro          | -   | +   | -   | -   | -   |
+| File format   | Cxx | Java |
+|---------------|-----|-----|
+| Parquet       | +   | +   |
+| ORC           | -   | +   |
+| Puffin        | +   | +   |
+| Avro          | -   | +   |
 
 ### File IO
 
-| File IO            | Cxx | Java | Go | Python | Rust |
-|--------------------|-----|-----|-----|-----|-----|
-| Local Filesystem   | +   | +   | +   | +   | +   |
-| Hadoop Filesystem  | -   | +   | +   | +   | +   |
-| S3 Compatible      | +   | +   | +   | +   | +   |
-| GCS Compatible     | ?   | +   | +   | +   | +   |
-| ADLS Compatible    | -   | +   | +   | +   | -   |
+| File IO            | Cxx | Java |
+|--------------------|-----|-----|
+| Local Filesystem   | +   | +   |
+| Hadoop Filesystem  | -   | +   |
+| S3 Compatible      | +   | +   |
+| GCS Compatible     | -   | +   |
+| ADLS Compatible    | -   | +   |
 
 ### Table Maintenance Operations
 
@@ -74,24 +74,24 @@ Not implemented
 
 ### Table read operations
 
-| Operation        | Iceberg version | Cxx | Java | Go | Python | Rust |
-|------------------------------|-----|-----|-----|-----|-----|-----|
-| Plan with data file          | 1,2 | +   | +   | +   | +   | +   |
-| Plan with position deletes   |   2 | +   | +   | +-  | +   | -   |
-| Plan with equality deletes   |   2 | +   | +   | +-  | +   | -   |
-| Plan with puffin statistics  | 1,2 | -   | +   | -   | -   | -   |
-| Read data file               | 1,2 | +   | +   | +   | +   | +   |
-| Read with position deletes   |   2 | +   | +   | +   | +   | -   |
-| Read with equality deletes   |   2 | +   | +   | -   | -   | -   |
+| Operation        | Iceberg version | Cxx | Java |
+|------------------------------|-----|-----|-----|
+| Plan with data file          | 1,2 | +   | +   |
+| Plan with position deletes   |   2 | +   | +   |
+| Plan with equality deletes   |   2 | +   | +   |
+| Plan with puffin statistics  | 1,2 | -   | +   |
+| Read data file               | 1,2 | +   | +   |
+| Read with position deletes   |   2 | +   | +   |
+| Read with equality deletes   |   2 | +   | +   |
 
 ### Table write operations
 
-| Operation     | Iceberg version | Cxx | Java | Go | Python | Rust |
-|---------------------------|-----|-----|-----|-----|-----|-----|
-| Append data               | 1,2 | +   | +   | +   | +   | +   |
-| Write position deletes    |   2 | -   | +   | -   | -   | -   |
-| Write equality deletes    |   2 | -   | +   | -   | -   | -   |
-| Write deletion vectors    |   3 | +   | +   | -   | -   | -   |
+| Operation     | Iceberg version | Cxx | Java |
+|---------------------------|-----|-----|-----|
+| Append data               | 1,2 | +   | +   |
+| Write position deletes    |   2 | -   | +   |
+| Write equality deletes    |   2 | -   | +   |
+| Write deletion vectors    |   3 | +   | +   |
 
 ### Catalog
 
