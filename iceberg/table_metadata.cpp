@@ -103,7 +103,6 @@ class WriterContext {
     doc.AddMember(rapidjson::StringRef(field_name.data(), field_name.size()), value, GetAllocator());
   }
 
-  template <>
   void WriteJsonField(rapidjson::Value& doc, std::string_view field_name, const char* str_value) {
     strings_.emplace_back(std::make_shared<std::string>(field_name));
     auto& name = *strings_.back();
@@ -114,7 +113,6 @@ class WriterContext {
                   GetAllocator());
   }
 
-  template <>
   void WriteJsonField(rapidjson::Value& doc, std::string_view field_name, std::string str_value) {
     strings_.emplace_back(std::make_shared<std::string>(field_name));
     auto& name = *strings_.back();
