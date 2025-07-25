@@ -104,23 +104,11 @@ class WriterContext {
   }
 
   void WriteJsonField(rapidjson::Value& doc, std::string_view field_name, const char* str_value) {
-    strings_.emplace_back(std::make_shared<std::string>(field_name));
-    auto& name = *strings_.back();
-    strings_.emplace_back(std::make_shared<std::string>(str_value));
-    auto& value = *strings_.back();
-
-    doc.AddMember(rapidjson::StringRef(name.data(), name.size()), rapidjson::StringRef(value.data(), value.size()),
-                  GetAllocator());
+    doc.AddMember(SaveRef(std::string(field_name)), SaveRef(std::string(str_value)), GetAllocator());
   }
 
   void WriteJsonField(rapidjson::Value& doc, std::string_view field_name, std::string str_value) {
-    strings_.emplace_back(std::make_shared<std::string>(field_name));
-    auto& name = *strings_.back();
-    strings_.emplace_back(std::make_shared<std::string>(std::move(str_value)));
-    auto& value = *strings_.back();
-
-    doc.AddMember(rapidjson::StringRef(name.data(), name.size()), rapidjson::StringRef(value.data(), value.size()),
-                  GetAllocator());
+    doc.AddMember(SaveRef(std::string(field_name)), SaveRef(str_value), GetAllocator());
   }
 
   void WriteDataType(rapidjson::Value& doc, const types::Type& type, const std::string& field_name) {
@@ -141,7 +129,7 @@ class WriterContext {
       // }
       rapidjson::Value element(rapidjson::kObjectType);
 
-      WriteJsonField(element, field_name, Names::list);
+      WriteJsonField(element, Names::type, Names::list);
       auto* list_type = static_cast<const types::ListType*>(&type);
       WriteJsonField(element, Names::element_id, list_type->ElementId());
       WriteJsonField(element, Names::element_required, list_type->ElementRequired());
@@ -150,7 +138,7 @@ class WriterContext {
       }
       WriteDataType(element, *list_type->ElementType(), Names::element);
 
-      doc.AddMember(Ref(Names::type), element.Move(), GetAllocator());
+      doc.AddMember(SaveRef(field_name), element.Move(), GetAllocator());
     }
   }
 
@@ -400,6 +388,12 @@ class WriterContext {
   std::vector<std::shared_ptr<std::string>> strings_;
 
   auto& GetAllocator() { return allocator_; }
+
+  rapidjson::GenericStringRef<char> SaveRef(std::string str) {
+    strings_.emplace_back(std::make_shared<std::string>(std::move(str)));
+    auto& saved_str = *strings_.back();
+    return rapidjson::StringRef(saved_str.data(), saved_str.size());
+  }
 };
 
 std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value) {

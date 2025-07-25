@@ -263,6 +263,33 @@ TEST(Metadata, WithFixedType) {
   EXPECT_EQ(metadata->GetCurrentSchema()->Columns()[1].type->ToString(), "fixed(12)");
 }
 
+TEST(Metadata, WriteListOfLists) {
+  std::ifstream input("warehouse/MockMetadataWithListOfLists.json");
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(!!metadata);
+
+  std::string serialized = ice_tea::WriteTableMetadataV2(*metadata, true);
+  std::string expected_substring = R"({
+          "id": 2,
+          "name": "mock_list_of_lists",
+          "required": false,
+          "type": {
+            "type": "list",
+            "element-id": 3,
+            "element-required": false,
+            "element": {
+              "type": "list",
+              "element-id": 4,
+              "element-required": false,
+              "element": "int"
+            }
+          }
+        })";
+
+  EXPECT_NE(serialized.find(expected_substring), std::string::npos);
+}
+
 TEST(Metadata, EmptyTableUUID) {
   try {
     iceberg::TableMetadataV2(
