@@ -19,21 +19,15 @@
                 },
                 {
                     "id": 2,
-                    "name": "b",
-                    "required": false,
-                    "type": "fixed[12]"
-                },
-                {
-                    "id": 3,
-                    "name": "mock_default_list_list",
+                    "name": "mock_list_of_lists",
                     "required": false,
                     "type": {
                         "type": "list",
-                        "element-id": 4,
+                        "element-id": 3,
                         "element-required": false,
                         "element": {
                             "type": "list",
-                            "element-id": 5,
+                            "element-id": 4,
                             "element": "int",
                             "element-required": false
                         }

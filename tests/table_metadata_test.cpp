@@ -256,7 +256,7 @@ TEST(Metadata, WithBucketPartitioning) {
 }
 
 TEST(Metadata, WithFixedType) {
-  std::ifstream input("warehouse/MockMetadata.json");
+  std::ifstream input("warehouse/MockMetadataWithFixed.json");
 
   auto metadata = ice_tea::ReadTableMetadataV2(input);
   ASSERT_TRUE(metadata);
@@ -264,14 +264,30 @@ TEST(Metadata, WithFixedType) {
 }
 
 TEST(Metadata, WriteListOfLists) {
-  std::ifstream input("warehouse/MockMetadata.json");
+  std::ifstream input("warehouse/MockMetadataWithListOfLists.json");
 
   auto metadata = ice_tea::ReadTableMetadataV2(input);
   ASSERT_TRUE(!!metadata);
 
   std::string serialized = ice_tea::WriteTableMetadataV2(*metadata, true);
-  metadata = ice_tea::ReadTableMetadataV2(serialized);
-  ASSERT_TRUE(!!metadata);
+  std::string expected_substring = R"({
+          "id": 2,
+          "name": "mock_default_list_list",
+          "required": false,
+          "type": {
+            "type": "list",
+            "element-id": 3,
+            "element-required": false,
+            "element": {
+              "type": "list",
+              "element-id": 4,
+              "element-required": false,
+              "element": "int"
+            }
+          }
+        })";
+
+  EXPECT_NE(serialized.find(expected_substring), std::string::npos);
 }
 
 TEST(Metadata, EmptyTableUUID) {
