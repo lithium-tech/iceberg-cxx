@@ -272,7 +272,7 @@ TEST(Metadata, WriteListOfLists) {
   std::string serialized = ice_tea::WriteTableMetadataV2(*metadata, true);
   std::string expected_substring = R"({
           "id": 2,
-          "name": "mock_default_list_list",
+          "name": "mock_list_of_lists",
           "required": false,
           "type": {
             "type": "list",
