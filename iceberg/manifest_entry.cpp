@@ -105,7 +105,6 @@ requires(std::is_same_v<std::vector<typename T::value_type>, T> ||
 
 template <typename T>
 T Extract(const avro::GenericRecord& datum, const std::string& name) {
-  bool invalid_field_name = false;
   try {
     const auto& field = datum.field(name);
     return Deserialize<T>(field);
@@ -113,13 +112,11 @@ T Extract(const avro::GenericRecord& datum, const std::string& name) {
     throw;
   } catch (const std::exception& e) {
     if (std::string(e.what()).starts_with("Invalid field name:")) {
-      invalid_field_name = true;
+      throw ExtractError(std::string(__PRETTY_FUNCTION__) + ": field '" + name + "' is missing");
+    } else {
+      throw ExtractError(std::string(__PRETTY_FUNCTION__) + ": " + e.what());
     }
   }
-  if (invalid_field_name) {
-    throw ExtractError(std::string(__PRETTY_FUNCTION__) + ": field '" + name + "' is missing");
-  }
-  throw ExtractError("Undefined Avro error in " + std::string(__PRETTY_FUNCTION__));
 }
 
 // clang-format off
