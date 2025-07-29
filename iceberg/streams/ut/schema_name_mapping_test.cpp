@@ -13,9 +13,9 @@ TEST(SchemaNameMapper, IsArray) {
 
 TEST(SchemaNameMapper, CorrectStructure) {
   const std::string no_names_array = "[ { \"field-id\": 1 }, { \"field-id\": 3, \"names\": [\"col2\"] } ]";
-  EXPECT_THROW(SchemaNameMapper(no_names_array).GetRootNode().Validate(), std::runtime_error);
+  EXPECT_THROW(SchemaNameMapper(no_names_array).GetRootNode(), std::runtime_error);
   const std::string no_field_id = "[ { \"names\": [\"col1\"] }, { \"field-id\": 3, \"names\": [\"col2\"] } ]";
-  EXPECT_NO_THROW(SchemaNameMapper(no_field_id).GetRootNode().Validate());
+  EXPECT_NO_THROW(SchemaNameMapper(no_field_id).GetRootNode());
 }
 
 TEST(SchemaNameMapper, UniqueNames) {
@@ -23,15 +23,14 @@ TEST(SchemaNameMapper, UniqueNames) {
       "[ { \"field-id\": 1, \"names\": [\"col1\"] }, { \"field-id\": 3, \"names\": [\"col1\"] } ]";
   const std::string non_unique_names_json2 =
       "[ { \"field-id\": 1, \"names\": [\"col1\", \"col1\"] }, { \"field-id\": 3, \"names\": [\"col2\"] } ]";
-  EXPECT_THROW(SchemaNameMapper(non_unique_names_json1).GetRootNode().Validate(), std::runtime_error);
-  EXPECT_THROW(SchemaNameMapper(non_unique_names_json2).GetRootNode().Validate(), std::runtime_error);
+  EXPECT_THROW(SchemaNameMapper(non_unique_names_json1).GetRootNode(), std::runtime_error);
+  EXPECT_THROW(SchemaNameMapper(non_unique_names_json2).GetRootNode(), std::runtime_error);
 }
 
 TEST(SchemaNameMapper, GetFieldIdByName) {
   const std::string json = "[ { \"field-id\": 1, \"names\": [\"col1\"] }, { \"field-id\": 3, \"names\": [\"col2\"] } ]";
   const SchemaNameMapper schema_name_mapper(json);
   const SchemaNameMapper::Node root_node = schema_name_mapper.GetRootNode();
-  EXPECT_NO_THROW(root_node.Validate());
 
   EXPECT_EQ(root_node.GetFieldIdByName("col1"), 1);
   EXPECT_EQ(root_node.GetFieldIdByName("col2"), 3);

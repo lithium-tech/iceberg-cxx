@@ -40,7 +40,7 @@ TEST_F(FileReaderBuilderTest, Trivial) {
   auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {3, "col123"}});
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr);
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt);
 
   auto col1_data = OptionalVector<int64_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{1, 2, 3, 4};
@@ -76,7 +76,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMapping) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        &schema_name_mapping);
+                                        schema_name_mapping);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -109,7 +109,7 @@ TEST_F(FileReaderBuilderTest, FieldIdFirst) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        &schema_name_mapping);
+                                        schema_name_mapping);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -141,7 +141,7 @@ TEST_F(FileReaderBuilderTest, FieldIDsAreNotInjective) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        &schema_name_mapping);
+                                        schema_name_mapping);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -168,7 +168,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingMissingColumn) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        &schema_name_mapping);
+                                        schema_name_mapping);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -199,7 +199,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingWithArray) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        &schema_name_mapping);
+                                        schema_name_mapping);
 
   ArrayContainer col1_data = {
       .arrays = {OptionalVector<int32_t>{3, 1}, OptionalVector<int32_t>{4}, OptionalVector<int32_t>{9, 2, 5}}};
