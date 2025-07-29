@@ -105,7 +105,6 @@ requires(std::is_same_v<std::vector<typename T::value_type>, T> ||
 
 template <typename T>
 T Extract(const avro::GenericRecord& datum, const std::string& name) {
-  bool invalid_field_name = false;
   try {
     const auto& field = datum.field(name);
     return Deserialize<T>(field);
