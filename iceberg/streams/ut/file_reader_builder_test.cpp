@@ -241,7 +241,7 @@ TEST_F(FileReaderBuilderTest, DefaultValue) {
   auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}});
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
 
@@ -270,7 +270,7 @@ TEST_F(FileReaderBuilderTest, ColumnFirst) {
   auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}});
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
                                             {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
@@ -306,7 +306,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingFirst) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        &schema_name_mapping,
+                                        schema_name_mapping,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
                                             {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
@@ -341,7 +341,7 @@ TEST_F(FileReaderBuilderTest, Combination) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        &schema_name_mapping,
+                                        schema_name_mapping,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
                                             {3, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));

@@ -99,12 +99,12 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
   eq_del_config.max_rows = 1'000'000;
   eq_del_config.throw_if_memory_limit_exceeded = false;
 
-  const std::string* schema_name_mapping = [metadata]() -> const std::string* {
+  auto schema_name_mapping = [metadata]() -> std::optional<std::string> {
     auto it = metadata->properties.find("schema.name-mapping.default");
     if (it == metadata->properties.end()) {
-      return nullptr;
+      return std::nullopt;
     }
-    return &it->second;
+    return it->second;
   }();
 
   return IcebergScanBuilder::MakeIcebergStream(
