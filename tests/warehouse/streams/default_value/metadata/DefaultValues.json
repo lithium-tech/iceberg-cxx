@@ -507,7 +507,8 @@
       "id" : 12,
       "name" : "timestamptz_col",
       "required" : false,
-      "type" : "timestamptz"
+      "type" : "timestamptz",
+      "initial-default": "2017-11-16T22:31:08.123456+00:00"
     } ]
   }, {
     "type" : "struct",
@@ -581,7 +582,8 @@
       "id" : 12,
       "name" : "timestamptz_col",
       "required" : false,
-      "type" : "timestamptz"
+      "type" : "timestamptz",
+      "initial-default": "2017-11-16T22:31:08.123456+00:00"
     }, {
       "id" : 13,
       "name" : "array_col",

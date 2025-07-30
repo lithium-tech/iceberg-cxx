@@ -1,9 +1,12 @@
 #include <fstream>
 
+#include "arrow/util/logging.h"
 #include "gtest/gtest.h"
 #include "iceberg/common/fs/file_reader_provider_impl.h"
 #include "iceberg/common/fs/filesystem_provider_impl.h"
+#include "iceberg/literals.h"
 #include "iceberg/streams/iceberg/builder.h"
+#include "iceberg/streams/ut/batch_maker.h"
 #include "iceberg/table_metadata.h"
 
 namespace iceberg {
@@ -113,6 +116,60 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
       schema_name_mapping);
 }
 
+std::shared_ptr<arrow::Scalar> CreateStringListScalar(const std::vector<std::string>& values) {
+  arrow::StringBuilder string_builder;
+  ARROW_CHECK_OK(string_builder.AppendValues(values));
+
+  std::shared_ptr<arrow::Array> values_array;
+  ARROW_CHECK_OK(string_builder.Finish(&values_array));
+
+  auto list_type = arrow::list(arrow::utf8());
+  return std::make_shared<arrow::ListScalar>(values_array, list_type);
+}
+
+void CheckSecondRecord(IcebergStreamPtr data_stream) {
+  auto batch = data_stream->ReadNext();
+  ASSERT_TRUE(!!batch);
+
+  auto record_batch = batch->GetRecordBatch();
+  ASSERT_TRUE(!!record_batch);
+
+  EXPECT_TRUE(record_batch->GetColumnByName("array_col")
+                  ->Equals(*Literal(CreateStringListScalar({"item1", "item2"})).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("binary_col")
+                  ->Equals(*Literal(std::make_shared<arrow::BinaryScalar>(
+                                        arrow::Buffer::FromString("\x73\x70\x61\x72\x6b"), arrow::binary()))
+                                .MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("boolean_col")
+                  ->Equals(*Literal(std::make_shared<arrow::BooleanScalar>(true)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("date_col")
+                  ->Equals(*Literal(std::make_shared<arrow::Date32Scalar>(19640)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("decimal_col")
+                  ->Equals(*Literal(std::make_shared<arrow::Decimal128Scalar>(
+                                        arrow::Decimal128::FromString("12345.67").ValueOrDie(),
+                                        std::make_shared<arrow::Decimal128Type>(10, 2)))
+                                .MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("double_col")
+                  ->Equals(*Literal(std::make_shared<arrow::DoubleScalar>(1.7976931348623157e308)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("float_col")
+                  ->Equals(*Literal(std::make_shared<arrow::FloatScalar>(3.4028235e+38)).MakeColumn(1)));
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("id")->Equals(*Literal(std::make_shared<arrow::Int64Scalar>(2)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("integer_col")
+                  ->Equals(*Literal(std::make_shared<arrow::Int32Scalar>(2147483647)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("long_col")
+                  ->Equals(*Literal(std::make_shared<arrow::Int64Scalar>(9223372036854775807)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("string_col")
+                  ->Equals(*Literal(std::make_shared<arrow::StringScalar>("example")).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("timestamp_col")
+                  ->Equals(*Literal(std::make_shared<arrow::TimestampScalar>(1696941296000000, arrow::TimeUnit::MICRO))
+                                .MakeColumn(1)));
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("timestamptz_col")
+          ->Equals(*Literal(std::make_shared<arrow::TimestampScalar>(1696941296000000, arrow::TimeUnit::MICRO, "UTC"))
+                        .MakeColumn(1)));
+}
+
 TEST(StreamsTest, EndToEndNullColumn) {
   const std::string path =
       "warehouse/streams/default_value/metadata/00014-c179c339-e10a-486b-b075-144f5e5b101a.metadata.json";
@@ -120,22 +177,19 @@ TEST(StreamsTest, EndToEndNullColumn) {
   std::iota(field_ids_to_retrieve.begin(), field_ids_to_retrieve.end(), 1);
   auto data_stream = MakeDataStream(path, field_ids_to_retrieve);
 
-  /*auto batch1 = data_stream->ReadNext();
-  ASSERT_TRUE(!!batch1);
+  CheckSecondRecord(data_stream);
 
-  auto batch2 = data_stream->ReadNext();
-  ASSERT_TRUE(!!batch2);*/
+  auto batch = data_stream->ReadNext();
+  ASSERT_TRUE(!!batch);
 
-  while (true) {
-    auto batch = data_stream->ReadNext();
-    if (!batch) {
-      break;
-    }
-    std::cout << "path: " << batch->GetPath() << ", row_number = " << batch->GetRowPosition()
-              << ", partition_id = " << batch->GetPartition() << ", layer_id = " << batch->GetLayer() << std::endl;
-    std::cout << "batch: " << batch->GetRecordBatch()->ToString() << std::endl;
-    std::cout << std::string(80, '-') << std::endl;
-  }
+  auto record_batch = batch->GetRecordBatch();
+  ASSERT_TRUE(!!record_batch);
+
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("id")->Equals(*Literal(std::make_shared<arrow::Int64Scalar>(1)).MakeColumn(1)));
+
+  batch = data_stream->ReadNext();
+  ASSERT_TRUE(!batch);
 }
 
 TEST(StreamsTest, EndToEndWithDefaultValue) {
@@ -144,22 +198,51 @@ TEST(StreamsTest, EndToEndWithDefaultValue) {
   std::iota(field_ids_to_retrieve.begin(), field_ids_to_retrieve.end(), 1);
   auto data_stream = MakeDataStream(path, field_ids_to_retrieve);
 
-  /*auto batch1 = data_stream->ReadNext();
-  ASSERT_TRUE(!!batch1);
+  CheckSecondRecord(data_stream);
 
-  auto batch2 = data_stream->ReadNext();
-  ASSERT_TRUE(!!batch2);*/
+  auto batch = data_stream->ReadNext();
+  ASSERT_TRUE(!!batch);
 
-  while (true) {
-    auto batch = data_stream->ReadNext();
-    if (!batch) {
-      break;
-    }
-    std::cout << "path: " << batch->GetPath() << ", row_number = " << batch->GetRowPosition()
-              << ", partition_id = " << batch->GetPartition() << ", layer_id = " << batch->GetLayer() << std::endl;
-    std::cout << "batch: " << batch->GetRecordBatch()->ToString() << std::endl;
-    std::cout << std::string(80, '-') << std::endl;
-  }
+  auto record_batch = batch->GetRecordBatch();
+  ASSERT_TRUE(!!record_batch);
+
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("array_col")->Equals(*Literal(CreateStringListScalar({"b", "fwl"})).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("binary_col")
+                  ->Equals(*Literal(std::make_shared<arrow::BinaryScalar>(
+                                        arrow::Buffer::FromString("\xb5\xb5\xb5\xb5\xb5"), arrow::binary()))
+                                .MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("boolean_col")
+                  ->Equals(*Literal(std::make_shared<arrow::BooleanScalar>(true)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("date_col")
+                  ->Equals(*Literal(std::make_shared<arrow::Date32Scalar>(1039)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("decimal_col")
+                  ->Equals(*Literal(std::make_shared<arrow::Decimal128Scalar>(
+                                        arrow::Decimal128::FromString("3.14").ValueOrDie(),
+                                        std::make_shared<arrow::Decimal128Type>(10, 2)))
+                                .MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("double_col")
+                  ->Equals(*Literal(std::make_shared<arrow::DoubleScalar>(6.21)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("float_col")
+                  ->Equals(*Literal(std::make_shared<arrow::FloatScalar>(3.5)).MakeColumn(1)));
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("id")->Equals(*Literal(std::make_shared<arrow::Int64Scalar>(1)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("integer_col")
+                  ->Equals(*Literal(std::make_shared<arrow::Int32Scalar>(17)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("long_col")
+                  ->Equals(*Literal(std::make_shared<arrow::Int64Scalar>(9)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("string_col")
+                  ->Equals(*Literal(std::make_shared<arrow::StringScalar>("default")).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("timestamp_col")
+                  ->Equals(*Literal(std::make_shared<arrow::TimestampScalar>(1351728650051000, arrow::TimeUnit::MICRO))
+                                .MakeColumn(1)));
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("timestamptz_col")
+          ->Equals(*Literal(std::make_shared<arrow::TimestampScalar>(1510871468123456, arrow::TimeUnit::MICRO, "UTC"))
+                        .MakeColumn(1)));
+
+  batch = data_stream->ReadNext();
+  ASSERT_TRUE(!batch);
 }
 
 }  // namespace
