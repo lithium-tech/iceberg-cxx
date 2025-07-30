@@ -183,7 +183,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
     std::vector<std::pair<int, std::string>> remaining_field_ids_with_names = [&]() {
       std::vector<std::pair<int, std::string>> result;
       for (const auto& col : cols) {
-        if (!col.column_position.has_value()) {
+        if (!col.column_position.has_value() && default_value_map_->contains(col.field_id)) {
           result.push_back(std::make_pair(col.field_id, col.result_name));
         }
       }
@@ -192,7 +192,8 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
 
     result = std::make_shared<ProjectionStream>(parquet_name_to_result_name, result);
 
-    result = std::make_shared<DefaultValueApplier>(result, default_value_map_, std::move(remaining_field_ids_with_names));
+    result =
+        std::make_shared<DefaultValueApplier>(result, default_value_map_, std::move(remaining_field_ids_with_names));
 
     return std::make_shared<ArrowStreamWrapper>(result, annotated_data_path.GetPartitionLayerFile());
   }

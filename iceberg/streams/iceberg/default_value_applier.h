@@ -17,16 +17,6 @@ class DefaultValueApplier : public IStream<ArrowBatchWithRowPosition> {
         remaining_field_ids_with_names_(std::move(remaining_field_ids_with_names)) {
     Ensure(input != nullptr, std::string(__PRETTY_FUNCTION__) + ": input is nullptr");
     Ensure(default_value_map != nullptr, std::string(__PRETTY_FUNCTION__) + ": default_value_map is nullptr");
-
-    // delete fields that have no default values
-    for (int i = 0; i < remaining_field_ids_with_names_.size();) {
-      if (!default_value_map_->contains(remaining_field_ids_with_names_[i].first)) {
-        std::swap(remaining_field_ids_with_names_[i], remaining_field_ids_with_names_.back());
-        remaining_field_ids_with_names_.pop_back();
-      } else {
-        ++i;
-      }
-    }
   }
 
   std::shared_ptr<ArrowBatchWithRowPosition> ReadNext() override {
