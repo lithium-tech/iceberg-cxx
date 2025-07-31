@@ -37,51 +37,6 @@ std::unique_ptr<arrow::Buffer> DeserializeHexadecimal(const char* str, int lengt
   return buffer;
 }
 
-std::shared_ptr<arrow::DataType> ConvertToDataType(std::shared_ptr<const types::Type> type) {
-  switch (type->TypeId()) {
-    case TypeID::kBoolean:
-      return std::make_shared<arrow::BooleanType>();
-    case TypeID::kInt:
-      return std::make_shared<arrow::Int32Type>();
-    case TypeID::kLong:
-      return std::make_shared<arrow::Int64Type>();
-    case TypeID::kFloat:
-      return std::make_shared<arrow::FloatType>();
-    case TypeID::kDouble:
-      return std::make_shared<arrow::DoubleType>();
-    case TypeID::kDecimal: {
-      auto decimal = std::static_pointer_cast<const types::DecimalType>(type);
-      return std::make_shared<arrow::Decimal128Type>(decimal->Precision(), decimal->Scale());
-    }
-    case TypeID::kDate:
-      return std::make_shared<arrow::Date32Type>();
-    case TypeID::kTime:
-      return std::make_shared<arrow::Time64Type>(arrow::TimeUnit::MICRO);
-    case TypeID::kTimestamp:
-      return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
-    case TypeID::kTimestamptz:
-      return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO, "UTC");
-    case TypeID::kTimestampNs:
-      return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::NANO);
-    case TypeID::kTimestamptzNs:
-      return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::NANO, "UTC");
-    case TypeID::kString:
-      return std::make_shared<arrow::StringType>();
-    case TypeID::kUuid:
-      return std::make_shared<arrow::FixedSizeBinaryType>(16);
-    case TypeID::kFixed:
-      return std::make_shared<arrow::FixedSizeBinaryType>(
-          std::static_pointer_cast<const types::FixedType>(type)->Size());
-    case TypeID::kBinary:
-      return std::make_shared<arrow::BinaryType>();
-    case TypeID::kList:
-      return std::make_shared<arrow::ListType>(
-          ConvertToDataType(std::static_pointer_cast<const types::ListType>(type)->ElementType()));
-    default:
-      Ensure(false, std::string(__PRETTY_FUNCTION__) + ": Unsupported type");
-  }
-}
-
 std::shared_ptr<arrow::Scalar> DeserializeScalar(std::shared_ptr<const types::Type> type,
                                                  const rapidjson::Value& document) {
   switch (type->TypeId()) {
@@ -215,6 +170,51 @@ std::shared_ptr<arrow::Scalar> DeserializeScalar(std::shared_ptr<const types::Ty
 }
 
 }  // namespace
+
+std::shared_ptr<arrow::DataType> ConvertToDataType(std::shared_ptr<const types::Type> type) {
+  switch (type->TypeId()) {
+    case TypeID::kBoolean:
+      return std::make_shared<arrow::BooleanType>();
+    case TypeID::kInt:
+      return std::make_shared<arrow::Int32Type>();
+    case TypeID::kLong:
+      return std::make_shared<arrow::Int64Type>();
+    case TypeID::kFloat:
+      return std::make_shared<arrow::FloatType>();
+    case TypeID::kDouble:
+      return std::make_shared<arrow::DoubleType>();
+    case TypeID::kDecimal: {
+      auto decimal = std::static_pointer_cast<const types::DecimalType>(type);
+      return std::make_shared<arrow::Decimal128Type>(decimal->Precision(), decimal->Scale());
+    }
+    case TypeID::kDate:
+      return std::make_shared<arrow::Date32Type>();
+    case TypeID::kTime:
+      return std::make_shared<arrow::Time64Type>(arrow::TimeUnit::MICRO);
+    case TypeID::kTimestamp:
+      return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
+    case TypeID::kTimestamptz:
+      return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO, "UTC");
+    case TypeID::kTimestampNs:
+      return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::NANO);
+    case TypeID::kTimestamptzNs:
+      return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::NANO, "UTC");
+    case TypeID::kString:
+      return std::make_shared<arrow::StringType>();
+    case TypeID::kUuid:
+      return std::make_shared<arrow::FixedSizeBinaryType>(16);
+    case TypeID::kFixed:
+      return std::make_shared<arrow::FixedSizeBinaryType>(
+          std::static_pointer_cast<const types::FixedType>(type)->Size());
+    case TypeID::kBinary:
+      return std::make_shared<arrow::BinaryType>();
+    case TypeID::kList:
+      return std::make_shared<arrow::ListType>(
+          ConvertToDataType(std::static_pointer_cast<const types::ListType>(type)->ElementType()));
+    default:
+      Ensure(false, std::string(__PRETTY_FUNCTION__) + ": Unsupported type");
+  }
+}
 
 std::shared_ptr<arrow::Array> Literal::MakeColumn(int64_t length) const {
   return MakeArrayFromScalar(*scalar_, length).ValueOrDie();

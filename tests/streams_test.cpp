@@ -61,7 +61,8 @@ void Ensure(bool cond, const std::string& msg) {
   }
 }
 
-IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>& field_ids_to_retrieve) {
+IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>& field_ids_to_retrieve,
+                                bool with_nulls) {
   std::ifstream input(path);
 
   auto metadata = ice_tea::ReadTableMetadataV2(input);
@@ -113,7 +114,7 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
   return IcebergScanBuilder::MakeIcebergStream(
       meta_stream, pos_del_info, std::make_shared<EqualityDeletes>(std::move(eq_del_info)), std::move(eq_del_config),
       nullptr, *metadata->GetCurrentSchema(), field_ids_to_retrieve, std::make_shared<FileReaderProvider>(fs_provider),
-      schema_name_mapping);
+      schema_name_mapping, with_nulls);
 }
 
 std::shared_ptr<arrow::Scalar> CreateStringListScalar(const std::vector<std::string>& values) {
@@ -170,12 +171,36 @@ void CheckSecondRecord(IcebergStreamPtr data_stream) {
                         .MakeColumn(1)));
 }
 
-TEST(StreamsTest, EndToEndNullColumn) {
+TEST(StreamsTest, EndToEndWithoutNulls) {
   const std::string path =
       "warehouse/streams/default_value/metadata/00014-c179c339-e10a-486b-b075-144f5e5b101a.metadata.json";
   std::vector<int> field_ids_to_retrieve(13);
   std::iota(field_ids_to_retrieve.begin(), field_ids_to_retrieve.end(), 1);
-  auto data_stream = MakeDataStream(path, field_ids_to_retrieve);
+  auto data_stream = MakeDataStream(path, field_ids_to_retrieve, false);
+
+  CheckSecondRecord(data_stream);
+
+  auto batch = data_stream->ReadNext();
+  ASSERT_TRUE(!!batch);
+
+  auto record_batch = batch->GetRecordBatch();
+  ASSERT_TRUE(!!record_batch);
+
+  EXPECT_EQ(record_batch->num_columns(), 1);
+
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("id")->Equals(*Literal(std::make_shared<arrow::Int64Scalar>(1)).MakeColumn(1)));
+
+  batch = data_stream->ReadNext();
+  ASSERT_TRUE(!batch);
+}
+
+TEST(StreamsTest, EndToEndWithNulls) {
+  const std::string path =
+      "warehouse/streams/default_value/metadata/00014-c179c339-e10a-486b-b075-144f5e5b101a.metadata.json";
+  std::vector<int> field_ids_to_retrieve(13);
+  std::iota(field_ids_to_retrieve.begin(), field_ids_to_retrieve.end(), 1);
+  auto data_stream = MakeDataStream(path, field_ids_to_retrieve, true);
 
   CheckSecondRecord(data_stream);
 
@@ -186,7 +211,37 @@ TEST(StreamsTest, EndToEndNullColumn) {
   ASSERT_TRUE(!!record_batch);
 
   EXPECT_TRUE(
+      record_batch->GetColumnByName("array_col")
+          ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::ListType>(std::make_shared<arrow::StringType>()), 1)
+                        .ValueOrDie()));
+  EXPECT_TRUE(record_batch->GetColumnByName("binary_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::BinaryType>(), 1).ValueOrDie()));
+  EXPECT_TRUE(record_batch->GetColumnByName("boolean_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::BooleanType>(), 1).ValueOrDie()));
+  EXPECT_TRUE(record_batch->GetColumnByName("date_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::Date32Type>(), 1).ValueOrDie()));
+  EXPECT_TRUE(record_batch->GetColumnByName("decimal_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::Decimal128Type>(10, 2), 1).ValueOrDie()));
+  EXPECT_TRUE(record_batch->GetColumnByName("double_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::DoubleType>(), 1).ValueOrDie()));
+  EXPECT_TRUE(record_batch->GetColumnByName("float_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::FloatType>(), 1).ValueOrDie()));
+  EXPECT_TRUE(
       record_batch->GetColumnByName("id")->Equals(*Literal(std::make_shared<arrow::Int64Scalar>(1)).MakeColumn(1)));
+  EXPECT_TRUE(record_batch->GetColumnByName("integer_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::Int32Type>(), 1).ValueOrDie()));
+  EXPECT_TRUE(record_batch->GetColumnByName("long_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::Int64Type>(), 1).ValueOrDie()));
+  EXPECT_TRUE(record_batch->GetColumnByName("string_col")
+                  ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::StringType>(), 1).ValueOrDie()));
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("timestamp_col")
+          ->Equals(
+              *arrow::MakeArrayOfNull(std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO), 1).ValueOrDie()));
+  EXPECT_TRUE(
+      record_batch->GetColumnByName("timestamptz_col")
+          ->Equals(*arrow::MakeArrayOfNull(std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO, "UTC"), 1)
+                        .ValueOrDie()));
 
   batch = data_stream->ReadNext();
   ASSERT_TRUE(!batch);
@@ -196,7 +251,7 @@ TEST(StreamsTest, EndToEndWithDefaultValue) {
   const std::string path = "warehouse/streams/default_value/metadata/DefaultValues.json";
   std::vector<int> field_ids_to_retrieve(13);
   std::iota(field_ids_to_retrieve.begin(), field_ids_to_retrieve.end(), 1);
-  auto data_stream = MakeDataStream(path, field_ids_to_retrieve);
+  auto data_stream = MakeDataStream(path, field_ids_to_retrieve, true);
 
   CheckSecondRecord(data_stream);
 

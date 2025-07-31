@@ -41,7 +41,7 @@ TEST_F(FileReaderBuilderTest, Trivial) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
-                                        std::make_shared<const std::map<int, Literal>>());
+                                        std::make_shared<const std::map<int, Literal>>(), nullptr);
 
   auto col1_data = OptionalVector<int64_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{1, 2, 3, 4};
@@ -77,7 +77,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMapping) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>(), nullptr);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -110,7 +110,7 @@ TEST_F(FileReaderBuilderTest, FieldIdFirst) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>(), nullptr);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -142,7 +142,7 @@ TEST_F(FileReaderBuilderTest, FieldIDsAreNotInjective) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>(), nullptr);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -169,7 +169,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingMissingColumn) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>(), nullptr);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -200,7 +200,7 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingWithArray) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
+                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>(), nullptr);
 
   ArrayContainer col1_data = {
       .arrays = {OptionalVector<int32_t>{3, 1}, OptionalVector<int32_t>{4}, OptionalVector<int32_t>{9, 2, 5}}};
@@ -243,7 +243,8 @@ TEST_F(FileReaderBuilderTest, DefaultValue) {
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
-                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}),
+                                        nullptr);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{10, 10, 10, 10};
@@ -273,7 +274,8 @@ TEST_F(FileReaderBuilderTest, ColumnFirst) {
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
-                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}),
+                                        nullptr);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -309,7 +311,8 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingFirst) {
                                         schema_name_mapping,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
-                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}),
+                                        nullptr);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -344,7 +347,8 @@ TEST_F(FileReaderBuilderTest, Combination) {
                                         schema_name_mapping,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
-                                            {3, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+                                            {3, Literal(std::make_shared<arrow::Int32Scalar>(10))}}),
+                                        nullptr);
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};

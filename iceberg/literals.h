@@ -20,6 +20,8 @@ class Literal {
   std::shared_ptr<arrow::Scalar> scalar_;
 };
 
+std::shared_ptr<arrow::DataType> ConvertToDataType(std::shared_ptr<const types::Type> type);
+
 Literal DeserializeLiteral(std::shared_ptr<const types::Type> type, const rapidjson::Value& document);
 
 }  // namespace iceberg

@@ -25,23 +25,33 @@ namespace iceberg {
 
 class IcebergScanBuilder {
  public:
-  static IcebergStreamPtr MakeIcebergStream(
-      AnnotatedDataPathStreamPtr meta_stream, PositionalDeletes positional_deletes,
-      std::shared_ptr<EqualityDeletes> equality_deletes, std::optional<EqualityDeleteHandler::Config> cfg,
-      std::shared_ptr<const IRowGroupFilter> rg_filter, const iceberg::Schema& schema,
-      std::vector<int> field_ids_to_retrieve, std::shared_ptr<const IFileReaderProvider> file_reader_provider,
-      std::optional<std::string> schema_name_mapping = std::nullopt, std::shared_ptr<ILogger> logger = nullptr) {
+  static IcebergStreamPtr MakeIcebergStream(AnnotatedDataPathStreamPtr meta_stream,
+                                            PositionalDeletes positional_deletes,
+                                            std::shared_ptr<EqualityDeletes> equality_deletes,
+                                            std::optional<EqualityDeleteHandler::Config> cfg,
+                                            std::shared_ptr<const IRowGroupFilter> rg_filter,
+                                            const iceberg::Schema& schema, std::vector<int> field_ids_to_retrieve,
+                                            std::shared_ptr<const IFileReaderProvider> file_reader_provider,
+                                            std::optional<std::string> schema_name_mapping = std::nullopt,
+                                            bool with_nulls = true, std::shared_ptr<ILogger> logger = nullptr) {
     Ensure(file_reader_provider != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
 
     auto mapper = MakeMapper(schema);
 
     auto default_value_map = MakeDefaultValueMap(schema);
 
+    auto arrow_data_type_map = [&]() -> std::shared_ptr<const std::map<int, std::shared_ptr<arrow::DataType>>> {
+      if (with_nulls) {
+        return MakeArrowDataTypeMap(schema);
+      }
+      return nullptr;
+    }();
+
     // this class takes an AnnotatedDataPath as input and returns IcebergStream
     // (which reads some columns from row groups matching rg-filter of data file)
     auto stream_builder = std::make_shared<FileReaderBuilder>(
         field_ids_to_retrieve, equality_deletes, mapper, file_reader_provider, rg_filter,
-        std::move(schema_name_mapping), MakeDefaultValueMap(schema), logger);
+        std::move(schema_name_mapping), MakeDefaultValueMap(schema), arrow_data_type_map, logger);
 
     // convert stream of AnnotatedDatapath into concatenation of streams created with FileReaderBuilder
     IcebergStreamPtr stream = std::make_shared<DataScanner>(meta_stream, stream_builder);
@@ -88,6 +98,16 @@ class IcebergScanBuilder {
     // arrow::RecordBatch store names, not field ids
     // this class helps with mapping from parquet field id to arrow::RecordBatch names
     return std::make_shared<const std::map<int, Literal>>(std::move(field_id_to_default_value));
+  }
+
+  static std::shared_ptr<const std::map<int, std::shared_ptr<arrow::DataType>>> MakeArrowDataTypeMap(
+      const iceberg::Schema& schema) {
+    std::map<int, std::shared_ptr<arrow::DataType>> field_id_to_arrow_data_type;
+    for (const auto& col : schema.Columns()) {
+      field_id_to_arrow_data_type[col.field_id] = ConvertToDataType(col.type);
+    }
+    return std::make_shared<const std::map<int, std::shared_ptr<arrow::DataType>>>(
+        std::move(field_id_to_arrow_data_type));
   }
 
   static std::shared_ptr<IcebergStream> MakeFinalProjection(const FieldIdMapper& mapper,
