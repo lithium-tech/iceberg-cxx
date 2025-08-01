@@ -21,8 +21,8 @@ SchemaNameMapper::SchemaNameMapper(const std::string& json) : doc_(std::make_sha
   Ensure(!doc_->HasParseError(), "schema.name-mapping.default is not a valid JSON");
 }
 
-SchemaNameMapper::Node SchemaNameMapper::GetRootNode() const {
-  auto node = Node(doc_, doc_.get());
+SchemaNameMapper::Mapper SchemaNameMapper::GetRootMapper() const {
+  auto node = Mapper(doc_, doc_.get());
   if (!root_node_validated_) {
     node.Validate();
     root_node_validated_ = true;
@@ -30,10 +30,10 @@ SchemaNameMapper::Node SchemaNameMapper::GetRootNode() const {
   return node;
 }
 
-SchemaNameMapper::Node::Node(std::shared_ptr<rapidjson::Document> main_object, const rapidjson::Value* doc)
+SchemaNameMapper::Mapper::Mapper(std::shared_ptr<rapidjson::Document> main_object, const rapidjson::Value* doc)
     : doc_(doc) {}
 
-std::optional<int32_t> SchemaNameMapper::Node::GetFieldIdByName(const std::string& name) const {
+std::optional<int32_t> SchemaNameMapper::Mapper::GetFieldIdByName(const std::string& name) const {
   const auto& doc = *doc_;
   const size_t sz = doc.Size();
   for (size_t i = 0; i < sz; ++i) {
@@ -48,7 +48,7 @@ std::optional<int32_t> SchemaNameMapper::Node::GetFieldIdByName(const std::strin
   return std::nullopt;
 }
 
-void SchemaNameMapper::Node::Validate() const {
+void SchemaNameMapper::Mapper::Validate() const {
   const auto& doc = *doc_;
   Ensure(doc.IsArray(), std::string(__FUNCTION__) + ": !doc.IsArray()");
 

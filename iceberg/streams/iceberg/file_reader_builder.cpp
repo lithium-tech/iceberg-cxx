@@ -23,7 +23,7 @@ std::unordered_map<int, int> MakeFieldIdToIndexMap(const parquet::schema::GroupN
 
     if (!schema_name_mapper.has_value()) continue;
     auto field_name = field->name();
-    auto possible_field_id = schema_name_mapper->GetRootNode().GetFieldIdByName(field_name);
+    auto possible_field_id = schema_name_mapper->GetRootMapper().GetFieldIdByName(field_name);
     if (possible_field_id.has_value()) {
       InsertOrFail(field_id_to_index, *possible_field_id, i);
     }

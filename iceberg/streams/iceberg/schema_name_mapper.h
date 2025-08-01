@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <unordered_set>
 
 #include "iceberg/common/json_parse.h"
@@ -8,13 +9,13 @@ namespace iceberg {
 
 class SchemaNameMapper {
  public:
-  class Node {
+  class Mapper {
    public:
-    explicit Node(std::shared_ptr<rapidjson::Document> main_object, const rapidjson::Value* doc);
+    explicit Mapper(std::shared_ptr<rapidjson::Document> main_object, const rapidjson::Value* doc);
 
     std::optional<int32_t> GetFieldIdByName(const std::string& name) const;
 
-    // TODO: support GetChildNode(const std::string& name)
+    // TODO: support GetChildMapper(const std::string& name)
 
     // Checks that the structure is correct and all names at this level are unique
     void Validate() const;
@@ -29,7 +30,7 @@ class SchemaNameMapper {
 
   SchemaNameMapper(const std::string& json);
 
-  Node GetRootNode() const;
+  Mapper GetRootMapper() const;
 
   static constexpr const char* names = "names";
   static constexpr const char* field_id = "field-id";
@@ -39,6 +40,5 @@ class SchemaNameMapper {
   std::shared_ptr<rapidjson::Document> doc_;
   mutable bool root_node_validated_ = false;
 };
-g
 
 }  // namespace iceberg
