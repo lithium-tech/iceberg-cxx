@@ -280,7 +280,7 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
 using SequenceNumber = int64_t;
 
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
-    std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& manifest_list_path,
+    std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& manifest_list_path, bool use_reader_schema,
     const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, std::shared_ptr<iceberg::Schema> schema,
     const ManifestEntryDeserializerConfig& config) {
   const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
@@ -290,11 +290,13 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
   std::queue<ManifestFile> manifest_files_queue(std::deque<ManifestFile>(
       std::make_move_iterator(manifest_metadatas.begin()), std::make_move_iterator(manifest_metadatas.end())));
 
-  return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue), partition_specs, schema, config);
+  return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue), use_reader_schema, partition_specs,
+                                            schema, config);
 }
 
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
+                                                         bool use_reader_schema,
                                                          const ManifestEntryDeserializerConfig& config) {
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   if (!maybe_manifest_list_path.has_value()) {
@@ -302,7 +304,7 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
   }
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
-  return AllEntriesStream::Make(fs, manifest_list_path, table_metadata->partition_specs,
+  return AllEntriesStream::Make(fs, manifest_list_path, use_reader_schema, table_metadata->partition_specs,
                                 table_metadata->GetCurrentSchema(), config);
 }
 
@@ -351,13 +353,15 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
 }
 
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                            const std::string& metadata_location, const GetScanMetadataConfig& config) {
+                                            const std::string& metadata_location, bool use_reader_schema,
+                                            const GetScanMetadataConfig& config) {
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
     return arrow::Status::ExecutionError("GetScanMetadata: failed to parse metadata " + metadata_location);
   }
-  auto entries_stream = AllEntriesStream::Make(fs, table_metadata, config.manifest_entry_deserializer_config);
+  auto entries_stream =
+      AllEntriesStream::Make(fs, table_metadata, use_reader_schema, config.manifest_entry_deserializer_config);
   return GetScanMetadata(*entries_stream, *table_metadata);
 }
 

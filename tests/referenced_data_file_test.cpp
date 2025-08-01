@@ -161,7 +161,7 @@ TEST(ReferencedDataFile, GetScanMetadata) {
 
   std::string snapshot_path = "file://" + (dir.path() / "snapshot.json").string();
 
-  auto s = ice_tea::GetScanMetadata(fs, snapshot_path);
+  auto s = ice_tea::GetScanMetadata(fs, snapshot_path, false);
 
   ASSERT_EQ(s.status(), arrow::Status::OK());
   auto& parts = s->partitions;
