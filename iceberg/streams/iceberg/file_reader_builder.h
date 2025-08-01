@@ -67,14 +67,14 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   FileReaderBuilder(std::vector<int> field_ids_to_retrieve, std::shared_ptr<const EqualityDeletes> equality_deletes,
                     std::shared_ptr<const FieldIdMapper> mapper,
                     std::shared_ptr<const IFileReaderProvider> file_reader_provider,
-                    std::shared_ptr<const IRowGroupFilter> rg_filter, std::optional<std::string>&& schema_name_mapping,
-                    std::shared_ptr<ILogger> logger = nullptr)
+                    std::shared_ptr<const IRowGroupFilter> rg_filter,
+                    std::optional<SchemaNameMapper>&& schema_name_mapper, std::shared_ptr<ILogger> logger = nullptr)
       : field_ids_to_retrieve_(std::move(field_ids_to_retrieve)),
         equality_deletes_(equality_deletes),
         mapper_(mapper),
         file_reader_provider_(file_reader_provider),
         rg_filter_(rg_filter),
-        schema_name_mapping_(std::move(schema_name_mapping)),
+        schema_name_mapper_(std::move(schema_name_mapper)),
         logger_(logger) {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
@@ -118,7 +118,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
       return result;
     }();
 
-    const auto cols = GetColumnPositionsToRetrieveByFieldIds(*metadata, field_ids_required);
+    const auto cols = GetParquetColumnInfos(*metadata, field_ids_required);
 
     std::vector<int> col_positions = [&]() {
       std::vector<int> result;
@@ -187,21 +187,6 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
     return input_file;
   }
 
-  class GroupNodeWrapper {
-   public:
-    GroupNodeWrapper(const parquet::schema::GroupNode* node, std::unordered_map<int, int> index_to_field_id);
-
-    int GetRealFieldId(int index) const;
-
-    int GetFieldCount() const;
-
-    std::string GetName(int index) const;
-
-   private:
-    const parquet::schema::GroupNode* node_;
-    std::unordered_map<int, int> index_to_field_id_;
-  };
-
   struct ParquetColumnInfo {
     int field_id;
 
@@ -215,8 +200,8 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
         : field_id(f), column_position(pos), parquet_name(std::move(par_name)), result_name(std::move(res_name)) {}
   };
 
-  std::vector<ParquetColumnInfo> GetColumnPositionsToRetrieveByFieldIds(const parquet::FileMetaData& metadata,
-                                                                        const std::vector<int>& field_ids) const;
+  std::vector<ParquetColumnInfo> GetParquetColumnInfos(const parquet::FileMetaData& metadata,
+                                                       const std::vector<int>& field_ids) const;
 
   std::vector<int> GetRowGroupsToRetrieve(const parquet::FileMetaData& metadata,
                                           const std::vector<AnnotatedDataPath::Segment>& segments);
@@ -227,7 +212,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::shared_ptr<const FieldIdMapper> mapper_;
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::shared_ptr<const IRowGroupFilter> rg_filter_;
-  std::optional<std::string> schema_name_mapping_;
+  std::optional<SchemaNameMapper> schema_name_mapper_;
   std::shared_ptr<ILogger> logger_;
 };
 

@@ -16,14 +16,22 @@ void InsertOrFail(std::unordered_set<std::string>& set, const std::string& elem)
 
 }  // namespace
 
-SchemaNameMapper::SchemaNameMapper(const std::string& json) {
-  doc_.Parse(json.c_str(), json.size());
-  Ensure(!doc_.HasParseError(), "schema.name-mapping.default is not a valid JSON");
+SchemaNameMapper::SchemaNameMapper(const std::string& json) : doc_(std::make_shared<rapidjson::Document>()) {
+  doc_->Parse(json.c_str(), json.size());
+  Ensure(!doc_->HasParseError(), "schema.name-mapping.default is not a valid JSON");
 }
 
-SchemaNameMapper::Node SchemaNameMapper::GetRootNode() const { return Node(&doc_); }
+SchemaNameMapper::Node SchemaNameMapper::GetRootNode() const {
+  auto node = Node(doc_, doc_.get());
+  if (!root_node_validated_) {
+    node.Validate();
+    root_node_validated_ = true;
+  }
+  return node;
+}
 
-SchemaNameMapper::Node::Node(const rapidjson::Value* doc) : doc_(doc) { Validate(); }
+SchemaNameMapper::Node::Node(std::shared_ptr<rapidjson::Document> main_object, const rapidjson::Value* doc)
+    : doc_(doc) {}
 
 std::optional<int32_t> SchemaNameMapper::Node::GetFieldIdByName(const std::string& name) const {
   const auto& doc = *doc_;

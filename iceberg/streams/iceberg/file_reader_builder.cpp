@@ -4,69 +4,56 @@ namespace iceberg {
 
 namespace {
 
-void InsertOrFail(std::unordered_set<int>& set, int x) {
-  Ensure(!set.contains(x), "Field ids are not unique");
-  set.insert(x);
+void InsertOrFail(std::unordered_map<int, int>& mp, int key, int value) {
+  Ensure(mp.insert(std::make_pair(key, value)).second, std::string(__PRETTY_FUNCTION__) + ": field ids are not unique");
 }
 
-std::unordered_map<int, int> MakeIndexToFieldIdMap(const parquet::schema::GroupNode* node,
-                                                   const std::optional<std::string>& schema_name_mapping) {
-  if (!schema_name_mapping.has_value()) {
-    return {};
-  }
-  std::unordered_set<int> field_ids_set;
-  std::optional<SchemaNameMapper> schema_name_mapper;
-  std::optional<SchemaNameMapper::Node> root_node;
-  std::unordered_map<int, int> index_to_field_id;
+std::unordered_map<int, int> MakeFieldIdToIndexMap(const parquet::schema::GroupNode* node,
+                                                   const std::optional<SchemaNameMapper>& schema_name_mapper) {
+  std::unordered_map<int, int> field_id_to_index;
   for (int i = 0; i < node->field_count(); ++i) {
-    if (node->field(i)->field_id() >= 0) {
-      InsertOrFail(field_ids_set, node->field(i)->field_id());
+    auto field = node->field(i);
+    Ensure(field != nullptr, std::string(__PRETTY_FUNCTION__) + ": field is nullptr");
+    auto field_id = field->field_id();
+
+    if (field_id >= 0) {
+      InsertOrFail(field_id_to_index, field_id, i);
       continue;
     }
-    if (!schema_name_mapper.has_value()) {
-      schema_name_mapper = SchemaNameMapper(*schema_name_mapping);
-      root_node = schema_name_mapper.value().GetRootNode();
-    }
-    auto field_name = node->field(i)->name();
-    auto field_id = root_node->GetFieldIdByName(field_name);
-    if (field_id.has_value()) {
-      index_to_field_id[i] = field_id.value();
-      InsertOrFail(field_ids_set, field_id.value());
+
+    if (!schema_name_mapper.has_value()) continue;
+    auto field_name = field->name();
+    auto possible_field_id = schema_name_mapper->GetRootNode().GetFieldIdByName(field_name);
+    if (possible_field_id.has_value()) {
+      InsertOrFail(field_id_to_index, *possible_field_id, i);
     }
   }
-  return index_to_field_id;
+  return field_id_to_index;
 }
 
 }  // namespace
 
-std::vector<FileReaderBuilder::ParquetColumnInfo> FileReaderBuilder::GetColumnPositionsToRetrieveByFieldIds(
+std::vector<FileReaderBuilder::ParquetColumnInfo> FileReaderBuilder::GetParquetColumnInfos(
     const parquet::FileMetaData& metadata, const std::vector<int>& field_ids) const {
   const auto& schema = metadata.schema();
   Ensure(schema != nullptr, std::string(__PRETTY_FUNCTION__) + ": schema is nullptr");
 
   auto node = schema->group_node();
+  Ensure(node != nullptr, std::string(__PRETTY_FUNCTION__) + ": schema->group_node() is nullptr");
 
-  GroupNodeWrapper group_node_wrapper(node, MakeIndexToFieldIdMap(node, schema_name_mapping_));
-
-  const auto field_count = group_node_wrapper.GetFieldCount();
+  auto field_id_to_index = MakeFieldIdToIndexMap(node, schema_name_mapper_);
 
   std::vector<ParquetColumnInfo> column_infos;
+  column_infos.reserve(field_ids.size());
 
-  for (const auto& field_id_to_find : field_ids) {
-    bool found = false;
-
-    for (int i = 0; i < field_count; ++i) {
-      if (field_id_to_find == group_node_wrapper.GetRealFieldId(i)) {
-        found = true;
-        auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
-        column_infos.emplace_back(field_id_to_find, i, group_node_wrapper.GetName(i), std::move(result_name));
-        break;
-      }
-    }
-
-    if (!found) {
-      auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
-      column_infos.emplace_back(field_id_to_find, std::nullopt, "", std::move(result_name));
+  for (const auto field_id : field_ids) {
+    auto it = field_id_to_index.find(field_id);
+    auto result_name = mapper_->FieldIdToColumnName(field_id);
+    if (it != field_id_to_index.end()) {
+      // already checked node->field() != nullptr in MakeFieldIdToIndexMap
+      column_infos.emplace_back(field_id, it->second, node->field(it->second)->name(), std::move(result_name));
+    } else {
+      column_infos.emplace_back(field_id, std::nullopt, "", std::move(result_name));
     }
   }
 
@@ -101,26 +88,5 @@ std::vector<int> FileReaderBuilder::GetRowGroupsToRetrieve(const parquet::FileMe
   }
   return row_groups_to_process;
 }
-
-FileReaderBuilder::GroupNodeWrapper::GroupNodeWrapper(const parquet::schema::GroupNode* node,
-                                                      std::unordered_map<int, int> index_to_field_id)
-    : node_(node), index_to_field_id_(std::move(index_to_field_id)) {
-  Ensure(node_, std::string(__PRETTY_FUNCTION__) + ": group_node is nullptr");
-  for (int i = 0; i < GetFieldCount(); ++i) {
-    Ensure(node_->field(i) != nullptr, std::string(__PRETTY_FUNCTION__) + ": field is nullptr");
-  }
-}
-
-int FileReaderBuilder::GroupNodeWrapper::GetRealFieldId(int index) const {
-  auto it = index_to_field_id_.find(index);
-  if (it == index_to_field_id_.end()) {
-    return node_->field(index)->field_id();
-  }
-  return it->second;
-}
-
-int FileReaderBuilder::GroupNodeWrapper::GetFieldCount() const { return node_->field_count(); }
-
-std::string FileReaderBuilder::GroupNodeWrapper::GetName(int index) const { return node_->field(index)->name(); }
 
 }  // namespace iceberg
