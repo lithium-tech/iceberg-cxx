@@ -92,7 +92,7 @@ struct GetScanMetadataConfig {
 };
 
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                            const std::string& metadata_location,
+                                            const std::string& metadata_location, bool use_avro_reader_schema,
                                             const GetScanMetadataConfig& config = {});
 
 class IcebergEntriesStream {
@@ -105,7 +105,7 @@ class IcebergEntriesStream {
 class AllEntriesStream : public IcebergEntriesStream {
  public:
   AllEntriesStream(std::shared_ptr<arrow::fs::FileSystem> fs, std::queue<ManifestFile> manifest_files,
-                   const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs = {},
+                   bool use_reader_schema, const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs = {},
                    std::shared_ptr<iceberg::Schema> schema = {}, const ManifestEntryDeserializerConfig& config = {})
       : fs_(fs),
         manifest_files_(std::move(manifest_files)),
@@ -114,13 +114,13 @@ class AllEntriesStream : public IcebergEntriesStream {
         config_(config) {}
 
   static std::shared_ptr<AllEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                const std::string& manifest_list_path,
+                                                const std::string& manifest_list_path, bool use_reader_schema,
                                                 const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs = {},
                                                 std::shared_ptr<iceberg::Schema> schema = nullptr,
                                                 const ManifestEntryDeserializerConfig& config = {});
 
   static std::shared_ptr<AllEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                                std::shared_ptr<TableMetadataV2> table_metadata,
+                                                std::shared_ptr<TableMetadataV2> table_metadata, bool use_reader_schema,
                                                 const ManifestEntryDeserializerConfig& config = {});
 
   std::optional<ManifestEntry> ReadNext();

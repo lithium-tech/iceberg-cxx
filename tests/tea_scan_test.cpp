@@ -73,19 +73,21 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
        6}};
 
   for (const auto& test_info : path_to_expected_partitions_count) {
-    auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, test_info.meta_path);
-    ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK()) << test_info.meta_path;
-    EXPECT_EQ(maybe_scan_metadata->partitions.size(), test_info.partitions) << test_info.meta_path;
-    size_t data_entries = 0;
-    size_t del_entries = 0;
-    for (auto& p : maybe_scan_metadata->partitions) {
-      for (auto& l : p) {
-        data_entries += l.data_entries_.size();
-        del_entries += l.positional_delete_entries_.size();
+    for (const bool use_avro_reader_schema : {false, true}) {
+      auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, test_info.meta_path, use_avro_reader_schema);
+      ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK()) << test_info.meta_path;
+      EXPECT_EQ(maybe_scan_metadata->partitions.size(), test_info.partitions) << test_info.meta_path;
+      size_t data_entries = 0;
+      size_t del_entries = 0;
+      for (auto& p : maybe_scan_metadata->partitions) {
+        for (auto& l : p) {
+          data_entries += l.data_entries_.size();
+          del_entries += l.positional_delete_entries_.size();
+        }
       }
+      EXPECT_EQ(data_entries, test_info.data_entries) << test_info.meta_path;
+      EXPECT_EQ(del_entries, test_info.delete_entries) << test_info.meta_path;
     }
-    EXPECT_EQ(data_entries, test_info.data_entries) << test_info.meta_path;
-    EXPECT_EQ(del_entries, test_info.delete_entries) << test_info.meta_path;
   }
 }
 
@@ -93,10 +95,13 @@ TEST(GetScanMetadata, WithNoMatchingPartitionSpec) {
   std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
   fs = std::make_shared<ReplacingFilesystem>(fs);
 
-  ASSERT_ANY_THROW(ice_tea::GetScanMetadata(fs,
-                                            "s3://warehouse/partitioned_table_with_missing_spec/metadata/"
-                                            "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json")
-                       .ok());
+  for (const bool use_avro_reader_schema : {false, true}) {
+    ASSERT_ANY_THROW(ice_tea::GetScanMetadata(fs,
+                                              "s3://warehouse/partitioned_table_with_missing_spec/metadata/"
+                                              "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
+                                              use_avro_reader_schema)
+                         .ok());
+  }
 }
 
 // TODO(gmusya): this test is broken and misleading (it is a copy of WithNoMatchingPartitionSpec test), fix
@@ -123,16 +128,19 @@ TEST(GetScanMetadata, WithMultipleMatchingPartitionSpecs) {
   std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
   fs = std::make_shared<ReplacingFilesystem>(fs);
 
-  auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs,
-                                                      "s3://warehouse/partitioned_table_with_multiple_spec/metadata/"
-                                                      "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json");
-  ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
-  std::string error_message = maybe_scan_metadata.status().message();
+  for (const bool use_avro_reader_schema : {false, true}) {
+    auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs,
+                                                        "s3://warehouse/partitioned_table_with_multiple_spec/metadata/"
+                                                        "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
+                                                        use_avro_reader_schema);
+    ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
+    std::string error_message = maybe_scan_metadata.status().message();
 
-  EXPECT_EQ(error_message,
-            "Multiple (2) partiton specifications for entry "
-            "s3a://warehouse/partitioned_table/data/c1=2/c2=2025-03-04/"
-            "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet are found");
+    EXPECT_EQ(error_message,
+              "Multiple (2) partiton specifications for entry "
+              "s3a://warehouse/partitioned_table/data/c1=2/c2=2025-03-04/"
+              "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet are found");
+  }
 }
 
 TEST(GetScanMetadata, EqualityDataEntries) {
