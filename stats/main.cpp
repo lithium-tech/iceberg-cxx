@@ -293,7 +293,8 @@ int main(int argc, char** argv) {
     const std::string filename = absl::GetFlag(FLAGS_filename);
 
     if (!iceberg_metadata_location.empty()) {
-      auto scan_meta = iceberg::ValueSafe(iceberg::ice_tea::GetScanMetadata(fs, iceberg_metadata_location));
+      auto scan_meta = iceberg::ValueSafe(iceberg::ice_tea::GetScanMetadata(
+          fs, iceberg_metadata_location, [&](iceberg::Schema& schema) { return true; }));
       for (const auto& partition : scan_meta.partitions) {
         for (const auto& layer : partition) {
           for (const auto& entry : layer.data_entries_) {
