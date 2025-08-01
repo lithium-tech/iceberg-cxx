@@ -1,6 +1,7 @@
 add_library(iceberg_streams STATIC
   file_reader_builder.cpp
   parquet_stats_getter.cpp
+  filtering_stream.cpp
 )
 
 target_include_directories(iceberg_streams PUBLIC ${CMAKE_SOURCE_DIR})

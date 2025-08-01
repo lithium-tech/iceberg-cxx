@@ -78,6 +78,17 @@ class MetaStream : public iceberg::IAnnotatedDataPathStream {
   size_t current_iterator_ = 0;
 };
 
+class PassThroughFilter : public iceberg::ice_filter::IRowFilter {
+ public:
+  explicit PassThroughFilter(std::vector<int32_t> involved_field_ids)
+      : iceberg::ice_filter::IRowFilter(std::move(involved_field_ids)) {}
+
+  iceberg::SelectionVector<int32_t> ApplyFilter(
+      std::shared_ptr<iceberg::ArrowBatchWithRowPosition> batch) const override {
+    return iceberg::SelectionVector<int32_t>(batch->GetRecordBatch()->num_rows());
+  }
+};
+
 ABSL_FLAG(std::string, hms_host, "localhost", "host to connect to");
 ABSL_FLAG(uint16_t, hms_port, 9083, "port to connect to");
 
@@ -210,8 +221,8 @@ int main(int argc, char** argv) {
 
     auto data_stream = iceberg::IcebergScanBuilder::MakeIcebergStream(
         meta_stream, pos_del_info, std::make_shared<iceberg::EqualityDeletes>(std::move(eq_del_info)),
-        std::move(eq_del_config), nullptr, *table_metadata->GetCurrentSchema(), {1},
-        std::make_shared<iceberg::FileReaderProvider>(fs_provider));
+        std::move(eq_del_config), nullptr, std::make_shared<PassThroughFilter>(std::vector<int32_t>{}),
+        *table_metadata->GetCurrentSchema(), {1}, std::make_shared<iceberg::FileReaderProvider>(fs_provider));
 
     while (true) {
       auto batch = data_stream->ReadNext();

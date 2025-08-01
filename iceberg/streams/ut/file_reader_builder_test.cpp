@@ -17,6 +17,17 @@
 namespace iceberg {
 namespace {
 
+class PassThroughFilter : public iceberg::ice_filter::IRowFilter {
+ public:
+  explicit PassThroughFilter(std::vector<int32_t> involved_field_ids)
+      : iceberg::ice_filter::IRowFilter(std::move(involved_field_ids)) {}
+
+  iceberg::SelectionVector<int32_t> ApplyFilter(
+      std::shared_ptr<iceberg::ArrowBatchWithRowPosition> batch) const override {
+    return iceberg::SelectionVector<int32_t>(batch->GetRecordBatch()->num_rows());
+  }
+};
+
 TEST(FileReaderBuilder, Trivial) {
   auto equality_deletes = std::make_shared<EqualityDeletes>(EqualityDeletes{});
 
@@ -28,7 +39,8 @@ TEST(FileReaderBuilder, Trivial) {
       std::map<std::string, std::shared_ptr<IFileSystemGetter>>{{"file", std::make_shared<LocalFileSystemGetter>()}});
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider), nullptr);
+                                        std::make_shared<FileReaderProvider>(fs_provider), nullptr,
+                                        std::make_shared<PassThroughFilter>(std::vector<int32_t>{}));
 
   ScopedTempDir dir;
   std::string data_path = "file://" + (dir.path() / "data.parquet").generic_string();
