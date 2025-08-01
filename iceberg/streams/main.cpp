@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
       std::cerr << "GetScanMetadata: failed to parse metadata " + metadata_location << std::endl;
       return 1;
     }
-    auto entries_stream = iceberg::ice_tea::AllEntriesStream::Make(fs, table_metadata);
+    auto entries_stream = iceberg::ice_tea::AllEntriesStream::Make(fs, table_metadata, true);
     if (!entries_stream) {
       std::cerr << "Failed to make entries stream" << std::endl;
       return 1;
