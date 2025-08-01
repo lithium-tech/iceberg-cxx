@@ -74,7 +74,8 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
 
   for (const auto& test_info : path_to_expected_partitions_count) {
     for (const bool use_avro_reader_schema : {false, true}) {
-      auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs, test_info.meta_path, use_avro_reader_schema);
+      auto maybe_scan_metadata = ice_tea::GetScanMetadata(
+          fs, test_info.meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; });
       ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK()) << test_info.meta_path;
       EXPECT_EQ(maybe_scan_metadata->partitions.size(), test_info.partitions) << test_info.meta_path;
       size_t data_entries = 0;
@@ -99,7 +100,7 @@ TEST(GetScanMetadata, WithNoMatchingPartitionSpec) {
     ASSERT_ANY_THROW(ice_tea::GetScanMetadata(fs,
                                               "s3://warehouse/partitioned_table_with_missing_spec/metadata/"
                                               "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
-                                              use_avro_reader_schema)
+                                              [&](iceberg::Schema& schema) { return use_avro_reader_schema; })
                          .ok());
   }
 }
@@ -129,10 +130,11 @@ TEST(GetScanMetadata, WithMultipleMatchingPartitionSpecs) {
   fs = std::make_shared<ReplacingFilesystem>(fs);
 
   for (const bool use_avro_reader_schema : {false, true}) {
-    auto maybe_scan_metadata = ice_tea::GetScanMetadata(fs,
-                                                        "s3://warehouse/partitioned_table_with_multiple_spec/metadata/"
-                                                        "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
-                                                        use_avro_reader_schema);
+    auto maybe_scan_metadata =
+        ice_tea::GetScanMetadata(fs,
+                                 "s3://warehouse/partitioned_table_with_multiple_spec/metadata/"
+                                 "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
+                                 [&](iceberg::Schema& schema) { return use_avro_reader_schema; });
     ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
     std::string error_message = maybe_scan_metadata.status().message();
 

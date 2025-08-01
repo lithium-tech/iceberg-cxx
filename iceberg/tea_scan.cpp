@@ -20,6 +20,7 @@
 #include "iceberg/manifest_file.h"
 #include "iceberg/result.h"
 #include "iceberg/schema.h"
+#include "iceberg/streams/arrow/error.h"
 #include "iceberg/table_metadata.h"
 #include "iceberg/type.h"
 
@@ -353,15 +354,21 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
 }
 
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                            const std::string& metadata_location, bool use_reader_schema,
+                                            const std::string& metadata_location,
+                                            std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
                                             const GetScanMetadataConfig& config) {
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
     return arrow::Status::ExecutionError("GetScanMetadata: failed to parse metadata " + metadata_location);
   }
+  if (!table_metadata->GetCurrentSchema()) {
+    return arrow::Status::ExecutionError("GetScanMetadata: failed to parse metadata " + metadata_location +
+                                         " (failed to get schema)");
+  }
   auto entries_stream =
-      AllEntriesStream::Make(fs, table_metadata, use_reader_schema, config.manifest_entry_deserializer_config);
+      AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
+                             config.manifest_entry_deserializer_config);
   return GetScanMetadata(*entries_stream, *table_metadata);
 }
 

@@ -92,7 +92,8 @@ struct GetScanMetadataConfig {
 };
 
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
-                                            const std::string& metadata_location, bool use_avro_reader_schema,
+                                            const std::string& metadata_location,
+                                            std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
                                             const GetScanMetadataConfig& config = {});
 
 class IcebergEntriesStream {
