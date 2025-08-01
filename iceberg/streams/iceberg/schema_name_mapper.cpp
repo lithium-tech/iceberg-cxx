@@ -9,62 +9,46 @@ void Ensure(bool cond, const std::string& msg) {
   }
 }
 
-void InsertOrFail(std::unordered_set<std::string>& set, const std::string& elem) {
-  Ensure(!set.contains(elem), "Names at the same level are not unique");
-  set.insert(elem);
-}
-
 }  // namespace
 
 SchemaNameMapper::SchemaNameMapper(const std::string& json) : doc_(std::make_shared<rapidjson::Document>()) {
   doc_->Parse(json.c_str(), json.size());
   Ensure(!doc_->HasParseError(), "schema.name-mapping.default is not a valid JSON");
+  root_mapper_ = std::make_shared<SchemaNameMapper::Mapper>(*doc_);
 }
 
-SchemaNameMapper::Mapper SchemaNameMapper::GetRootMapper() const {
-  auto node = Mapper(doc_, doc_.get());
-  if (!root_node_validated_) {
-    node.Validate();
-    root_node_validated_ = true;
-  }
-  return node;
-}
+std::shared_ptr<SchemaNameMapper::Mapper> SchemaNameMapper::GetRootMapper() const { return root_mapper_; }
 
-SchemaNameMapper::Mapper::Mapper(std::shared_ptr<rapidjson::Document> main_object, const rapidjson::Value* doc)
-    : doc_(doc) {}
-
-std::optional<int32_t> SchemaNameMapper::Mapper::GetFieldIdByName(const std::string& name) const {
-  const auto& doc = *doc_;
-  const size_t sz = doc.Size();
-  for (size_t i = 0; i < sz; ++i) {
-    const rapidjson::Value& names_array = doc[i][names];
-    const size_t names_sz = names_array.Size();
-    for (size_t j = 0; j < names_sz; ++j) {
-      if (names_array[j].GetString() == name) {
-        return json_parse::ExtractOptionalInt32Field(doc[i], field_id);
+SchemaNameMapper::Mapper::Mapper(const rapidjson::Value& doc) {
+  Ensure(doc.IsArray(), std::string(__PRETTY_FUNCTION__) + ": doc is not an Array");
+  int size = doc.Size();
+  for (int i = 0; i < size; ++i) {
+    Ensure(doc[i].IsObject(), std::string(__PRETTY_FUNCTION__) + ": doc elements must be objects");
+    Ensure(doc[i].HasMember(names),
+           std::string(__PRETTY_FUNCTION__) + ": doc elements must contain" + names + " field");
+    const auto& names_field = doc[i][names];
+    Ensure(names_field.IsArray(), std::string(__PRETTY_FUNCTION__) + ": " + names + " field must be an array");
+    if (doc[i].HasMember(field_id)) {
+      Ensure(doc[i][field_id].IsInt(), std::string(__PRETTY_FUNCTION__) + ": " + field_id + " field must be an int");
+      int field_id_value = doc[i][field_id].GetInt();
+      int names_sz = names_field.Size();
+      for (int j = 0; j < names_sz; ++j) {
+        Ensure(names_field[j].IsString(),
+               std::string(__PRETTY_FUNCTION__) + ": " + names + " field must be an array of strings");
+        const bool inserted =
+            mp_.insert(std::make_pair(std::string(names_field[j].GetString()), field_id_value)).second;
+        Ensure(inserted, std::string(__PRETTY_FUNCTION__) + ": names at the same level are not unique");
       }
     }
   }
-  return std::nullopt;
 }
 
-void SchemaNameMapper::Mapper::Validate() const {
-  const auto& doc = *doc_;
-  Ensure(doc.IsArray(), std::string(__FUNCTION__) + ": !doc.IsArray()");
-
-  const size_t sz = doc.Size();
-  std::unordered_set<std::string> all_names;
-  for (size_t i = 0; i < sz; ++i) {
-    Ensure(doc[i].HasMember(names),
-           std::string(__FUNCTION__) + ": \"names\" is a required field in schema.name-mapping.default");
-    const rapidjson::Value& names_array = doc[i][names];
-    Ensure(names_array.IsArray(), std::string(__FUNCTION__) + ": \"names\" is not an array");
-    const size_t names_sz = names_array.Size();
-    for (size_t j = 0; j < names_sz; ++j) {
-      Ensure(names_array[j].IsString(), std::string(__FUNCTION__) + ": \"names\" is not an array of strings");
-      InsertOrFail(all_names, names_array[j].GetString());
-    }
+std::optional<int32_t> SchemaNameMapper::Mapper::GetFieldIdByName(const std::string& name) const {
+  auto it = mp_.find(name);
+  if (it == mp_.end()) {
+    return std::nullopt;
   }
+  return it->second;
 }
 
 }  // namespace iceberg

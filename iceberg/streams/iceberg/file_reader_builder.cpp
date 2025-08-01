@@ -5,7 +5,8 @@ namespace iceberg {
 namespace {
 
 void InsertOrFail(std::unordered_map<int, int>& mp, int key, int value) {
-  Ensure(mp.insert(std::make_pair(key, value)).second, std::string(__PRETTY_FUNCTION__) + ": field ids are not unique");
+  const bool inserted = mp.insert(std::make_pair(key, value)).second;
+  Ensure(inserted, std::string(__PRETTY_FUNCTION__) + ": field ids are not unique");
 }
 
 std::unordered_map<int, int> MakeFieldIdToIndexMap(const parquet::schema::GroupNode* node,
@@ -21,11 +22,12 @@ std::unordered_map<int, int> MakeFieldIdToIndexMap(const parquet::schema::GroupN
       continue;
     }
 
-    if (!schema_name_mapper.has_value()) continue;
-    auto field_name = field->name();
-    auto possible_field_id = schema_name_mapper->GetRootMapper().GetFieldIdByName(field_name);
-    if (possible_field_id.has_value()) {
-      InsertOrFail(field_id_to_index, *possible_field_id, i);
+    if (schema_name_mapper.has_value()) {
+      auto field_name = field->name();
+      auto possible_field_id = schema_name_mapper->GetRootMapper()->GetFieldIdByName(field_name);
+      if (possible_field_id.has_value()) {
+        InsertOrFail(field_id_to_index, *possible_field_id, i);
+      }
     }
   }
   return field_id_to_index;

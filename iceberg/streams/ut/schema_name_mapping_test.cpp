@@ -30,11 +30,11 @@ TEST(SchemaNameMapper, UniqueNames) {
 TEST(SchemaNameMapper, GetFieldIdByName) {
   const std::string json = "[ { \"field-id\": 1, \"names\": [\"col1\"] }, { \"field-id\": 3, \"names\": [\"col2\"] } ]";
   const SchemaNameMapper schema_name_mapper(json);
-  const SchemaNameMapper::Mapper root_node = schema_name_mapper.GetRootMapper();
+  auto root_node = schema_name_mapper.GetRootMapper();
 
-  EXPECT_EQ(root_node.GetFieldIdByName("col1"), 1);
-  EXPECT_EQ(root_node.GetFieldIdByName("col2"), 3);
-  EXPECT_EQ(root_node.GetFieldIdByName("col3"), std::nullopt);
+  EXPECT_EQ(root_node->GetFieldIdByName("col1"), 1);
+  EXPECT_EQ(root_node->GetFieldIdByName("col2"), 3);
+  EXPECT_EQ(root_node->GetFieldIdByName("col3"), std::nullopt);
 }
 
 }  // namespace
