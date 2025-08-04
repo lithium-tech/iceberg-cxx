@@ -4,8 +4,6 @@
 #include <string>
 #include <vector>
 
-#include "avro/ValidSchema.hh"
-
 namespace iceavro {
 
 enum class NodeType {

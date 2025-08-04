@@ -2,42 +2,16 @@
 
 #include <stdexcept>
 
+#include "arrow/type.h"
 #include "iceberg/streams/arrow/error.h"
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
-#include "rapidjson/writer.h"
 
 namespace iceavro {
 
 namespace {
-
-constexpr int MinimumBytesToStoreDecimalUnsafe(int precision) {
-  int bytes = 1;
-  __uint128_t minimum_nonrepresentable_value =
-      (1 << 7);  // not (1 << 8) because both positive and negative values must be representable
-
-  const __uint128_t value_to_store = [precision]() {
-    __uint128_t result = 1;
-    for (int i = 0; i < precision; ++i) {
-      result *= 10;
-    }
-    return result;
-  }();
-
-  while (bytes < 16 && minimum_nonrepresentable_value <= value_to_store) {
-    ++bytes;
-    minimum_nonrepresentable_value *= (1 << 8);
-  }
-  return bytes;
-}
-static_assert(MinimumBytesToStoreDecimalUnsafe(1) == 1);
-static_assert(MinimumBytesToStoreDecimalUnsafe(9) == 4);
-static_assert(MinimumBytesToStoreDecimalUnsafe(10) == 5);
-static_assert(MinimumBytesToStoreDecimalUnsafe(18) == 8);
-static_assert(MinimumBytesToStoreDecimalUnsafe(19) == 9);
-static_assert(MinimumBytesToStoreDecimalUnsafe(38) == 16);
 
 constexpr int MinimumBytesToStoreDecimal(int precision) {
   const int kMaxPrecision = 38;
@@ -49,7 +23,7 @@ constexpr int MinimumBytesToStoreDecimal(int precision) {
     throw std::runtime_error("MinimumBytesToStoreDecimal: precision is less than or equal to " + std::to_string(0) +
                              " is not supported");
   }
-  return MinimumBytesToStoreDecimalUnsafe(precision);
+  return arrow::DecimalType::DecimalSize(precision);
 }
 
 class Serializer {
