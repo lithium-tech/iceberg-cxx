@@ -380,6 +380,10 @@ class DataFileDeserializer {
                                                        config_.extract_upper_bounds);
     ExtractIf<DataFile::PartitionTuple>(record, "partition", data_file.partition_tuple,
                                         config_.extract_partition_tuple);
+    ExtractIf<std::map<int32_t, int64_t>>(record, "nan_value_counts", data_file.nan_value_counts,
+                                          config_.extract_nan_value_counts);
+    ExtractIf<std::map<int32_t, int64_t>>(record, "distinct_counts", data_file.distinct_counts,
+                                          config_.extract_distinct_counts);
     // TODO(gmusya): this part is not covered by tests in iceberg-cxx. Fix
     ExtractIf<std::vector<int32_t>>(record, "equality_ids", data_file.equality_ids, config_.extract_equality_ids);
     return data_file;
@@ -538,6 +542,20 @@ NodePtr MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec,
     upper_bounds_entry->AddField("value", std::make_shared<iceavro::BytesNode>());
     result->AddField("upper_bounds",
                      std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::ArrayNode>(upper_bounds_entry)));
+  }
+  if (cfg.datafile_config.extract_nan_value_counts) {
+    auto nan_value_counts_entry = std::make_shared<iceavro::RecordNode>("k138_v139");
+    nan_value_counts_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    nan_value_counts_entry->AddField("value", std::make_shared<iceavro::LongNode>());
+    result->AddField("nan_value_counts", std::make_shared<iceavro::OptionalNode>(
+                                             std::make_shared<iceavro::ArrayNode>(nan_value_counts_entry)));
+  }
+  if (cfg.datafile_config.extract_distinct_counts) {
+    auto distinct_counts_entry = std::make_shared<iceavro::RecordNode>("k123_v124");
+    distinct_counts_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    distinct_counts_entry->AddField("value", std::make_shared<iceavro::LongNode>());
+    result->AddField("distinct_counts", std::make_shared<iceavro::OptionalNode>(
+                                            std::make_shared<iceavro::ArrayNode>(distinct_counts_entry)));
   }
   result->AddField("split_offsets", std::make_shared<iceavro::OptionalNode>(
                                         std::make_shared<iceavro::ArrayNode>(std::make_shared<iceavro::LongNode>())));
@@ -812,6 +830,8 @@ void SerializeDataFile(const std::vector<PartitionKeyField>& partition_spec, con
   SerializeOptionalMapIntLong(data_file.null_value_counts, GetMember(record, "null_value_counts"));
   SerializeOptionalMapIntBytes(data_file.lower_bounds, GetMember(record, "lower_bounds"));
   SerializeOptionalMapIntBytes(data_file.upper_bounds, GetMember(record, "upper_bounds"));
+  SerializeOptionalMapIntLong(data_file.distinct_counts, GetMember(record, "distinct_counts"));
+  SerializeOptionalMapIntLong(data_file.nan_value_counts, GetMember(record, "nan_value_counts"));
   SerializePartition(partition_spec, data_file.partition_tuple, GetMember(record, "partition"));
 }
 
