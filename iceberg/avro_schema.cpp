@@ -13,7 +13,7 @@ namespace iceavro {
 
 namespace {
 
-constexpr int MinimumBytesToStoreDecimal(int precision) {
+int MinimumBytesToStoreDecimal(int precision) {
   const int kMaxPrecision = 38;
   if (precision > kMaxPrecision) {
     throw std::runtime_error("MinimumBytesToStoreDecimal: precision is greater than " + std::to_string(kMaxPrecision) +
