@@ -427,6 +427,7 @@ class ManifestEntryDeserializer {
 };
 
 NodePtr MakeSchemaPartition(const std::vector<PartitionKeyField>& partition_spec) {
+  // TODO(gmusya): support field ids
   auto result = std::make_shared<iceavro::RecordNode>("r102", 102);
   for (const auto& field : partition_spec) {
     switch (field.type->TypeId()) {
@@ -495,6 +496,30 @@ NodePtr MakeSchemaPartition(const std::vector<PartitionKeyField>& partition_spec
   }
   return result;
 }
+
+// TODO(gmusya): use field id
+#if 0
+namespace field_id {
+constexpr int32_t kContent = 134;
+constexpr int32_t kFilePath = 100;
+constexpr int32_t kFileFormat = 101;
+constexpr int32_t kPartition = 102;
+constexpr int32_t kRecordCount = 103;
+constexpr int32_t kFileSizeInBytes = 104;
+constexpr int32_t kColumnSizes = 108;
+constexpr int32_t kValueCounts = 109;
+constexpr int32_t kNullValueCounts = 110;
+constexpr int32_t kDistinctCounts = 111;
+constexpr int32_t kLowerBounds = 125;
+constexpr int32_t kUpperBounds = 128;
+constexpr int32_t kKeyMetadata = 131;
+constexpr int32_t kSplitOffsets = 132;
+constexpr int32_t kEqualityIds = 135;
+constexpr int32_t kNanValueCounts = 137;
+constexpr int32_t kSortOrderId = 140;
+constexpr int32_t kReferencedDataFile = 143;
+}  // namespace field_id
+#endif
 
 NodePtr MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec,
                            const ManifestEntryDeserializerConfig& cfg = {}) {

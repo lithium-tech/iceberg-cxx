@@ -29,6 +29,7 @@ enum class NodeType {
   kOptional
 };
 
+// TODO(gmusya): use field id
 struct Node {
   NodeType node_type_;
   std::optional<int32_t> field_id_;
