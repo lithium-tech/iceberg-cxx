@@ -521,6 +521,52 @@ constexpr int32_t kReferencedDataFile = 143;
 }  // namespace field_id
 #endif
 
+// Spec (https://iceberg.apache.org/spec/#avro) says
+// <<Optional fields, array elements, and map values must be wrapped in an Avro union with null.
+// This is the only union type allowed in Iceberg data files.>>
+// Nevertheless, the following fields can be found in metadata.
+////////////////////////////////////////////////////////////////////////////////
+// 1. Array example
+// {
+//     "name": "split_offsets",
+//     "type": [
+//         "null",
+//         {
+//             "type": "array",
+//             "items": "long"
+//         }
+//     ],
+//     "default": null
+// },
+// 2. Map example
+// {
+//     "name": "upper_bounds",
+//     "type": [
+//         "null",
+//         {
+//             "type": "array",
+//             "items": {
+//                 "type": "record",
+//                 "name": "k129_v130",
+//                 "fields": [
+//                     {
+//                         "name": "key",
+//                         "type": "int"
+//                     },
+//                     {
+//                         "name": "value",
+//                         "type": "bytes"
+//                     }
+//                 ]
+//             }
+//         }
+//     ],
+//     "default": null
+// }
+////////////////////////////////////////////////////////////////////////////////
+// The spec probably implies that if an array contains nullable elements, those elements must be wrapped in a union.
+// `split_offsets` and `upper_bounds` do not have optional elements, so there is no need to wrap them.
+
 NodePtr MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec,
                            const ManifestEntryDeserializerConfig& cfg = {}) {
   auto result = std::make_shared<iceavro::RecordNode>("r2");
