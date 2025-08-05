@@ -7,9 +7,36 @@
 
 namespace iceberg {
 
+namespace {
+class StreamAwareLogger : public ILogger {
+ public:
+  StreamAwareLogger(std::shared_ptr<ILogger> logger, std::string stream_name)
+      : logger_(logger), stream_name_(std::move(stream_name)) {
+    Ensure(logger != nullptr, std::string(__PRETTY_FUNCTION__) + ": logger is nullptr");
+  }
+
+  void Log(const Message& message, const MessageType& message_type) override {
+    logger_->Log(message, stream_name_ + ":" + message_type);
+  }
+
+ private:
+  std::string stream_name_;
+  std::shared_ptr<ILogger> logger_;
+};
+
+std::shared_ptr<StreamAwareLogger> MakeStreamAwareLogger(std::shared_ptr<ILogger> logger, std::string stream_name) {
+  if (logger == nullptr) {
+    return nullptr;
+  }
+  return std::make_shared<StreamAwareLogger>(logger, std::move(stream_name));
+}
+
+}  // namespace
+
 StreamPtr<ArrowBatchWithRowPosition> FileReaderBuilder::MakeFinalStream(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader, const std::vector<int>& matching_row_groups,
-    std::shared_ptr<const parquet::FileMetaData> metadata, const std::vector<int>& field_ids) {
+    std::shared_ptr<const parquet::FileMetaData> metadata, const std::vector<int>& field_ids,
+    std::shared_ptr<ILogger> logger) {
   const auto cols = GetColumnPositionsToRetrieveByFieldIds(*metadata, field_ids);
 
   std::vector<int> col_positions;
@@ -18,8 +45,8 @@ StreamPtr<ArrowBatchWithRowPosition> FileReaderBuilder::MakeFinalStream(
       col_positions.emplace_back(col.column_position.value());
     }
   }
-  if (logger_) {
-    logger_->Log(std::to_string(col_positions.size()), "metrics:data:columns_read");
+  if (logger) {
+    logger->Log(std::to_string(col_positions.size()), "metrics:data:columns_read");
   }
 
   const std::map<std::string, std::string> parquet_name_to_result_name = [&]() {
@@ -34,7 +61,7 @@ StreamPtr<ArrowBatchWithRowPosition> FileReaderBuilder::MakeFinalStream(
   }();
 
   StreamPtr<ArrowBatchWithRowPosition> result =
-      std::make_shared<ParquetFileReader>(arrow_reader, matching_row_groups, col_positions, logger_);
+      std::make_shared<ParquetFileReader>(arrow_reader, matching_row_groups, col_positions, logger);
 
   return std::make_shared<ProjectionStream>(parquet_name_to_result_name, result);
 }
@@ -76,6 +103,23 @@ IcebergStreamPtr FileReaderBuilder::Build(const AnnotatedDataPath& annotated_dat
     return result;
   }();
 
+  const std::vector<int> field_ids_for_filter = [&]() {
+    if (row_filter_ == nullptr) {
+      return std::vector<int>{};
+    }
+    std::vector<int> result = row_filter_->GetInvolvedFieldIds();
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
+  }();
+
+  // names are too long
+  const std::vector<int> field_ids_for_data = [](const std::vector<int>& a, const std::vector<int>& b) {
+    std::vector<int> result;
+    std::set_difference(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(result));
+    return result;
+  }(field_ids_required, field_ids_for_filter);
+
   const std::vector<int> row_groups_matching_offsets =
       GetRowGroupsToRetrieve(*metadata, annotated_data_path.GetSegments());
   int64_t planned_row_groups = row_groups_matching_offsets.size();
@@ -106,9 +150,12 @@ IcebergStreamPtr FileReaderBuilder::Build(const AnnotatedDataPath& annotated_dat
     logger_->Log(std::to_string(skipped_row_groups), "metrics:row_groups:skipped");
   }
 
-  auto result = MakeFinalStream(arrow_reader, matching_row_groups, metadata, field_ids_required);
-
-  return std::make_shared<ArrowStreamWrapper>(result, annotated_data_path.GetPartitionLayerFile());
+  auto data_stream = MakeFinalStream(arrow_reader, matching_row_groups, metadata, field_ids_for_data,
+                                     MakeStreamAwareLogger(logger_, "data_stream"));
+  auto filter_stream = MakeFinalStream(arrow_reader, matching_row_groups, metadata, field_ids_for_filter,
+                                       MakeStreamAwareLogger(logger_, "filter_stream"));
+  return std::make_shared<FilteringStream>(filter_stream, data_stream, row_filter_,
+                                           annotated_data_path.GetPartitionLayerFile(), logger_);
 }
 
 }  // namespace iceberg

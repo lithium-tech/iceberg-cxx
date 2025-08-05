@@ -7,6 +7,7 @@ add_subdirectory(iceberg)
 
 add_executable(iceberg_streams_ut
   # ut/builder_test.cpp # TODO(gmusya): cover
+  ut/filtering_stream_test.cpp
   ut/data_scan_test.cpp
   ut/equality_delete_applier_test.cpp
   ut/file_reader_builder_test.cpp

@@ -25,14 +25,12 @@ namespace iceberg {
 
 class IcebergScanBuilder {
  public:
-  static IcebergStreamPtr MakeIcebergStream(AnnotatedDataPathStreamPtr meta_stream,
-                                            PositionalDeletes positional_deletes,
-                                            std::shared_ptr<EqualityDeletes> equality_deletes,
-                                            std::optional<EqualityDeleteHandler::Config> cfg,
-                                            std::shared_ptr<const IRowGroupFilter> rg_filter,
-                                            const iceberg::Schema& schema, std::vector<int> field_ids_to_retrieve,
-                                            std::shared_ptr<const IFileReaderProvider> file_reader_provider,
-                                            std::shared_ptr<ILogger> logger = nullptr) {
+  static IcebergStreamPtr MakeIcebergStream(
+      AnnotatedDataPathStreamPtr meta_stream, PositionalDeletes positional_deletes,
+      std::shared_ptr<EqualityDeletes> equality_deletes, std::optional<EqualityDeleteHandler::Config> cfg,
+      std::shared_ptr<const IRowGroupFilter> rg_filter, std::shared_ptr<const ice_filter::IRowFilter> row_filter,
+      const iceberg::Schema& schema, std::vector<int> field_ids_to_retrieve,
+      std::shared_ptr<const IFileReaderProvider> file_reader_provider, std::shared_ptr<ILogger> logger = nullptr) {
     Ensure(file_reader_provider != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
 
     auto mapper = MakeMapper(schema);
@@ -40,7 +38,7 @@ class IcebergScanBuilder {
     // this class takes an AnnotatedDataPath as input and returns IcebergStream
     // (which reads some columns from row groups matching rg-filter of data file)
     auto stream_builder = std::make_shared<FileReaderBuilder>(field_ids_to_retrieve, equality_deletes, mapper,
-                                                              file_reader_provider, rg_filter, logger);
+                                                              file_reader_provider, rg_filter, row_filter, logger);
 
     // convert stream of AnnotatedDatapath into concatenation of streams created with FileReaderBuilder
     IcebergStreamPtr stream = std::make_shared<DataScanner>(meta_stream, stream_builder);

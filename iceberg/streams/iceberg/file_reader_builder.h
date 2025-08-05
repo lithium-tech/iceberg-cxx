@@ -11,14 +11,11 @@
 
 #include "iceberg/common/batch.h"
 #include "iceberg/common/fs/file_reader_provider.h"
-#include "iceberg/common/logger.h"
 #include "iceberg/common/rg_metadata.h"
-#include "iceberg/common/selection_vector.h"
-#include "iceberg/streams/arrow/batch_with_row_number.h"
 #include "iceberg/streams/iceberg/data_entries_meta_stream.h"
 #include "iceberg/streams/iceberg/data_scan.h"
 #include "iceberg/streams/iceberg/equality_delete_applier.h"
-#include "iceberg/streams/iceberg/iceberg_batch.h"
+#include "iceberg/streams/iceberg/filtering_stream.h"
 #include "iceberg/streams/iceberg/mapper.h"
 #include "iceberg/streams/iceberg/plan.h"
 #include "iceberg/streams/iceberg/row_group_filter.h"
@@ -26,28 +23,14 @@
 
 namespace iceberg {
 
-class ArrowStreamWrapper : public IcebergStream {
+class PassThroughFilter : public iceberg::ice_filter::IRowFilter {
  public:
-  ArrowStreamWrapper(StreamPtr<ArrowBatchWithRowPosition> input, PartitionLayerFile state)
-      : input_(input), state_(std::move(state)) {}
+  explicit PassThroughFilter(std::vector<int32_t> field_ids) : iceberg::ice_filter::IRowFilter(std::move(field_ids)) {}
 
-  std::shared_ptr<IcebergBatch> ReadNext() override {
-    auto batch = input_->ReadNext();
-    if (!batch) {
-      return nullptr;
-    }
-    SelectionVector<int32_t> selection_vector(batch->GetRecordBatch()->num_rows());
-
-    BatchWithSelectionVector batch_with_vec(batch->GetRecordBatch(), std::move(selection_vector));
-    PartitionLayerFilePosition result_state(state_, batch->row_position);
-
-    return std::make_shared<IcebergBatch>(std::move(batch_with_vec), std::move(result_state));
+  iceberg::SelectionVector<int32_t> ApplyFilter(
+      std::shared_ptr<iceberg::ArrowBatchWithRowPosition> batch) const override {
+    return iceberg::SelectionVector<int32_t>(batch->GetRecordBatch()->num_rows());
   }
-
- private:
-  StreamPtr<ArrowBatchWithRowPosition> input_;
-
-  const PartitionLayerFile state_;
 };
 
 // TODO(gmusya): maybe extract some private methods into functions
@@ -56,16 +39,21 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   FileReaderBuilder(std::vector<int> field_ids_to_retrieve, std::shared_ptr<const EqualityDeletes> equality_deletes,
                     std::shared_ptr<const FieldIdMapper> mapper,
                     std::shared_ptr<const IFileReaderProvider> file_reader_provider,
-                    std::shared_ptr<const IRowGroupFilter> rg_filter, std::shared_ptr<ILogger> logger = nullptr)
+                    std::shared_ptr<const IRowGroupFilter> rg_filter,
+                    std::shared_ptr<const ice_filter::IRowFilter> row_filter, std::shared_ptr<ILogger> logger = nullptr)
       : field_ids_to_retrieve_(std::move(field_ids_to_retrieve)),
         equality_deletes_(equality_deletes),
         mapper_(mapper),
         file_reader_provider_(file_reader_provider),
         rg_filter_(rg_filter),
+        row_filter_(row_filter),
         logger_(logger) {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
     Ensure(file_reader_provider_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
+    if (row_filter_ == nullptr) {
+      row_filter_ = std::make_shared<PassThroughFilter>(std::vector<int32_t>{});
+    }
   }
 
   IcebergStreamPtr Build(const AnnotatedDataPath& annotated_data_path) override;
@@ -158,7 +146,8 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   StreamPtr<ArrowBatchWithRowPosition> MakeFinalStream(std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
                                                        const std::vector<int>& matching_row_groups,
                                                        std::shared_ptr<const parquet::FileMetaData> metadata,
-                                                       const std::vector<int>& field_ids);
+                                                       const std::vector<int>& field_ids,
+                                                       std::shared_ptr<ILogger> logger);
 
   const std::vector<ColumnInfo> columns_to_retrieve_;
   const std::vector<int> field_ids_to_retrieve_;
@@ -166,6 +155,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::shared_ptr<const FieldIdMapper> mapper_;
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::shared_ptr<const IRowGroupFilter> rg_filter_;
+  std::shared_ptr<const ice_filter::IRowFilter> row_filter_;
   std::shared_ptr<ILogger> logger_;
 };
 
