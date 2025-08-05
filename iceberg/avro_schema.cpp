@@ -36,6 +36,8 @@ class Serializer {
  public:
   using Allocator = rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>;
 
+  // TODO(gmusya): consider returning 'value' instead of '{"type": value}'
+  // After this change 'field-id' and 'default' fields should must be set on calling RecordNode::AddField method
   rapidjson::Value Serialize(std::shared_ptr<BoolNode> node) {
     rapidjson::Value result(rapidjson::kObjectType);
 
