@@ -146,7 +146,8 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   StreamPtr<ArrowBatchWithRowPosition> MakeFinalStream(std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
                                                        const std::vector<int>& matching_row_groups,
                                                        std::shared_ptr<const parquet::FileMetaData> metadata,
-                                                       const std::vector<int>& field_ids);
+                                                       const std::vector<int>& field_ids,
+                                                       std::shared_ptr<ILogger> logger);
 
   const std::vector<ColumnInfo> columns_to_retrieve_;
   const std::vector<int> field_ids_to_retrieve_;
