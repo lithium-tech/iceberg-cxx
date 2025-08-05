@@ -13,6 +13,12 @@ namespace iceavro {
 
 namespace {
 
+namespace field {
+constexpr std::string_view kType = "type";
+constexpr std::string_view kLogicalType = "logicalType";
+constexpr std::string_view kAdjustToUtc = "adjust-to-utc";
+}  // namespace field
+
 int MinimumBytesToStoreDecimal(int precision) {
   const int kMaxPrecision = 38;
   if (precision > kMaxPrecision) {
@@ -33,28 +39,28 @@ class Serializer {
   rapidjson::Value Serialize(std::shared_ptr<BoolNode> node) {
     rapidjson::Value result(rapidjson::kObjectType);
 
-    AddMember(result, "type", "boolean");
+    AddMember(result, field::kType, "boolean");
     return result;
   }
 
   rapidjson::Value Serialize(std::shared_ptr<IntNode> node) {
     rapidjson::Value result(rapidjson::kObjectType);
 
-    AddMember(result, "type", "int");
+    AddMember(result, field::kType, "int");
     return result;
   }
 
   rapidjson::Value Serialize(std::shared_ptr<FloatNode> node) {
     rapidjson::Value result(rapidjson::kObjectType);
 
-    AddMember(result, "type", "float");
+    AddMember(result, field::kType, "float");
     return result;
   }
 
   rapidjson::Value Serialize(std::shared_ptr<DoubleNode> node) {
     rapidjson::Value result(rapidjson::kObjectType);
 
-    AddMember(result, "type", "double");
+    AddMember(result, field::kType, "double");
     return result;
   }
 
@@ -64,10 +70,10 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "int");
-      AddMember(true_type, "logicalType", "date");
+      AddMember(true_type, field::kType, "int");
+      AddMember(true_type, field::kLogicalType, "date");
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -79,10 +85,10 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "fixed");
+      AddMember(true_type, field::kType, "fixed");
       AddMember(true_type, "size", node->size_);
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -94,12 +100,12 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "fixed");
+      AddMember(true_type, field::kType, "fixed");
       AddMember(true_type, "name", "uuid_fixed");
       AddMember(true_type, "size", 16);
-      AddMember(true_type, "logicalType", "uuid");
+      AddMember(true_type, field::kLogicalType, "uuid");
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -111,10 +117,10 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "long");
-      AddMember(true_type, "logicalType", "time-micros");
+      AddMember(true_type, field::kType, "long");
+      AddMember(true_type, field::kLogicalType, "time-micros");
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -126,11 +132,11 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "long");
-      AddMember(true_type, "logicalType", "timestamp-micros");
-      AddMember(true_type, "adjust-to-utc", false);
+      AddMember(true_type, field::kType, "long");
+      AddMember(true_type, field::kLogicalType, "timestamp-micros");
+      AddMember(true_type, field::kAdjustToUtc, false);
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -142,11 +148,11 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "long");
-      AddMember(true_type, "logicalType", "timestamp-micros");
-      AddMember(true_type, "adjust-to-utc", true);
+      AddMember(true_type, field::kType, "long");
+      AddMember(true_type, field::kLogicalType, "timestamp-micros");
+      AddMember(true_type, field::kAdjustToUtc, true);
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -158,11 +164,11 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "long");
-      AddMember(true_type, "logicalType", "timestamp-nanos");
-      AddMember(true_type, "adjust-to-utc", false);
+      AddMember(true_type, field::kType, "long");
+      AddMember(true_type, field::kLogicalType, "timestamp-nanos");
+      AddMember(true_type, field::kAdjustToUtc, false);
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -174,11 +180,11 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "long");
-      AddMember(true_type, "logicalType", "timestamp-nanos");
-      AddMember(true_type, "adjust-to-utc", true);
+      AddMember(true_type, field::kType, "long");
+      AddMember(true_type, field::kLogicalType, "timestamp-nanos");
+      AddMember(true_type, field::kAdjustToUtc, true);
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -190,14 +196,14 @@ class Serializer {
     {
       rapidjson::Value true_type(rapidjson::kObjectType);
 
-      AddMember(true_type, "type", "fixed");
+      AddMember(true_type, field::kType, "fixed");
       AddMember(true_type, "size", MinimumBytesToStoreDecimal(node->precision_));
       AddMember(true_type, "name", "decimal_" + std::to_string(node->precision_) + "_" + std::to_string(node->scale_));
-      AddMember(true_type, "logicalType", "decimal");
+      AddMember(true_type, field::kLogicalType, "decimal");
       AddMember(true_type, "precision", node->precision_);
       AddMember(true_type, "scale", node->scale_);
 
-      result.AddMember("type", std::move(true_type), allocator_);
+      AddMember(result, field::kType, std::move(true_type));
     }
 
     return result;
@@ -206,21 +212,21 @@ class Serializer {
   rapidjson::Value Serialize(std::shared_ptr<LongNode> node) {
     rapidjson::Value result(rapidjson::kObjectType);
 
-    AddMember(result, "type", "long");
+    AddMember(result, field::kType, "long");
     return result;
   }
 
   rapidjson::Value Serialize(std::shared_ptr<StringNode> node) {
     rapidjson::Value result(rapidjson::kObjectType);
 
-    AddMember(result, "type", "string");
+    AddMember(result, field::kType, "string");
     return result;
   }
 
   rapidjson::Value Serialize(std::shared_ptr<BytesNode> node) {
     rapidjson::Value result(rapidjson::kObjectType);
 
-    AddMember(result, "type", "bytes");
+    AddMember(result, field::kType, "bytes");
     return result;
   }
 
@@ -245,11 +251,11 @@ class Serializer {
     {
       rapidjson::Value type_result(rapidjson::kObjectType);
 
-      AddMember(type_result, "type", "record");
+      AddMember(type_result, field::kType, "record");
       AddMember(type_result, "name", node->name_);
       AddMember(type_result, "fields", node->fields_);
 
-      result.AddMember("type", std::move(type_result), allocator_);
+      AddMember(result, field::kType, std::move(type_result));
     }
     return result;
   }
@@ -260,16 +266,16 @@ class Serializer {
                     std::string(__PRETTY_FUNCTION__) + ": internal error. OptionalNode child must be an object");
 
     rapidjson::GenericObject object = result.GetObject();
-    iceberg::Ensure(object.HasMember("type"),
+    iceberg::Ensure(object.HasMember(field::kType.data()),
                     std::string(__PRETTY_FUNCTION__) + ": internal error. OptionalNode child must has field 'type'");
 
     rapidjson::Value possible_types(rapidjson::kArrayType);
     possible_types.PushBack("null", allocator_);
-    possible_types.PushBack(object.FindMember("type")->value, allocator_);
+    possible_types.PushBack(object.FindMember(field::kType.data())->value, allocator_);
 
-    result.EraseMember("type");
+    result.EraseMember(field::kType.data());
 
-    result.AddMember("type", std::move(possible_types), allocator_);
+    AddMember(result, field::kType, std::move(possible_types));
     result.AddMember("default", rapidjson::Value(), allocator_);
     return result;
   }
@@ -280,15 +286,15 @@ class Serializer {
                     std::string(__PRETTY_FUNCTION__) + ": internal error. ArrayNode element must be an object");
 
     rapidjson::GenericObject object = element.GetObject();
-    iceberg::Ensure(object.HasMember("type"),
+    iceberg::Ensure(object.HasMember(field::kType.data()),
                     std::string(__PRETTY_FUNCTION__) + ": internal error. ArrayNode element must has field 'type'");
 
     rapidjson::Value type_result(rapidjson::kObjectType);
-    type_result.AddMember("items", object.FindMember("type")->value, allocator_);
-    type_result.AddMember("type", "array", allocator_);
+    type_result.AddMember("items", object.FindMember(field::kType.data())->value, allocator_);
+    AddMember(type_result, field::kType, "array");
 
     rapidjson::Value result(rapidjson::kObjectType);
-    result.AddMember("type", std::move(type_result), allocator_);
+    AddMember(result, field::kType, std::move(type_result));
     return result;
   }
 
@@ -349,6 +355,8 @@ class Serializer {
 
   rapidjson::Value Serialize(std::same_as<bool> auto value) { return rapidjson::Value(value); }
 
+  rapidjson::Value Serialize(rapidjson::Value value) { return value; }
+
   template <typename T>
   void AddMember(rapidjson::Value& result, std::string_view name, T&& value) {
     result.AddMember(rapidjson::Value(name.data(), allocator_), Serialize(std::forward<T>(value)), allocator_);
@@ -364,10 +372,10 @@ std::string ToJsonString(std::shared_ptr<Node> node) {
   Serializer serializer;
   rapidjson::Value json_node = serializer.Serialize(node);
   iceberg::Ensure(json_node.IsObject(), std::string(__PRETTY_FUNCTION__) + ": internal error. Node must be an object");
-  iceberg::Ensure(json_node.HasMember("type"),
+  iceberg::Ensure(json_node.HasMember(field::kType.data()),
                   std::string(__PRETTY_FUNCTION__) + ": internal error. Node must has field 'type'");
 
-  rapidjson::Value& val = json_node.FindMember("type")->value;
+  rapidjson::Value& val = json_node.FindMember(field::kType.data())->value;
   rapidjson::StringBuffer buffer;
   rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
   val.Accept(writer);
