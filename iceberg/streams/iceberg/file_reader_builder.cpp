@@ -53,7 +53,7 @@ IcebergStreamPtr FileReaderBuilder::Build(const AnnotatedDataPath& annotated_dat
   std::shared_ptr<const parquet::FileMetaData> metadata = parquet_reader->metadata();
   Ensure(metadata != nullptr, std::string(__PRETTY_FUNCTION__) + ": metadata is nullptr");
 
-  std::vector<int> field_ids_required = [&]() {
+  const std::vector<int> field_ids_required = [&]() {
     auto field_ids_for_equality_delete = equality_deletes_->GetFieldIds(annotated_data_path.GetPartitionLayer());
 
     if (logger_) {
@@ -76,17 +76,21 @@ IcebergStreamPtr FileReaderBuilder::Build(const AnnotatedDataPath& annotated_dat
     return result;
   }();
 
-  std::vector<int> field_ids_for_filter;
-  if (row_filter_ != nullptr) {
-    field_ids_for_filter = row_filter_->GetInvolvedFieldIds();
-  }
-  std::sort(field_ids_for_filter.begin(), field_ids_for_filter.end());
-  field_ids_for_filter.erase(std::unique(field_ids_for_filter.begin(), field_ids_for_filter.end()),
-                             field_ids_for_filter.end());
+  const std::vector<int> field_ids_for_filter = [&]() {
+    if (row_filter_ == nullptr) {
+      return std::vector<int>{};
+    }
+    std::vector<int> result = row_filter_->GetInvolvedFieldIds();
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
+  }();
 
   // names are too long
-  [](std::vector<int>& a, std::vector<int>& b) {
-    a.erase(std::set_difference(a.begin(), a.end(), b.begin(), b.end(), a.begin()), a.end());
+  const std::vector<int> field_ids_for_data = [](const std::vector<int>& a, const std::vector<int>& b) {
+    std::vector<int> result;
+    std::set_difference(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(result));
+    return result;
   }(field_ids_required, field_ids_for_filter);
 
   const std::vector<int> row_groups_matching_offsets =
@@ -119,7 +123,7 @@ IcebergStreamPtr FileReaderBuilder::Build(const AnnotatedDataPath& annotated_dat
     logger_->Log(std::to_string(skipped_row_groups), "metrics:row_groups:skipped");
   }
 
-  auto data_stream = MakeFinalStream(arrow_reader, matching_row_groups, metadata, field_ids_required);
+  auto data_stream = MakeFinalStream(arrow_reader, matching_row_groups, metadata, field_ids_for_data);
   auto filter_stream = MakeFinalStream(arrow_reader, matching_row_groups, metadata, field_ids_for_filter);
   return std::make_shared<FilteringStream>(filter_stream, data_stream, row_filter_,
                                            annotated_data_path.GetPartitionLayerFile(), logger_);

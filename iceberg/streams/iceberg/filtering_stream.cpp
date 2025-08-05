@@ -21,19 +21,24 @@ std::shared_ptr<IcebergBatch> FilteringStream::ReadNext() {
     auto batch_filter = filter_stream_->ReadNext();
     if (batch_filter == nullptr) {
       if (logger_) {
-        logger_->Log(std::to_string(rows_skipped_), "metrics:rows:skipped");
+        logger_->Log(std::to_string(rows_skipped_), "metrics:rows:filtered_out");
       }
       return nullptr;
     }
-
     auto selection_vector = row_filter_->ApplyFilter(batch_filter);
     if (selection_vector.Size() == 0) {
       rows_skipped_ += batch_filter->GetRecordBatch()->num_rows();
       continue;
     }
     while (rows_skipped_ > 0) {
-      rows_skipped_ -= data_stream_->ReadNext()->GetRecordBatch()->num_rows();
+      auto batch_data = data_stream_->ReadNext();
+      Ensure(batch_data != nullptr,
+             std::string(__PRETTY_FUNCTION__) + ": internal error. data_stream has ended before filter_stream");
+      rows_skipped_ -= batch_data->GetRecordBatch()->num_rows();
     }
+    Ensure(rows_skipped_ == 0, std::string(__PRETTY_FUNCTION__) +
+                                   ": internal error. data_stream batch sizes don't match filter_stream batch sizes.");
+
     auto batch_data = data_stream_->ReadNext();
     auto result_batch = Concatenate(batch_data, batch_filter);
 

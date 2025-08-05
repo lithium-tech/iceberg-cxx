@@ -17,7 +17,11 @@ class MockFilter : public ice_filter::IRowFilter {
       ++ind;
       return SelectionVector<int32_t>({});
     }
-    return SelectionVector<int32_t>(batch->GetRecordBatch()->num_rows());
+    std::vector<int32_t> indices;
+    for (int i = 0; i < batch->GetRecordBatch()->num_rows(); i += 2) {
+      indices.push_back(i);
+    }
+    return SelectionVector<int32_t>(indices);
   }
 
  private:
@@ -49,7 +53,7 @@ class CountingStream : public MockStream {
 
   std::shared_ptr<ArrowBatchWithRowPosition> ReadNext() override {
     ++cnt_;
-    return static_cast<MockStream*>(this)->ReadNext();
+    return MockStream::ReadNext();
   }
 
   int GetCounter() const { return cnt_; }
@@ -58,7 +62,7 @@ class CountingStream : public MockStream {
   int cnt_ = 0;
 };
 
-TEST(FilteringStreamTest, BatchesHaveSameSizes) {
+TEST(FilteringStreamTest, Concatenate) {
   auto batch = std::make_shared<ArrowBatchWithRowPosition>(MakeBatch({MakeInt32ArrowColumn({0})}, {"a"}), 0);
   auto batch_with_different_row_position =
       std::make_shared<ArrowBatchWithRowPosition>(MakeBatch({MakeInt32ArrowColumn({1})}, {"b"}), 1);
@@ -76,6 +80,40 @@ TEST(FilteringStreamTest, BatchesHaveSameSizes) {
   EXPECT_EQ(concatenated_batch->GetRecordBatch()->num_columns(), 2);
   EXPECT_TRUE(concatenated_batch->GetRecordBatch()->GetColumnByName("d")->Equals(MakeStringArrowColumn({&str})));
   EXPECT_TRUE(concatenated_batch->GetRecordBatch()->GetColumnByName("a")->Equals(MakeInt32ArrowColumn({0})));
+}
+
+TEST(FilteringStreamTest, Correctness) {
+  std::vector filter_batches = {
+      std::make_shared<ArrowBatchWithRowPosition>(MakeBatch({MakeInt32ArrowColumn({0})}, {"a"}), 0),
+      std::make_shared<ArrowBatchWithRowPosition>(MakeBatch({MakeInt32ArrowColumn({1, 2})}, {"a"}), 1),
+      std::make_shared<ArrowBatchWithRowPosition>(MakeBatch({MakeInt32ArrowColumn({3, 4})}, {"a"}), 3)};
+
+  std::vector data_batches = {
+      std::make_shared<ArrowBatchWithRowPosition>(MakeBatch({MakeInt32ArrowColumn({5})}, {"b"}), 0),
+      std::make_shared<ArrowBatchWithRowPosition>(MakeBatch({MakeInt32ArrowColumn({6, 7})}, {"b"}), 1),
+      std::make_shared<ArrowBatchWithRowPosition>(MakeBatch({MakeInt32ArrowColumn({8, 9})}, {"b"}), 3)};
+
+  auto filter_stream = std::make_shared<CountingStream>(std::move(filter_batches));
+  auto data_stream = std::make_shared<CountingStream>(std::move(data_batches));
+
+  auto row_filter = std::make_shared<MockFilter>(std::vector<int32_t>{}, std::vector<int32_t>{0, 2});
+
+  auto result_stream = std::make_shared<FilteringStream>(filter_stream, data_stream, row_filter,
+                                                         PartitionLayerFile(PartitionLayer(0, 0), ""));
+  auto batch1 = result_stream->ReadNext();
+  ASSERT_TRUE(batch1);
+
+  EXPECT_EQ(batch1->GetRecordBatch()->num_columns(), 2);
+  EXPECT_TRUE(batch1->GetRecordBatch()->GetColumnByName("a")->Equals(*MakeInt32ArrowColumn({1, 2})));
+  EXPECT_TRUE(batch1->GetRecordBatch()->GetColumnByName("b")->Equals(*MakeInt32ArrowColumn({6, 7})));
+
+  EXPECT_EQ(batch1->GetSelectionVector().GetVector(), std::vector<int32_t>{0});
+
+  auto batch2 = result_stream->ReadNext();
+  EXPECT_EQ(batch2, nullptr);
+
+  EXPECT_EQ(filter_stream->GetCounter(), 4);  // 3 for batches + 1 for last nullptr
+  EXPECT_EQ(data_stream->GetCounter(), 2);
 }
 
 }  // namespace

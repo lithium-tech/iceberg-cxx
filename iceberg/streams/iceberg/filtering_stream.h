@@ -11,6 +11,7 @@ class FilteringStream : public IcebergStream {
   FilteringStream(StreamPtr<ArrowBatchWithRowPosition> filter_stream, StreamPtr<ArrowBatchWithRowPosition> data_stream,
                   std::shared_ptr<const ice_filter::IRowFilter> row_filter,
                   const PartitionLayerFile& partition_layer_file, std::shared_ptr<ILogger> logger = nullptr);
+
   std::shared_ptr<IcebergBatch> ReadNext() override;
 
  private:
@@ -20,7 +21,7 @@ class FilteringStream : public IcebergStream {
   const PartitionLayerFile partition_layer_file_;
   std::shared_ptr<ILogger> logger_;
 
-  int64_t rows_skipped_;
+  int64_t rows_skipped_ = 0;
 };
 
 std::shared_ptr<ArrowBatchWithRowPosition> Concatenate(std::shared_ptr<ArrowBatchWithRowPosition> a,

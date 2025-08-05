@@ -23,6 +23,16 @@
 
 namespace iceberg {
 
+class PassThroughFilter : public iceberg::ice_filter::IRowFilter {
+ public:
+  explicit PassThroughFilter() : iceberg::ice_filter::IRowFilter({}) {}
+
+  iceberg::SelectionVector<int32_t> ApplyFilter(
+      std::shared_ptr<iceberg::ArrowBatchWithRowPosition> batch) const override {
+    return iceberg::SelectionVector<int32_t>(batch->GetRecordBatch()->num_rows());
+  }
+};
+
 // TODO(gmusya): maybe extract some private methods into functions
 class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
  public:
@@ -41,6 +51,9 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
     Ensure(file_reader_provider_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
+    if (row_filter_ == nullptr) {
+      row_filter_ = std::make_shared<PassThroughFilter>();
+    }
   }
 
   IcebergStreamPtr Build(const AnnotatedDataPath& annotated_data_path) override;
