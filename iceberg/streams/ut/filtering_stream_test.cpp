@@ -109,6 +109,9 @@ TEST(FilteringStreamTest, Correctness) {
 
   EXPECT_EQ(batch1->GetSelectionVector().GetVector(), std::vector<int32_t>{0});
 
+  EXPECT_EQ(filter_stream->GetCounter(), 2);
+  EXPECT_EQ(data_stream->GetCounter(), 2);
+
   auto batch2 = result_stream->ReadNext();
   EXPECT_EQ(batch2, nullptr);
 
