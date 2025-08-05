@@ -1,6 +1,5 @@
 #include "iceberg/streams/iceberg/file_reader_builder.h"
 
-<<<<<<< HEAD
 #include <map>
 
 #include "iceberg/streams/arrow/file_reader.h"
@@ -30,10 +29,7 @@ std::shared_ptr<StreamAwareLogger> MakeStreamAwareLogger(std::shared_ptr<ILogger
     return nullptr;
   }
   return std::make_shared<StreamAwareLogger>(logger, std::move(stream_name));
-=======
-namespace iceberg {
-
-namespace {
+}
 
 void InsertOrFail(std::unordered_map<int, int>& mp, int key, int value) {
   const bool inserted = mp.insert(std::make_pair(key, value)).second;
@@ -62,17 +58,15 @@ std::unordered_map<int, int> MakeFieldIdToIndexMap(const parquet::schema::GroupN
     }
   }
   return field_id_to_index;
->>>>>>> f71e736 (tmp)
 }
 
 }  // namespace
 
-<<<<<<< HEAD
 StreamPtr<ArrowBatchWithRowPosition> FileReaderBuilder::MakeFinalStream(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader, const std::vector<int>& matching_row_groups,
     std::shared_ptr<const parquet::FileMetaData> metadata, const std::vector<int>& field_ids,
     std::shared_ptr<ILogger> logger) {
-  const auto cols = GetColumnPositionsToRetrieveByFieldIds(*metadata, field_ids);
+  const auto cols = GetParquetColumnInfos(*metadata, field_ids);
 
   std::vector<int> col_positions;
   for (const auto& col : cols) {
@@ -191,7 +185,8 @@ IcebergStreamPtr FileReaderBuilder::Build(const AnnotatedDataPath& annotated_dat
                                        MakeStreamAwareLogger(logger_, "filter_stream"));
   return std::make_shared<FilteringStream>(filter_stream, data_stream, row_filter_,
                                            annotated_data_path.GetPartitionLayerFile(), logger_);
-=======
+}
+
 std::vector<FileReaderBuilder::ParquetColumnInfo> FileReaderBuilder::GetParquetColumnInfos(
     const parquet::FileMetaData& metadata, const std::vector<int>& field_ids) const {
   const auto& schema = metadata.schema();
@@ -246,7 +241,6 @@ std::vector<int> FileReaderBuilder::GetRowGroupsToRetrieve(const parquet::FileMe
     }
   }
   return row_groups_to_process;
->>>>>>> f71e736 (tmp)
 }
 
 }  // namespace iceberg
