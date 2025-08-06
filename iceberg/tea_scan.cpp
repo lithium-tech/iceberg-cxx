@@ -1,5 +1,6 @@
 #include "iceberg/tea_scan.h"
 
+#include <chrono>
 #include <deque>
 #include <iterator>
 #include <memory>
@@ -7,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -18,10 +20,12 @@
 #include "iceberg/common/threadpool.h"
 #include "iceberg/experimental_representations.h"
 #include "iceberg/manifest_entry.h"
+#include "iceberg/manifest_entry_stats_getter.h"
 #include "iceberg/manifest_file.h"
 #include "iceberg/result.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"
+#include "iceberg/transforms.h"
 #include "iceberg/type.h"
 
 namespace iceberg::ice_tea {
@@ -124,6 +128,7 @@ std::string SerializePartitionTuple(const DataFile::PartitionTuple& partition_tu
   return result;
 }
 
+<<<<<<< HEAD
 std::vector<ManifestFile> GetManifestFiles(std::shared_ptr<arrow::fs::FileSystem> fs,
                                            const std::string& manifest_list_path) {
   const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
@@ -139,6 +144,136 @@ void AddSequenceNumberOrFail(const ManifestFile& manifest, ManifestEntry& entry)
   Ensure(entry.sequence_number.has_value(),
          "No sequence_number in iceberg::ManifestEntry for data file " + entry.data_file.file_path);
 }
+=======
+int ConvertToInt(const std::vector<uint8_t>& value) {
+  Ensure(value.size() == sizeof(int), std::string(__PRETTY_FUNCTION__) + ": byte array size doesn't match");
+  int res;
+  std::memcpy(&res, value.data(), sizeof(int));
+  return res;
+}
+
+int YearsToDays(int years) {
+  const int max_days_per_year = 366;
+  Ensure(years <= std::numeric_limits<int>::max() / max_days_per_year &&
+             years >= std::numeric_limits<int>::min() / max_days_per_year,
+         std::string(__PRETTY_FUNCTION__) + ": days can overflow");
+  auto start = std::chrono::sys_days{std::chrono::year(1970) / 1 / 1};
+  auto end = start + std::chrono::years(years);
+  auto duration = end - start;
+  return std::chrono::duration_cast<std::chrono::days>(duration).count();
+}
+
+int MonthsToDays(int months) {
+  const int max_days_per_month = 31;
+  Ensure(months <= std::numeric_limits<int>::max() / max_days_per_month &&
+             months >= std::numeric_limits<int>::min() / max_days_per_month,
+         std::string(__PRETTY_FUNCTION__) + ": days can overflow");
+  auto start = std::chrono::sys_days{std::chrono::year(1970) / 1 / 1};
+  auto end = start + std::chrono::months(months);
+  auto duration = end - start;
+  return std::chrono::duration_cast<std::chrono::days>(duration).count();
+}
+
+int DaysToHours(int days) {
+  const int hours_per_day = 24;
+  Ensure(days <= std::numeric_limits<int>::max() / hours_per_day &&
+             days >= std::numeric_limits<int>::min() / hours_per_day,
+         std::string(__PRETTY_FUNCTION__) + ": hours will overflow");
+  return days * hours_per_day;
+}
+
+int64_t HoursToMicros(int64_t hours) {
+  const int64_t micros_per_hour = 3600ll * 1000000ll;
+  Ensure(hours <= std::numeric_limits<int64_t>::max() / micros_per_hour &&
+             hours >= std::numeric_limits<int64_t>::min() / micros_per_hour,
+         std::string(__PRETTY_FUNCTION__) + ": micros will overflow");
+  return hours * micros_per_hour;
+}
+
+class ManifestFileStatsGetter : public filter::IStatsGetter {
+ public:
+  ManifestFileStatsGetter(const std::unordered_map<std::string, TypeID>& name_to_type,
+                          std::unordered_map<std::string, int>&& name_to_position,
+                          const std::vector<PartitionFieldSummary>& partitions, std::shared_ptr<PartitionSpec> spec)
+      : name_to_type_(name_to_type),
+        name_to_position_(std::move(name_to_position)),
+        partitions_(partitions),
+        spec_(spec) {
+    Ensure(spec != nullptr, std::string(__PRETTY_FUNCTION__) + ": spec is nullptr");
+  }
+
+  std::optional<filter::GenericStats> GetStats(const std::string& column_name,
+                                               filter::ValueType value_type) const override {
+    auto it = name_to_position_.find(column_name);
+    if (it == name_to_position_.end()) {
+      return std::nullopt;
+    }
+    const auto position = it->second;
+    Ensure(position >= 0 && position < partitions_.size(), std::string(__PRETTY_FUNCTION__) + ": invalid position");
+
+    const auto ice_type = [&]() {
+      auto it2 = name_to_type_.find(column_name);
+      Ensure(it2 != name_to_type_.end(), std::string(__PRETTY_FUNCTION__) + ": type not found");
+      return it2->second;
+    }();
+
+    if (spec_->fields[position].transform == identity_transform_prefix) {
+      auto maybe_conversion = TypesToStatsConverter(ice_type, value_type);
+      if (!maybe_conversion) {
+        return std::nullopt;
+      }
+
+      auto minmax_after_transform =
+          maybe_conversion(partitions_[position].lower_bound, partitions_[position].upper_bound);
+
+      if (!minmax_after_transform.has_value()) {
+        return std::nullopt;
+      }
+
+      return filter::GenericStats(std::move(*minmax_after_transform));
+    }
+
+    int minimum = ConvertToInt(partitions_[position].lower_bound);
+    int maximum = ConvertToInt(partitions_[position].upper_bound);
+    if (spec_->fields[position].transform == year_transform_prefix) {
+      minimum = YearsToDays(minimum);
+      maximum = YearsToDays(maximum + 1);
+    }
+    if (spec_->fields[position].transform == month_transform_prefix) {
+      minimum = MonthsToDays(minimum);
+      maximum = MonthsToDays(maximum + 1);
+    }
+    if (value_type == filter::ValueType::kDate) {
+      return filter::GenericStats(filter::GenericMinMaxStats::Make<filter::ValueType::kDate>(minimum, maximum));
+    }
+    int64_t micros_min;
+    int64_t micros_max;
+    if (spec_->fields[position].transform == hour_transform_prefix) {
+      micros_min = HoursToMicros(minimum);
+      micros_max = HoursToMicros(maximum + 1);
+    } else {
+      micros_min = HoursToMicros(DaysToHours(minimum));
+      micros_max = HoursToMicros(DaysToHours(maximum));
+    }
+    switch (value_type) {
+      case filter::ValueType::kTimestamp:
+        return filter::GenericStats(
+            filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamp>(micros_min, micros_max));
+      case filter::ValueType::kTimestamptz:
+        return filter::GenericStats(
+            filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamptz>(micros_min, micros_max));
+      default:
+        throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unknown filter::ValueType");
+    }
+  }
+
+ private:
+  const std::unordered_map<std::string, TypeID>& name_to_type_;
+  std::unordered_map<std::string, int> name_to_position_;
+  const std::vector<PartitionFieldSummary>& partitions_;
+  std::shared_ptr<PartitionSpec> spec_;
+};
+>>>>>>> fd541a2 (v1)
 
 }  // namespace
 
@@ -304,13 +439,85 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
 
 using SequenceNumber = int64_t;
 
+std::queue<ManifestFile> FilterManifests(std::shared_ptr<filter::StatsFilter> stats_filter,
+                                         std::shared_ptr<iceberg::Schema> schema,
+                                         const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
+                                         std::vector<ManifestFile>& manifest_metadatas) {
+  std::unordered_map<int, int> spec_id_to_position;
+  for (int i = 0; i < partition_specs.size(); ++i) {
+    spec_id_to_position[partition_specs[i]->spec_id] = i;
+  }
+
+  std::unordered_map<int, std::string> field_id_to_name;
+  std::unordered_map<std::string, TypeID> name_to_type;
+
+  const std::unordered_set<std::string_view> allowed_transforms = {
+      Transforms::kIdentity, Transforms::kHour, Transforms::kDay, Transforms::kMonth, Transforms::kYear};
+
+  for (const auto& column : schema->Columns()) {
+    field_id_to_name[column.field_id] = column.name;
+    name_to_type[column.name] = column.type->TypeId();
+  }
+
+  std::queue<ManifestFile> result;
+  for (auto& manifest : manifest_metadatas) {
+    auto partition_spec = [&]() {
+      auto it = spec_id_to_position.find(manifest.partition_spec_id);
+      Ensure(it != spec_id_to_position.end(), std::string(__PRETTY_FUNCTION__) + ": partition spec id is not found");
+      return partition_specs[it->second];
+    }();
+
+    bool only_allowed_transforms = true;
+    for (const auto& field : partition_spec->fields) {
+      only_allowed_transforms &= allowed_transforms.contains(field.transform);
+    }
+
+    if (!only_allowed_transforms) {
+      result.push(std::move(manifest));
+      continue;
+    }
+
+    std::unordered_map<std::string, int> name_to_position;
+    for (size_t i = 0; i < partition_spec->fields.size(); ++i) {
+      const auto& field = partition_spec->fields[i];
+      auto it = field_id_to_name.find(field.source_id);
+      Ensure(it != field_id_to_name.end(), std::string(__PRETTY_FUNCTION__) + ": partition source id is not found");
+      name_to_position[it->second] = i;
+    }
+
+    ManifestFileStatsGetter stats_getter(name_to_type, std::move(name_to_position), manifest.partitions,
+                                         partition_spec);
+
+    if (stats_filter->ApplyFilter(stats_getter) != filter::MatchedRows::kNone) {
+      result.push(std::move(manifest));
+    }
+  }
+  return result;
+}
+
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
     std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& manifest_list_path, bool use_reader_schema,
     const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, std::shared_ptr<iceberg::Schema> schema,
+<<<<<<< HEAD
     const ManifestEntryDeserializerConfig& config) {
   auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
   std::queue<ManifestFile> manifest_files_queue(std::deque<ManifestFile>(
       std::make_move_iterator(manifest_metadatas.begin()), std::make_move_iterator(manifest_metadatas.end())));
+=======
+    std::shared_ptr<filter::StatsFilter> stats_filter, const ManifestEntryDeserializerConfig& config) {
+  const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
+
+  std::stringstream ss(manifest_metadatas_content);
+  std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
+
+  std::queue<ManifestFile> manifest_files_queue = [&]() {
+    if (stats_filter != nullptr && schema != nullptr) {
+      return FilterManifests(stats_filter, schema, partition_specs, manifest_metadatas);
+    }
+    return std::queue<ManifestFile>(std::deque<ManifestFile>(std::make_move_iterator(manifest_metadatas.begin()),
+                                                             std::make_move_iterator(manifest_metadatas.end())));
+  }();
+>>>>>>> fd541a2 (v1)
 
   return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue), use_reader_schema, partition_specs,
                                             schema, config);
@@ -319,11 +526,12 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
                                                          bool use_reader_schema,
+                                                         std::shared_ptr<filter::StatsFilter> stats_filter,
                                                          const ManifestEntryDeserializerConfig& config) {
   const std::string manifest_list_path = table_metadata->GetCurrentManifestListPathOrFail();
 
   return AllEntriesStream::Make(fs, manifest_list_path, use_reader_schema, table_metadata->partition_specs,
-                                table_metadata->GetCurrentSchema(), config);
+                                table_metadata->GetCurrentSchema(), stats_filter, config);
 }
 
 std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
@@ -364,7 +572,12 @@ arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
+<<<<<<< HEAD
                                             uint32_t threads_num, const GetScanMetadataConfig& config) {
+=======
+                                            std::shared_ptr<filter::StatsFilter> stats_filter,
+                                            const GetScanMetadataConfig& config) {
+>>>>>>> fd541a2 (v1)
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
@@ -374,6 +587,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
     return arrow::Status::ExecutionError("GetScanMetadata: failed to parse metadata " + metadata_location +
                                          " (failed to get schema)");
   }
+<<<<<<< HEAD
   if (threads_num == 0) {
     auto entries_stream =
         AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
@@ -382,6 +596,12 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   }
   return GetScanMetadataMultiThreaded(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
                                       threads_num, config.manifest_entry_deserializer_config);
+=======
+  auto entries_stream =
+      AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
+                             stats_filter, config.manifest_entry_deserializer_config);
+  return GetScanMetadata(*entries_stream, *table_metadata);
+>>>>>>> fd541a2 (v1)
 }
 
 class ScanMetadataBuilder {

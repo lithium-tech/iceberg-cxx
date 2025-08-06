@@ -32,6 +32,40 @@ class ReplacingFilesystem : public FileSystemWrapper {
   }
 };
 
+template <filter::ValueType value_type>
+std::shared_ptr<filter::StatsFilter> MakeGEFilter(const std::string& column_name,
+                                                  filter::PhysicalType<value_type> value) {
+  auto const_node = std::make_shared<filter::ConstNode>(filter::Value::Make<value_type>(value));
+  auto variable_node = std::make_shared<filter::VariableNode>(value_type, column_name);
+  filter::FunctionSignature signature = {
+      filter::FunctionID::kGreaterThanOrEqualTo, filter::ValueType::kBool, {value_type, value_type}};
+  auto final_node = std::make_shared<filter::FunctionNode>(std::move(signature),
+                                                           std::vector<filter::NodePtr>{variable_node, const_node});
+  return std::make_shared<filter::StatsFilter>(final_node, filter::StatsFilter::Settings{});
+}
+
+template <filter::ValueType value_type>
+std::shared_ptr<filter::StatsFilter> MakeLEFilter(const std::string& column_name,
+                                                  filter::PhysicalType<value_type> value) {
+  auto const_node = std::make_shared<filter::ConstNode>(filter::Value::Make<value_type>(value));
+  auto variable_node = std::make_shared<filter::VariableNode>(value_type, column_name);
+  filter::FunctionSignature signature = {
+      filter::FunctionID::kLessThanOrEqualTo, filter::ValueType::kBool, {value_type, value_type}};
+  auto final_node = std::make_shared<filter::FunctionNode>(std::move(signature),
+                                                           std::vector<filter::NodePtr>{variable_node, const_node});
+  return std::make_shared<filter::StatsFilter>(final_node, filter::StatsFilter::Settings{});
+}
+
+class PartitionPruningTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    fs_ = std::make_shared<arrow::fs::LocalFileSystem>();
+    fs_ = std::make_shared<ReplacingFilesystem>(fs_);
+  }
+
+  std::shared_ptr<arrow::fs::FileSystem> fs_;
+};
+
 TEST(GetScanMetadata, WithPartitionSpecs) {
   std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
   fs = std::make_shared<ReplacingFilesystem>(fs);
@@ -290,6 +324,135 @@ TEST(GetScanMetadata, EqualityScanMetadataWithMultipleSegments) {
 
   EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta2));
   EXPECT_TRUE(experimental::AreScanMetadataEqual(scan_meta1, scan_meta3));
+}
+
+TEST_F(PartitionPruningTest, YearTimestamp) {
+  std::ifstream input(
+      "tables/year_timestamp_partitioning/metadata/"
+      "00002-ac56aa65-6214-44b3-bb0f-86728eb58d8b.metadata.json");
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+
+  auto filterGE = MakeGEFilter<filter::ValueType::kTimestamp>("c2", 1767225601000000ll);  // 2026.01.01 00:00:01
+  auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
+  {
+    auto maybe_manifest_entry = streamGE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+
+  auto filterLE = MakeLEFilter<filter::ValueType::kTimestamp>("c2", 1704067199000000ll);  // 2023.12.31 23:59:59
+  auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+  {
+    auto maybe_manifest_entry = streamLE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+
+  auto pass_through_filter =
+      MakeLEFilter<filter::ValueType::kTimestamp>("c2", 1767225600000000ll);  // 2026.01.01 00:00:00
+  auto stream = ice_tea::AllEntriesStream::Make(fs_, metadata, false, pass_through_filter);
+  {
+    auto maybe_manifest_entry = stream->ReadNext();
+    EXPECT_TRUE(maybe_manifest_entry.has_value());
+  }
+}
+
+TEST_F(PartitionPruningTest, YearTimestamptz) {
+  std::ifstream input(
+      "tables/year_timestamptz_partitioning/metadata/"
+      "00002-d52e2c04-065b-4d14-98bb-ec47abcd1597.metadata.json");
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+
+  auto filterGE = MakeGEFilter<filter::ValueType::kTimestamptz>("c2", 1767225601000000ll);  // 2026.01.01 00:00:01
+  auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
+  {
+    auto maybe_manifest_entry = streamGE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+
+  auto filterLE = MakeLEFilter<filter::ValueType::kTimestamptz>("c2", 1704067199000000ll);  // 2023.12.31 23:59:59
+  auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+  {
+    auto maybe_manifest_entry = streamLE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+}
+
+TEST_F(PartitionPruningTest, MonthTimestamptz) {
+  std::ifstream input(
+      "tables/month_timestamptz_partitioning/metadata/00002-f44ed222-470e-4e33-b813-6646d434b185.metadata.json");
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+
+  auto filterGE = MakeGEFilter<filter::ValueType::kTimestamptz>("c2", 1743465601000000ll);  // 2025.04.01 00:00:01
+  auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
+  {
+    auto maybe_manifest_entry = streamGE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+
+  auto filterLE = MakeLEFilter<filter::ValueType::kTimestamptz>("c2", 1709251199000000ll);  // 2024.02.29 23:59:59
+  auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+  {
+    auto maybe_manifest_entry = streamLE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+}
+
+TEST_F(PartitionPruningTest, DayTimestamptz) {
+  std::ifstream input(
+      "tables/day_timestamptz_partitioning/metadata/00002-bf5ed300-c344-41fe-87ad-0d1190705bf9.metadata.json");
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+
+  auto filterGE = MakeGEFilter<filter::ValueType::kTimestamptz>("c2", 1741046401000000ll);  // 2025.03.04 00:00:01
+  auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
+  {
+    auto maybe_manifest_entry = streamGE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+
+  auto filterLE = MakeLEFilter<filter::ValueType::kTimestamptz>("c2", 1709423999000000ll);  // 2024.03.02 23:59:59
+  auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+  {
+    auto maybe_manifest_entry = streamLE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+}
+
+TEST_F(PartitionPruningTest, HourTimestamptz) {
+  std::ifstream input(
+      "tables/hour_timestamptz_partitioning/metadata/00002-aa3a65d9-0e43-452c-a96f-2ec0194f0104.metadata.json");
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+
+  auto filterGE = MakeGEFilter<filter::ValueType::kTimestamptz>("c2", 1741046401000000ll);  // 2025.03.04 00:00:01
+  auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
+  {
+    auto maybe_manifest_entry = streamGE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+
+  auto filterLE = MakeLEFilter<filter::ValueType::kTimestamptz>("c2", 1709506799000000ll);  // 2023.03.03 22:59:59
+  auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+  {
+    auto maybe_manifest_entry = streamLE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+}
+
+TEST_F(PartitionPruningTest, Identity) {
+  std::ifstream input("tables/identity_partitioning/metadata/00002-30bff4d8-0c4f-46a9-8e7a-ebea458dbb1d.metadata.json");
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+
+  auto filterGE = MakeGEFilter<filter::ValueType::kDate>("col_date", 20151);  // 2025.03.04
+  auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
+  {
+    auto maybe_manifest_entry = streamGE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+
+  auto filterLE = MakeLEFilter<filter::ValueType::kString>("col_string", "rome-string");
+  auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+  {
+    auto maybe_manifest_entry = streamLE->ReadNext();
+    EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
 }
 
 }  // namespace

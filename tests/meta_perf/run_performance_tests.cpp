@@ -69,7 +69,11 @@ void run_manifest_entries(std::shared_ptr<arrow::fs::FileSystem> fs, const int t
         fs,
         "s3://warehouse/performance/manifest_entries/metadata/"
         "00001-3e9c137d-3f3a-4d9f-ad3c-abd4911f4c9f.metadata.json",
+<<<<<<< HEAD
         [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, threads_num, config);
+=======
+        [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, config);
+>>>>>>> fd541a2 (v1)
     if (maybe_scan_metadata.status() != arrow::Status::OK()) {
       std::cerr << "run_manifest_entries failed" << std::endl;
       exit(1);
@@ -84,7 +88,11 @@ void run_manifest_entries_wide(std::shared_ptr<arrow::fs::FileSystem> fs, const 
         fs,
         "s3://warehouse/performance/manifest_entries_wide/metadata/"
         "00001-95d2fd1a-501a-4db4-a6b2-49c2d1a87e71.metadata.json",
+<<<<<<< HEAD
         [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, threads_num, config);
+=======
+        [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, config);
+>>>>>>> fd541a2 (v1)
     if (maybe_scan_metadata.status() != arrow::Status::OK()) {
       std::cerr << "run_manifest_entries_wide failed" << std::endl;
       exit(1);
@@ -98,7 +106,11 @@ void run_manifest_files(std::shared_ptr<arrow::fs::FileSystem> fs, const int tim
     auto maybe_scan_metadata = iceberg::ice_tea::GetScanMetadata(
         fs,
         "s3://warehouse/performance/manifest_files/metadata/00002-37c508a5-8a06-4823-845e-889dff066f72.metadata.json",
+<<<<<<< HEAD
         [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, threads_num, config);
+=======
+        [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, config);
+>>>>>>> fd541a2 (v1)
     if (maybe_scan_metadata.status() != arrow::Status::OK()) {
       std::cerr << "run_manifest_files failed" << std::endl;
       exit(1);
@@ -111,7 +123,11 @@ void run_schemas(std::shared_ptr<arrow::fs::FileSystem> fs, const int times, boo
   for (int _ = 0; _ < times; ++_) {
     auto maybe_scan_metadata = iceberg::ice_tea::GetScanMetadata(
         fs, "s3://warehouse/performance/schemas/metadata/00868-7a2e9a74-46be-4dd4-a81a-771445e15034.metadata.json",
+<<<<<<< HEAD
         [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, threads_num, config);
+=======
+        [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, config);
+>>>>>>> fd541a2 (v1)
     if (maybe_scan_metadata.status() != arrow::Status::OK()) {
       std::cerr << "run_schemas failed" << std::endl;
       exit(1);
@@ -124,7 +140,11 @@ void run_snapshots(std::shared_ptr<arrow::fs::FileSystem> fs, const int times, b
   for (int _ = 0; _ < times; ++_) {
     auto maybe_scan_metadata = iceberg::ice_tea::GetScanMetadata(
         fs, "s3://warehouse/performance/snapshots/metadata/01999-084000f2-7dd9-4e7c-adfd-24ec13d717c0.metadata.json",
+<<<<<<< HEAD
         [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, threads_num, config);
+=======
+        [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, config);
+>>>>>>> fd541a2 (v1)
     if (maybe_scan_metadata.status() != arrow::Status::OK()) {
       std::cerr << "run_snapshots failed" << std::endl;
       exit(1);
