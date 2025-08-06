@@ -1,6 +1,9 @@
 #include "iceberg/manifest_entry.h"
 
+#include <LogicalType.hh>
+#include <Node.hh>
 #include <cstdint>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <type_traits>
@@ -11,6 +14,7 @@
 #include "avro/Schema.hh"
 #include "avro/Types.hh"
 #include "avro/ValidSchema.hh"
+#include "iceberg/avro_schema.h"
 #include "iceberg/type.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/metadata.h"
@@ -18,6 +22,7 @@
 #include "rapidjson/document.h"
 
 namespace iceberg {
+using NodePtr = std::shared_ptr<iceavro::Node>;
 
 std::vector<int64_t> SplitOffsets(std::shared_ptr<parquet::FileMetaData> parquet_meta) {
   std::vector<int64_t> split_offsets;
@@ -375,6 +380,11 @@ class DataFileDeserializer {
                                                        config_.extract_upper_bounds);
     ExtractIf<DataFile::PartitionTuple>(record, "partition", data_file.partition_tuple,
                                         config_.extract_partition_tuple);
+    ExtractIf<std::map<int32_t, int64_t>>(record, "nan_value_counts", data_file.nan_value_counts,
+                                          config_.extract_nan_value_counts);
+    ExtractIf<std::map<int32_t, int64_t>>(record, "distinct_counts", data_file.distinct_counts,
+                                          config_.extract_distinct_counts);
+    // TODO(gmusya): this part is not covered by tests in iceberg-cxx. Fix
     ExtractIf<std::vector<int32_t>>(record, "equality_ids", data_file.equality_ids, config_.extract_equality_ids);
     return data_file;
   }
@@ -416,237 +426,246 @@ class ManifestEntryDeserializer {
   ManifestEntryDeserializerConfig config_;
 };
 
-void AddField(avro::RecordSchema& result_schema, const std::string& field_name, const avro::ValidSchema& field_schema,
-              const std::optional<std::string>& doc = std::nullopt) {
-  if (doc.has_value()) {
-    field_schema.root()->setDoc(*doc);
-  }
-  result_schema.root()->addName(field_name);
-  result_schema.root()->addLeaf(field_schema.root());
-}
-
-avro::ValidSchema MakeSchemaOptional(const avro::ValidSchema& schema) {
-  avro::UnionSchema result;
-  result.addType(avro::NullSchema());
-  result.root()->addLeaf(schema.root());
-  return avro::ValidSchema(result);
-}
-
-avro::ValidSchema MakeSchemaPair(const std::string& name, const avro::ValidSchema& key,
-                                 const avro::ValidSchema& other) {
-  avro::RecordSchema schema(name);
-  AddField(schema, "key", key);
-  AddField(schema, "value", other);
-  return avro::ValidSchema(schema);
-}
-
-avro::ValidSchema MakeSchemaArray(const avro::ValidSchema& element) {
-  avro::NodePtr arr(new avro::NodeArray);
-  arr->addLeaf(element.root());
-  return avro::ValidSchema(arr);
-}
-
-avro::ValidSchema MakeSchemaMap(const std::string& element_name, const avro::ValidSchema& key,
-                                const avro::ValidSchema& other) {
-  return MakeSchemaArray(MakeSchemaPair(element_name, key, other));
-}
-
-avro::ValidSchema MakeSchemaBool() { return avro::ValidSchema(avro::BoolSchema()); }
-avro::ValidSchema MakeSchemaInt() { return avro::ValidSchema(avro::IntSchema()); }
-avro::ValidSchema MakeSchemaDate() {
-  auto schema = avro::IntSchema();
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::DATE));
-  return avro::ValidSchema(schema);
-}
-avro::ValidSchema MakeSchemaTime() {
-  auto schema = avro::LongSchema();
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::TIME_MICROS));
-  return avro::ValidSchema(schema);
-}
-avro::ValidSchema MakeSchemaTimestamp() {
-  auto schema = avro::LongSchema();
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::TIMESTAMP_MICROS));
-  return avro::ValidSchema(schema);
-}
-
-avro::ValidSchema MakeSchemaTimestampNs() {
-  auto schema = avro::LongSchema();
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::TIMESTAMP_NANOS));
-  return avro::ValidSchema(schema);
-}
-
-constexpr int MinimumBytesToStoreDecimalUnsafe(int precision) {
-  int bytes = 1;
-  __uint128_t minimum_nonrepresentable_value =
-      (1 << 7);  // not (1 << 8) because both positive and negative values must be representable
-
-  const __uint128_t value_to_store = [precision]() {
-    __uint128_t result = 1;
-    for (int i = 0; i < precision; ++i) {
-      result *= 10;
-    }
-    return result;
-  }();
-
-  while (bytes < 16 && minimum_nonrepresentable_value <= value_to_store) {
-    ++bytes;
-    minimum_nonrepresentable_value *= (1 << 8);
-  }
-  return bytes;
-}
-static_assert(MinimumBytesToStoreDecimalUnsafe(1) == 1);
-static_assert(MinimumBytesToStoreDecimalUnsafe(9) == 4);
-static_assert(MinimumBytesToStoreDecimalUnsafe(10) == 5);
-static_assert(MinimumBytesToStoreDecimalUnsafe(18) == 8);
-static_assert(MinimumBytesToStoreDecimalUnsafe(19) == 9);
-static_assert(MinimumBytesToStoreDecimalUnsafe(38) == 16);
-
-constexpr int MinimumBytesToStoreDecimal(int precision) {
-  const int kMaxPrecision = 38;
-  if (precision > kMaxPrecision) {
-    throw std::runtime_error("MinimumBytesToStoreDecimal: precision is greater than " + std::to_string(kMaxPrecision) +
-                             " is not supported");
-  }
-  if (precision <= 0) {
-    throw std::runtime_error("MinimumBytesToStoreDecimal: precision is less than or equal to " + std::to_string(0) +
-                             " is not supported");
-  }
-  return MinimumBytesToStoreDecimalUnsafe(precision);
-}
-
-avro::ValidSchema MakeSchemaDecimal(int precision, int scale) {
-  auto schema = avro::FixedSchema(MinimumBytesToStoreDecimal(precision),
-                                  "decimal_" + std::to_string(precision) + "_" + std::to_string(scale));
-  avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
-  logical_type.setPrecision(precision);
-  logical_type.setScale(scale);
-  schema.root()->setLogicalType(logical_type);
-  return avro::ValidSchema(schema);
-}
-avro::ValidSchema MakeSchemaFixed(int size) { return avro::ValidSchema(avro::FixedSchema(size, "fixed")); }
-avro::ValidSchema MakeSchemaUuid() {
-  auto schema = avro::FixedSchema(16, "uuid_fixed");
-  schema.root()->setLogicalType(avro::LogicalType(avro::LogicalType::UUID));
-  return avro::ValidSchema(schema);
-}
-avro::ValidSchema MakeSchemaLong() { return avro::ValidSchema(avro::LongSchema()); }
-avro::ValidSchema MakeSchemaFloat() { return avro::ValidSchema(avro::FloatSchema()); }
-avro::ValidSchema MakeSchemaDouble() { return avro::ValidSchema(avro::DoubleSchema()); }
-avro::ValidSchema MakeSchemaString() { return avro::ValidSchema(avro::StringSchema()); }
-avro::ValidSchema MakeSchemaBytes() { return avro::ValidSchema(avro::BytesSchema()); }
-avro::ValidSchema MakeSchemaFixed(int size, const std::string& name) {
-  return avro::ValidSchema(avro::FixedSchema(size, name));
-}
-
-avro::ValidSchema MakeSchemaPartition(const std::vector<PartitionKeyField>& partition_spec) {
-  avro::RecordSchema schema("r102");
+NodePtr MakeSchemaPartition(const std::vector<PartitionKeyField>& partition_spec) {
+  // TODO(gmusya): support field ids
+  auto result = std::make_shared<iceavro::RecordNode>("r102", 102);
   for (const auto& field : partition_spec) {
     switch (field.type->TypeId()) {
       case TypeID::kBoolean:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaBool()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::BoolNode>()));
         break;
       case TypeID::kInt:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaInt()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::IntNode>()));
         break;
       case TypeID::kLong:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaLong()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::LongNode>()));
         break;
       case TypeID::kDate:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaDate()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::DateNode>()));
         break;
       case TypeID::kTime:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaTime()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::TimeNode>()));
         break;
-      // timestamp and timestamptz are same types for avro
-      case TypeID::kTimestamptz:
       case TypeID::kTimestamp:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaTimestamp()));
+        result->AddField(field.name,
+                         std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::TimestampNode>()));
         break;
-      // timestamp_ns and timestamptz_ns are same types for avro
-      case TypeID::kTimestamptzNs:
+      case TypeID::kTimestamptz:
+        result->AddField(field.name,
+                         std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::TimestamptzNode>()));
+        break;
       case TypeID::kTimestampNs:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaTimestampNs()));
+        result->AddField(field.name,
+                         std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::TimestampNsNode>()));
+        break;
+      case TypeID::kTimestamptzNs:
+        result->AddField(field.name,
+                         std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::TimestamptzNsNode>()));
         break;
       case TypeID::kDecimal: {
         auto decimal_type = std::static_pointer_cast<const types::DecimalType>(field.type);
-        AddField(schema, field.name,
-                 MakeSchemaOptional(MakeSchemaDecimal(decimal_type->Precision(), decimal_type->Scale())));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::DecimalNode>(
+                                         decimal_type->Precision(), decimal_type->Scale())));
         break;
       }
       case TypeID::kFixed: {
         auto fixed_type = std::static_pointer_cast<const types::FixedType>(field.type);
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaFixed(fixed_type->Size())));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(
+                                         std::make_shared<iceavro::FixedNode>(fixed_type->Size())));
         break;
       }
       case TypeID::kUuid:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaUuid()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::UuidNode>()));
         break;
       case TypeID::kString:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaString()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::StringNode>()));
         break;
       case TypeID::kBinary:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaBytes()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::BytesNode>()));
         break;
       case TypeID::kFloat:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaFloat()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::FloatNode>()));
         break;
       case TypeID::kDouble:
-        AddField(schema, field.name, MakeSchemaOptional(MakeSchemaDouble()));
+        result->AddField(field.name, std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::DoubleNode>()));
         break;
       default:
         throw std::runtime_error("Unexpected data iceberg::TypeID in partitioning: " +
                                  std::to_string(static_cast<int>(field.type->TypeId())));
     }
   }
-  return avro::ValidSchema(schema);
+  return result;
 }
 
-avro::ValidSchema MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec) {
-  avro::RecordSchema schema("r2");
-  AddField(schema, "file_path", MakeSchemaString());
-  AddField(schema, "file_format", MakeSchemaString());
-  AddField(schema, "content", MakeSchemaInt());
-  AddField(schema, "file_size_in_bytes", MakeSchemaLong());
-  AddField(schema, "record_count", MakeSchemaLong());
-  AddField(schema, "split_offsets", MakeSchemaOptional(MakeSchemaArray(MakeSchemaLong())));
-  AddField(schema, "equality_ids", MakeSchemaOptional(MakeSchemaArray(MakeSchemaInt())));
-  AddField(schema, "sort_order_id", MakeSchemaOptional(MakeSchemaInt()));
-  AddField(schema, "referenced_data_file", MakeSchemaOptional(MakeSchemaString()));
-  AddField(schema, "column_sizes", MakeSchemaOptional(MakeSchemaMap("k117_v118", MakeSchemaInt(), MakeSchemaLong())));
-  AddField(schema, "value_counts", MakeSchemaOptional(MakeSchemaMap("k119_v120", MakeSchemaInt(), MakeSchemaLong())));
-  AddField(schema, "null_value_counts",
-           MakeSchemaOptional(MakeSchemaMap("k121_v122", MakeSchemaInt(), MakeSchemaLong())));
-  AddField(schema, "lower_bounds", MakeSchemaOptional(MakeSchemaMap("k126_v127", MakeSchemaInt(), MakeSchemaBytes())));
-  AddField(schema, "upper_bounds", MakeSchemaOptional(MakeSchemaMap("k129_v130", MakeSchemaInt(), MakeSchemaBytes())));
-  AddField(schema, "partition", MakeSchemaPartition(partition_spec));
-  return avro::ValidSchema(schema);
+// TODO(gmusya): use field id
+#if 0
+namespace field_id {
+constexpr int32_t kContent = 134;
+constexpr int32_t kFilePath = 100;
+constexpr int32_t kFileFormat = 101;
+constexpr int32_t kPartition = 102;
+constexpr int32_t kRecordCount = 103;
+constexpr int32_t kFileSizeInBytes = 104;
+constexpr int32_t kColumnSizes = 108;
+constexpr int32_t kValueCounts = 109;
+constexpr int32_t kNullValueCounts = 110;
+constexpr int32_t kDistinctCounts = 111;
+constexpr int32_t kLowerBounds = 125;
+constexpr int32_t kUpperBounds = 128;
+constexpr int32_t kKeyMetadata = 131;
+constexpr int32_t kSplitOffsets = 132;
+constexpr int32_t kEqualityIds = 135;
+constexpr int32_t kNanValueCounts = 137;
+constexpr int32_t kSortOrderId = 140;
+constexpr int32_t kReferencedDataFile = 143;
+}  // namespace field_id
+#endif
+
+// Spec (https://iceberg.apache.org/spec/#avro) says
+// <<Optional fields, array elements, and map values must be wrapped in an Avro union with null.
+// This is the only union type allowed in Iceberg data files.>>
+// Nevertheless, the following fields can be found in metadata.
+////////////////////////////////////////////////////////////////////////////////
+// 1. Array example
+// {
+//     "name": "split_offsets",
+//     "type": [
+//         "null",
+//         {
+//             "type": "array",
+//             "items": "long"
+//         }
+//     ],
+//     "default": null
+// },
+// 2. Map example
+// {
+//     "name": "upper_bounds",
+//     "type": [
+//         "null",
+//         {
+//             "type": "array",
+//             "items": {
+//                 "type": "record",
+//                 "name": "k129_v130",
+//                 "fields": [
+//                     {
+//                         "name": "key",
+//                         "type": "int"
+//                     },
+//                     {
+//                         "name": "value",
+//                         "type": "bytes"
+//                     }
+//                 ]
+//             }
+//         }
+//     ],
+//     "default": null
+// }
+////////////////////////////////////////////////////////////////////////////////
+// The spec probably implies that if an array contains nullable elements, those elements must be wrapped in a union.
+// `split_offsets` and `upper_bounds` do not have optional elements, so there is no need to wrap them.
+
+NodePtr MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec,
+                           const ManifestEntryDeserializerConfig& cfg = {}) {
+  auto result = std::make_shared<iceavro::RecordNode>("r2");
+  result->AddField("content", std::make_shared<iceavro::IntNode>());
+  result->AddField("file_path", std::make_shared<iceavro::StringNode>());
+  result->AddField("file_format", std::make_shared<iceavro::StringNode>());
+  result->AddField("record_count", std::make_shared<iceavro::LongNode>());
+  result->AddField("file_size_in_bytes", std::make_shared<iceavro::LongNode>());
+  result->AddField("equality_ids", std::make_shared<iceavro::OptionalNode>(
+                                       std::make_shared<iceavro::ArrayNode>(std::make_shared<iceavro::IntNode>())));
+  result->AddField("referenced_data_file",
+                   std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::StringNode>()));
+  if (cfg.datafile_config.extract_column_sizes) {
+    auto column_sizes_entry = std::make_shared<iceavro::RecordNode>("k117_v118");
+    column_sizes_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    column_sizes_entry->AddField("value", std::make_shared<iceavro::LongNode>());
+    result->AddField("column_sizes",
+                     std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::ArrayNode>(column_sizes_entry)));
+  }
+  if (cfg.datafile_config.extract_value_counts) {
+    auto value_counts_entry = std::make_shared<iceavro::RecordNode>("k119_v120");
+    value_counts_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    value_counts_entry->AddField("value", std::make_shared<iceavro::LongNode>());
+    result->AddField("value_counts",
+                     std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::ArrayNode>(value_counts_entry)));
+  }
+  if (cfg.datafile_config.extract_null_value_counts) {
+    auto null_value_counts_entry = std::make_shared<iceavro::RecordNode>("k121_v122");
+    null_value_counts_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    null_value_counts_entry->AddField("value", std::make_shared<iceavro::LongNode>());
+    result->AddField("null_value_counts", std::make_shared<iceavro::OptionalNode>(
+                                              std::make_shared<iceavro::ArrayNode>(null_value_counts_entry)));
+  }
+  if (cfg.datafile_config.extract_lower_bounds) {
+    auto lower_bounds_entry = std::make_shared<iceavro::RecordNode>("k126_v127");
+    lower_bounds_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    lower_bounds_entry->AddField("value", std::make_shared<iceavro::BytesNode>());
+    result->AddField("lower_bounds",
+                     std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::ArrayNode>(lower_bounds_entry)));
+  }
+  if (cfg.datafile_config.extract_upper_bounds) {
+    auto upper_bounds_entry = std::make_shared<iceavro::RecordNode>("k129_v130");
+    upper_bounds_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    upper_bounds_entry->AddField("value", std::make_shared<iceavro::BytesNode>());
+    result->AddField("upper_bounds",
+                     std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::ArrayNode>(upper_bounds_entry)));
+  }
+  if (cfg.datafile_config.extract_nan_value_counts) {
+    auto nan_value_counts_entry = std::make_shared<iceavro::RecordNode>("k138_v139");
+    nan_value_counts_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    nan_value_counts_entry->AddField("value", std::make_shared<iceavro::LongNode>());
+    result->AddField("nan_value_counts", std::make_shared<iceavro::OptionalNode>(
+                                             std::make_shared<iceavro::ArrayNode>(nan_value_counts_entry)));
+  }
+  if (cfg.datafile_config.extract_distinct_counts) {
+    auto distinct_counts_entry = std::make_shared<iceavro::RecordNode>("k123_v124");
+    distinct_counts_entry->AddField("key", std::make_shared<iceavro::IntNode>());
+    distinct_counts_entry->AddField("value", std::make_shared<iceavro::LongNode>());
+    result->AddField("distinct_counts", std::make_shared<iceavro::OptionalNode>(
+                                            std::make_shared<iceavro::ArrayNode>(distinct_counts_entry)));
+  }
+  result->AddField("split_offsets", std::make_shared<iceavro::OptionalNode>(
+                                        std::make_shared<iceavro::ArrayNode>(std::make_shared<iceavro::LongNode>())));
+  result->AddField("sort_order_id", std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::IntNode>()));
+  result->AddField("partition", MakeSchemaPartition(partition_spec));
+  return result;
 }
 
-avro::ValidSchema MakeSchemaManifestEntry(const std::vector<PartitionKeyField>& partition_spec) {
-  avro::RecordSchema schema("manifest_entry");
-  AddField(schema, "status", MakeSchemaInt());
-  AddField(schema, "snapshot_id", MakeSchemaOptional(MakeSchemaLong()));
-  AddField(schema, "sequence_number", MakeSchemaOptional(MakeSchemaLong()));
-  AddField(schema, "file_sequence_number", MakeSchemaOptional(MakeSchemaLong()));
-  AddField(schema, "data_file", MakeSchemaDataFile(partition_spec));
+NodePtr MakeSchemaManifestEntry(const std::vector<PartitionKeyField>& partition_spec,
+                                const ManifestEntryDeserializerConfig& cfg = {}) {
+  auto result = std::make_shared<iceavro::RecordNode>("manifest_entry");
 
-  return avro::ValidSchema(schema);
+  result->AddField("status", std::make_shared<iceavro::IntNode>(0));
+  result->AddField("snapshot_id", std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::LongNode>(1)));
+  result->AddField("sequence_number", std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::LongNode>(3)));
+  result->AddField("file_sequence_number",
+                   std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::LongNode>(4)));
+  result->AddField("data_file", MakeSchemaDataFile(partition_spec, cfg));
+
+  return result;
 }
 
-void AddMember(avro::GenericRecord& result, const std::string& key, avro::GenericDatum&& value) {
-  result.setFieldAt(result.fieldIndex(std::string(key)), value);
+avro::GenericDatum& GetMember(avro::GenericRecord& datum, const std::string& key) {
+  return datum.fieldAt(datum.fieldIndex(std::string(key)));
 }
 
-avro::GenericDatum SerializeBool(bool value) { return avro::GenericDatum(value); }
-avro::GenericDatum SerializeInt(int value) { return avro::GenericDatum(value); }
-avro::GenericDatum SerializeLong(int64_t value) { return avro::GenericDatum(value); }
-avro::GenericDatum SerializeFloat(float value) { return avro::GenericDatum(value); }
-avro::GenericDatum SerializeDouble(double value) { return avro::GenericDatum(value); }
-avro::GenericDatum SerializeString(std::string value) { return avro::GenericDatum(std::move(value)); }
-avro::GenericDatum SerializeBytes(std::vector<uint8_t> value) { return avro::GenericDatum(std::move(value)); }
-avro::GenericDatum SerializeFixed(const avro::ValidSchema& result_schema, DataFile::PartitionKey::Fixed value) {
+void SerializeBool(bool value, avro::GenericDatum& result) { result = avro::GenericDatum(value); }
+void SerializeInt(int value, avro::GenericDatum& result) { result = avro::GenericDatum(value); }
+void SerializeLong(int64_t value, avro::GenericDatum& result) { result = avro::GenericDatum(value); }
+void SerializeFloat(float value, avro::GenericDatum& result) { result = avro::GenericDatum(value); }
+void SerializeDouble(double value, avro::GenericDatum& result) { result = avro::GenericDatum(value); }
+void SerializeString(std::string value, avro::GenericDatum& result) { result = avro::GenericDatum(std::move(value)); }
+void SerializeBytes(std::vector<uint8_t> value, avro::GenericDatum& result) {
+  result = avro::GenericDatum(std::move(value));
+}
+void SerializeFixed(const avro::ValidSchema& result_schema, DataFile::PartitionKey::Fixed value,
+                    avro::GenericDatum& result) {
   auto fixed_value = avro::GenericFixed(result_schema.root(), std::move(value.bytes));
-  return avro::GenericDatum(fixed_value.schema(), std::move(fixed_value));
+  result = avro::GenericDatum(fixed_value.schema(), std::move(fixed_value));
 }
 
 avro::GenericDatum SerializeOptionalWithValue(const avro::ValidSchema& result_schema, avro::GenericDatum&& datum) {
@@ -663,140 +682,135 @@ avro::GenericDatum SerializeOptionalWithoutValue(const avro::ValidSchema& result
   return avro::GenericDatum(result.schema(), std::move(result));
 }
 
-avro::GenericDatum SerializeOptionalInt(std::optional<int> value) {
-  auto result_schema = MakeSchemaOptional(MakeSchemaInt());
+void SerializeOptionalBool(std::optional<bool> value, avro::GenericDatum& result) {
   if (value.has_value()) {
-    return SerializeOptionalWithValue(result_schema, SerializeInt(*value));
+    result.selectBranch(1);
+    result.value<bool>() = *value;
   } else {
-    return SerializeOptionalWithoutValue(result_schema);
+    result.selectBranch(0);
   }
 }
 
-avro::GenericDatum SerializeOptionalLong(std::optional<int64_t> value) {
-  auto result_schema = MakeSchemaOptional(MakeSchemaLong());
+void SerializeOptionalInt(std::optional<int> value, avro::GenericDatum& result) {
   if (value.has_value()) {
-    return SerializeOptionalWithValue(result_schema, SerializeLong(*value));
+    result.selectBranch(1);
+    result.value<int32_t>() = *value;
   } else {
-    return SerializeOptionalWithoutValue(result_schema);
+    result.selectBranch(0);
   }
 }
 
-avro::GenericDatum SerializeOptionalBool(std::optional<bool> value) {
-  auto result_schema = MakeSchemaOptional(MakeSchemaBool());
+void SerializeOptionalLong(std::optional<int64_t> value, avro::GenericDatum& result) {
   if (value.has_value()) {
-    return SerializeOptionalWithValue(result_schema, SerializeBool(*value));
+    result.selectBranch(1);
+    result.value<int64_t>() = *value;
   } else {
-    return SerializeOptionalWithoutValue(result_schema);
+    result.selectBranch(0);
   }
 }
 
-avro::GenericDatum SerializeOptionalFloat(std::optional<float> value) {
-  auto result_schema = MakeSchemaOptional(MakeSchemaFloat());
+void SerializeOptionalFloat(std::optional<float> value, avro::GenericDatum& result) {
   if (value.has_value()) {
-    return SerializeOptionalWithValue(result_schema, SerializeFloat(*value));
+    result.selectBranch(1);
+    result.value<float>() = *value;
   } else {
-    return SerializeOptionalWithoutValue(result_schema);
+    result.selectBranch(0);
   }
 }
 
-avro::GenericDatum SerializeOptionalDouble(std::optional<double> value) {
-  auto result_schema = MakeSchemaOptional(MakeSchemaDouble());
+void SerializeOptionalDouble(std::optional<double> value, avro::GenericDatum& result) {
   if (value.has_value()) {
-    return SerializeOptionalWithValue(result_schema, SerializeDouble(*value));
+    result.selectBranch(1);
+    result.value<double>() = *value;
   } else {
-    return SerializeOptionalWithoutValue(result_schema);
+    result.selectBranch(0);
   }
 }
 
-avro::GenericDatum SerializeOptionalString(std::optional<std::string> value) {
-  auto result_schema = MakeSchemaOptional(MakeSchemaString());
+void SerializeOptionalFixed(const std::optional<DataFile::PartitionKey::Fixed>& value, avro::GenericDatum& result) {
   if (value.has_value()) {
-    return SerializeOptionalWithValue(result_schema, SerializeString(std::move(*value)));
+    result.selectBranch(1);
+    auto& fixed_result = result.value<avro::GenericFixed>();
+    fixed_result.value() = std::vector<uint8_t>(value->bytes);
   } else {
-    return SerializeOptionalWithoutValue(result_schema);
+    result.selectBranch(0);
   }
 }
 
-avro::GenericDatum SerializeOptionalBytes(std::optional<std::vector<uint8_t>> value) {
-  auto result_schema = MakeSchemaOptional(MakeSchemaBytes());
+void SerializeOptionalString(const std::optional<std::string>& value, avro::GenericDatum& result) {
   if (value.has_value()) {
-    return SerializeOptionalWithValue(result_schema, SerializeBytes(std::move(*value)));
+    result.selectBranch(1);
+    result.value<std::string>() = *value;
   } else {
-    return SerializeOptionalWithoutValue(result_schema);
+    result.selectBranch(0);
   }
 }
 
-avro::GenericDatum SerializeOptionalFixed(std::optional<DataFile::PartitionKey::Fixed> value) {
-  auto fixed_schema = MakeSchemaFixed(value->bytes.size(), "fixed");
-  auto result_schema = MakeSchemaOptional(fixed_schema);
+void SerializeOptionalBytes(const std::optional<std::vector<uint8_t>>& value, avro::GenericDatum& result) {
   if (value.has_value()) {
-    return SerializeOptionalWithValue(result_schema, SerializeFixed(fixed_schema, std::move(*value)));
+    result.selectBranch(1);
+    result.value<std::vector<uint8_t>>() = *value;
   } else {
-    return SerializeOptionalWithoutValue(result_schema);
+    result.selectBranch(0);
   }
 }
 
-avro::GenericDatum SerializeNull() { return avro::GenericDatum(); }
-
-avro::GenericDatum SerializePairIntLong(std::pair<int32_t, int64_t> pair, const std::string& element_name) {
-  const auto& pair_schema = MakeSchemaPair(element_name, MakeSchemaInt(), MakeSchemaLong());
-  avro::GenericRecord record(pair_schema.root());
-  AddMember(record, "key", SerializeInt(pair.first));
-  AddMember(record, "value", SerializeLong(pair.second));
-  return avro::GenericDatum(record.schema(), record);
-}
-
-avro::GenericDatum SerializePairIntBytes(const std::pair<int32_t, std::vector<uint8_t>>& pair,
-                                         const std::string& element_name) {
-  const auto& pair_schema = MakeSchemaPair(element_name, MakeSchemaInt(), MakeSchemaLong());
-  avro::GenericRecord record(pair_schema.root());
-  AddMember(record, "key", SerializeInt(pair.first));
-  AddMember(record, "value", SerializeBytes(pair.second));
-  return avro::GenericDatum(record.schema(), record);
-}
-
-avro::GenericDatum SerializeVectorGenericDatum(const avro::ValidSchema& result_schema,
-                                               std::vector<avro::GenericDatum>&& data) {
-  avro::GenericArray array(result_schema.root());
-  array.value() = std::move(data);
-  return avro::GenericDatum(array.schema(), std::move(array));
-}
-
-avro::GenericDatum SerializeVectorLong(const std::vector<int64_t>& array) {
-  std::vector<avro::GenericDatum> result;
-  for (const int64_t& value : array) {
-    result.emplace_back(SerializeLong(value));
+void SerializeOptionalVectorInt(const std::vector<int32_t>& value, avro::GenericDatum& result) {
+  if (!value.empty()) {
+    result.selectBranch(1);
+    auto& array = result.value<avro::GenericArray>();
+    for (const auto& x : value) {
+      array.value().emplace_back(x);
+    }
+  } else {
+    result.selectBranch(0);
   }
-  auto result_schema = MakeSchemaArray(MakeSchemaLong());
-  return SerializeVectorGenericDatum(result_schema, std::move(result));
 }
 
-avro::GenericDatum SerializeVectorInt(const std::vector<int>& array) {
-  std::vector<avro::GenericDatum> result;
-  for (const int32_t& value : array) {
-    result.emplace_back(SerializeInt(value));
+void SerializeOptionalVectorLong(const std::vector<int64_t>& value, avro::GenericDatum& result) {
+  if (!value.empty()) {
+    result.selectBranch(1);
+    auto& array = result.value<avro::GenericArray>();
+    for (const auto& x : value) {
+      array.value().emplace_back(x);
+    }
+  } else {
+    result.selectBranch(0);
   }
-  auto result_schema = MakeSchemaArray(MakeSchemaInt());
-  return SerializeVectorGenericDatum(result_schema, std::move(result));
 }
 
-avro::GenericDatum SerializeMapIntLong(const std::map<int32_t, int64_t>& map, const std::string& element_name) {
-  std::vector<avro::GenericDatum> array;
-  for (const auto& p : map) {
-    array.emplace_back(SerializePairIntLong(p, element_name));
+void SerializeOptionalMapIntLong(const std::map<int32_t, int64_t>& map, avro::GenericDatum& result) {
+  if (!map.empty()) {
+    result.selectBranch(1);
+    auto& array = result.value<avro::GenericArray>();
+    auto element_schema = array.schema()->leafAt(0);
+    for (const auto& [k, v] : map) {
+      avro::GenericDatum datum(element_schema);
+      auto& record = datum.value<avro::GenericRecord>();
+      SerializeInt(k, GetMember(record, "key"));
+      SerializeLong(v, GetMember(record, "value"));
+      array.value().emplace_back(std::move(datum));
+    }
+  } else {
+    result.selectBranch(0);
   }
-  auto result_schema = MakeSchemaMap(element_name, MakeSchemaInt(), MakeSchemaLong());
-  return SerializeVectorGenericDatum(result_schema, std::move(array));
 }
 
-avro::GenericDatum SerializeMapIntBytes(const std::map<int32_t, std::vector<uint8_t>>& map,
-                                        const std::string& element_name) {
-  std::vector<avro::GenericDatum> array;
-  for (const auto& p : map) {
-    array.emplace_back(SerializePairIntBytes(p, element_name));
+void SerializeOptionalMapIntBytes(const std::map<int32_t, std::vector<uint8_t>>& map, avro::GenericDatum& result) {
+  if (!map.empty()) {
+    result.selectBranch(1);
+    auto& array = result.value<avro::GenericArray>();
+    auto element_schema = array.schema()->leafAt(0);
+    for (const auto& [k, v] : map) {
+      avro::GenericDatum datum(element_schema);
+      auto& record = datum.value<avro::GenericRecord>();
+      SerializeInt(k, GetMember(record, "key"));
+      SerializeBytes(v, GetMember(record, "value"));
+      array.value().emplace_back(std::move(datum));
+    }
+  } else {
+    result.selectBranch(0);
   }
-  auto result_schema = MakeSchemaMap(element_name, MakeSchemaInt(), MakeSchemaBytes());
-  return SerializeVectorGenericDatum(result_schema, std::move(array));
 }
 
 static std::shared_ptr<const types::Type> ExtractTypeFromPartitionSpec(
@@ -809,10 +823,9 @@ static std::shared_ptr<const types::Type> ExtractTypeFromPartitionSpec(
   return it->type;
 }
 
-avro::GenericDatum SerializePartition(const std::vector<PartitionKeyField>& partition_spec,
-                                      const DataFile::PartitionTuple& partition) {
-  const auto partition_schema = MakeSchemaPartition(partition_spec);
-  avro::GenericRecord record(partition_schema.root());
+void SerializePartition(const std::vector<PartitionKeyField>& partition_spec, const DataFile::PartitionTuple& partition,
+                        avro::GenericDatum& result) {
+  avro::GenericRecord& record = result.value<avro::GenericRecord>();
   for (const auto& info : partition.fields) {
     if (record.hasField(info.name)) {
       std::shared_ptr<const types::Type> type = ExtractTypeFromPartitionSpec(partition_spec, info.name);
@@ -820,99 +833,92 @@ avro::GenericDatum SerializePartition(const std::vector<PartitionKeyField>& part
         throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": internal error. Field '" + info.name +
                                  "' not found in partition_spec");
       }
-      auto datum = [&]() {
-        bool is_null = std::holds_alternative<std::monostate>(info.value);
-        switch (type->TypeId()) {
-          case TypeID::kBoolean:
-            return SerializeOptionalBool(is_null ? std::nullopt : std::optional(std::get<bool>(info.value)));
-          case TypeID::kInt:
-          case TypeID::kDate:
-            return SerializeOptionalInt(is_null ? std::nullopt : std::optional(std::get<int>(info.value)));
-          case TypeID::kLong:
-          case TypeID::kTime:
-          case TypeID::kTimestamp:
-          case TypeID::kTimestamptz:
-          case TypeID::kTimestampNs:
-          case TypeID::kTimestamptzNs:
-            return SerializeOptionalLong(is_null ? std::nullopt : std::optional(std::get<int64_t>(info.value)));
-          case TypeID::kFloat:
-            return SerializeOptionalFloat(is_null ? std::nullopt : std::optional(std::get<float>(info.value)));
-          case TypeID::kDouble:
-            return SerializeOptionalDouble(is_null ? std::nullopt : std::optional(std::get<double>(info.value)));
-          case TypeID::kString:
-            return SerializeOptionalString(is_null ? std::nullopt : std::optional(std::get<std::string>(info.value)));
-          case TypeID::kBinary:
-            return SerializeOptionalBytes(is_null ? std::nullopt
-                                                  : std::optional(std::get<std::vector<uint8_t>>(info.value)));
-          case TypeID::kDecimal:
-          case TypeID::kFixed:
-          case TypeID::kUuid:
-            return SerializeOptionalFixed(is_null ? std::nullopt
-                                                  : std::optional(std::get<DataFile::PartitionKey::Fixed>(info.value)));
-          default:
-            throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": internal error. Field '" + info.name +
-                                     "' has unexpected type " + type->ToString());
-        }
-      }();
-      record.setFieldAt(record.fieldIndex(info.name), std::move(datum));
+      bool is_null = std::holds_alternative<std::monostate>(info.value);
+      switch (type->TypeId()) {
+        case TypeID::kBoolean:
+          SerializeOptionalBool(is_null ? std::nullopt : std::optional(std::get<bool>(info.value)),
+                                GetMember(record, info.name));
+          break;
+        case TypeID::kInt:
+        case TypeID::kDate:
+          SerializeOptionalInt(is_null ? std::nullopt : std::optional(std::get<int>(info.value)),
+                               GetMember(record, info.name));
+          break;
+        case TypeID::kFloat:
+          SerializeOptionalFloat(is_null ? std::nullopt : std::optional(std::get<float>(info.value)),
+                                 GetMember(record, info.name));
+          break;
+        case TypeID::kDouble:
+          SerializeOptionalDouble(is_null ? std::nullopt : std::optional(std::get<double>(info.value)),
+                                  GetMember(record, info.name));
+          break;
+        case TypeID::kBinary:
+          SerializeOptionalBytes(is_null ? std::nullopt : std::optional(std::get<std::vector<uint8_t>>(info.value)),
+                                 GetMember(record, info.name));
+          break;
+        case TypeID::kString:
+          SerializeOptionalString(is_null ? std::nullopt : std::optional(std::get<std::string>(info.value)),
+                                  GetMember(record, info.name));
+          break;
+        case TypeID::kLong:
+        case TypeID::kTime:
+        case TypeID::kTimestamp:
+        case TypeID::kTimestamptz:
+        case TypeID::kTimestampNs:
+        case TypeID::kTimestamptzNs:
+          SerializeOptionalLong(is_null ? std::nullopt : std::optional(std::get<int64_t>(info.value)),
+                                GetMember(record, info.name));
+          break;
+        case TypeID::kDecimal:
+        case TypeID::kFixed:
+        case TypeID::kUuid:
+          SerializeOptionalFixed(
+              is_null ? std::nullopt : std::optional(std::get<DataFile::PartitionKey::Fixed>(info.value)),
+              GetMember(record, info.name));
+          break;
+        default:
+          throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": internal error. Field '" + info.name +
+                                   "' has unexpected type " + type->ToString());
+      }
     }
   }
-
-  return avro::GenericDatum(record.schema(), std::move(record));
 }
 
-avro::GenericDatum SerializeDataFile(const std::vector<PartitionKeyField>& partition_spec, const DataFile& data_file) {
-  const auto data_schema = MakeSchemaDataFile(partition_spec);
-  avro::GenericRecord result(data_schema.root());
-  AddMember(result, "record_count", SerializeLong(data_file.record_count));
-  AddMember(result, "file_size_in_bytes", SerializeLong(data_file.file_size_in_bytes));
-  AddMember(result, "split_offsets",
-            SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaArray(MakeSchemaLong())),
-                                       SerializeVectorLong(data_file.split_offsets)));
-  AddMember(result, "equality_ids",
-            SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaArray(MakeSchemaInt())),
-                                       SerializeVectorInt(data_file.equality_ids)));
-  AddMember(result, "file_format", SerializeString(data_file.file_format));
-  AddMember(result, "file_path", SerializeString(data_file.file_path));
-  AddMember(result, "content", SerializeInt(static_cast<int>(data_file.content)));
-  AddMember(result, "referenced_data_file", SerializeOptionalString(data_file.referenced_data_file));
-  AddMember(result, "sort_order_id", SerializeOptionalInt(data_file.sort_order_id));
-  AddMember(
-      result, "column_sizes",
-      SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaMap("k117_v118", MakeSchemaInt(), MakeSchemaLong())),
-                                 SerializeMapIntLong(data_file.column_sizes, "k117_v118")));
-  AddMember(
-      result, "value_counts",
-      SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaMap("k119_v120", MakeSchemaInt(), MakeSchemaLong())),
-                                 SerializeMapIntLong(data_file.value_counts, "k119_v120")));
-  AddMember(
-      result, "null_value_counts",
-      SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaMap("k121_v122", MakeSchemaInt(), MakeSchemaLong())),
-                                 SerializeMapIntLong(data_file.null_value_counts, "k121_v122")));
-  AddMember(
-      result, "lower_bounds",
-      SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaMap("k126_v127", MakeSchemaInt(), MakeSchemaBytes())),
-                                 SerializeMapIntBytes(data_file.lower_bounds, "k126_v127")));
-  AddMember(
-      result, "upper_bounds",
-      SerializeOptionalWithValue(MakeSchemaOptional(MakeSchemaMap("k129_v130", MakeSchemaInt(), MakeSchemaBytes())),
-                                 SerializeMapIntBytes(data_file.upper_bounds, "k129_v130")));
-  AddMember(result, "partition", SerializePartition(partition_spec, data_file.partition_tuple));
-  avro::GenericDatum datum(result.schema(), result);
-  return datum;
-}
-
-avro::GenericDatum SerializeManifestEntry(const std::vector<PartitionKeyField>& partition_spec,
-                                          const ManifestEntry& entry) {
-  const auto schema = MakeSchemaManifestEntry(partition_spec);
-  avro::GenericDatum result(schema.root());
+void SerializeDataFile(const std::vector<PartitionKeyField>& partition_spec, const DataFile& data_file,
+                       avro::GenericDatum& result) {
   auto& record = result.value<avro::GenericRecord>();
-  AddMember(record, "status", SerializeInt(static_cast<int>(entry.status)));
-  AddMember(record, "snapshot_id", SerializeOptionalLong(entry.snapshot_id));
-  AddMember(record, "sequence_number", SerializeOptionalLong(entry.sequence_number));
-  AddMember(record, "file_sequence_number", SerializeOptionalLong(entry.file_sequence_number));
-  AddMember(record, "data_file", SerializeDataFile(partition_spec, entry.data_file));
-  return result;
+  SerializeLong(data_file.record_count, GetMember(record, "record_count"));
+  SerializeLong(data_file.file_size_in_bytes, GetMember(record, "file_size_in_bytes"));
+  SerializeOptionalVectorLong(data_file.split_offsets, GetMember(record, "split_offsets"));
+  SerializeOptionalVectorInt(data_file.equality_ids, GetMember(record, "equality_ids"));
+  SerializeString(data_file.file_format, GetMember(record, "file_format"));
+  SerializeString(data_file.file_path, GetMember(record, "file_path"));
+  SerializeInt(static_cast<int>(data_file.content), GetMember(record, "content"));
+  SerializeOptionalString(data_file.referenced_data_file, GetMember(record, "referenced_data_file"));
+  SerializeOptionalInt(data_file.sort_order_id, GetMember(record, "sort_order_id"));
+  SerializeOptionalMapIntLong(data_file.column_sizes, GetMember(record, "column_sizes"));
+  SerializeOptionalMapIntLong(data_file.value_counts, GetMember(record, "value_counts"));
+  SerializeOptionalMapIntLong(data_file.null_value_counts, GetMember(record, "null_value_counts"));
+  SerializeOptionalMapIntBytes(data_file.lower_bounds, GetMember(record, "lower_bounds"));
+  SerializeOptionalMapIntBytes(data_file.upper_bounds, GetMember(record, "upper_bounds"));
+  SerializeOptionalMapIntLong(data_file.distinct_counts, GetMember(record, "distinct_counts"));
+  SerializeOptionalMapIntLong(data_file.nan_value_counts, GetMember(record, "nan_value_counts"));
+  SerializePartition(partition_spec, data_file.partition_tuple, GetMember(record, "partition"));
+}
+
+void SerializeManifestEntry(const std::vector<PartitionKeyField>& partition_spec, const ManifestEntry& entry,
+                            avro::GenericDatum& result) {
+  auto& record = result.value<avro::GenericRecord>();
+  SerializeInt(static_cast<int>(entry.status), GetMember(record, "status"));
+  SerializeOptionalLong(entry.snapshot_id, GetMember(record, "snapshot_id"));
+  SerializeOptionalLong(entry.sequence_number, GetMember(record, "sequence_number"));
+  SerializeOptionalLong(entry.file_sequence_number, GetMember(record, "file_sequence_number"));
+  SerializeDataFile(partition_spec, entry.data_file, GetMember(record, "data_file"));
+}
+}  // namespace
+
+avro::ValidSchema AvroSchemaFromNode(NodePtr node) {
+  return avro::compileJsonSchemaFromString(iceavro::ToJsonString(node));
 }
 
 avro::NodePtr Find(avro::NodePtr root, const std::string& name) {
@@ -958,19 +964,25 @@ void ValidatePartitionSpec(const std::vector<PartitionKeyField>& partition_spec,
   }
 }
 
-}  // namespace
-
 Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKeyField>& partition_spec,
-                             const ManifestEntryDeserializerConfig& config) {
+                             const ManifestEntryDeserializerConfig& config, bool use_reader_schema) {
   if (!input) {
     throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": input is invalid");
   }
 
   auto istream = avro::istreamInputStream(input);
-  avro::DataFileReader<avro::GenericDatum> data_file_reader(std::move(istream));
-  Manifest result;
+  avro::DataFileReader<avro::GenericDatum> data_file_reader = [&]() {
+    if (use_reader_schema) {
+      auto schema = AvroSchemaFromNode(MakeSchemaManifestEntry(partition_spec, config));
+      return avro::DataFileReader<avro::GenericDatum>(std::move(istream), schema);
+    } else {
+      return avro::DataFileReader<avro::GenericDatum>(std::move(istream));
+    }
+  }();
 
   ValidatePartitionSpec(partition_spec, data_file_reader.dataSchema().root());
+
+  Manifest result;
 
   result.metadata = data_file_reader.metadata();
 
@@ -990,7 +1002,7 @@ Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKey
   }
   ManifestEntryDeserializer deserializer(config);
   while (true) {
-    avro::GenericDatum manifest_entry(data_file_reader.dataSchema());
+    avro::GenericDatum manifest_entry(data_file_reader.readerSchema());
     if (data_file_reader.read(manifest_entry)) {
       ManifestEntry entry = deserializer.Deserialize(manifest_entry);
       result.entries.emplace_back(std::move(entry));
@@ -1002,9 +1014,9 @@ Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKey
 }
 
 Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionKeyField>& partition_spec,
-                             const ManifestEntryDeserializerConfig& config) {
+                             const ManifestEntryDeserializerConfig& config, bool use_reader_schema) {
   std::stringstream ss(data);
-  return ReadManifestEntries(ss, partition_spec, config);
+  return ReadManifestEntries(ss, partition_spec, config, use_reader_schema);
 }
 
 std::string WriteManifestEntries(const Manifest& manifest, const std::vector<PartitionKeyField>& partition_spec) {
@@ -1012,12 +1024,16 @@ std::string WriteManifestEntries(const Manifest& manifest, const std::vector<Par
 
   std::stringstream ss;
   auto ostream = avro::ostreamOutputStream(ss, bufferSize);
-  avro::DataFileWriter<avro::GenericDatum> writer(std::move(ostream),
-                                                  avro::ValidSchema(MakeSchemaManifestEntry(partition_spec)), 16 * 1024,
-                                                  avro::NULL_CODEC, manifest.metadata);
+
+  auto schema = AvroSchemaFromNode(MakeSchemaManifestEntry(partition_spec));
+
+  avro::DataFileWriter<avro::GenericDatum> writer(std::move(ostream), schema, 16 * 1024, avro::NULL_CODEC,
+                                                  manifest.metadata);
 
   for (auto& man_entry : manifest.entries) {
-    writer.write(SerializeManifestEntry(partition_spec, man_entry));
+    avro::GenericDatum datum(schema);
+    SerializeManifestEntry(partition_spec, man_entry, datum);
+    writer.write(datum);
   }
   writer.close();
 
