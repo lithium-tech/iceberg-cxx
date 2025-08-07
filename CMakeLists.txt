@@ -19,6 +19,7 @@ option_v(ICECXX_COMPUTE "enable compute based on Arrow.Compute" ON)
 # deps options
 option_v(ICECXX_BUILD_ARROW "build Apache Arrow (use system's one otherwise)" ON)
 option_v(ICECXX_BUILD_ABSEIL "build abseil (use system's one otherwise)" ON)
+option_v(ICECXX_USE_GANDIVA "use Gandiva from Apache Arrow" ON)
 option_v(ICECXX_USE_SMHASHER "use MurmurHash3 from SMHasher" ON)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -53,6 +54,9 @@ if(ICECXX_BUILD_ARROW)
 else()
   find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
   find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
+  if (ICECXX_USE_GANDIVA)
+    find_package(Gandiva REQUIRED PATHS ${DEPS_PATH})
+  endif()
 
   # Fix up missing dependency declaration
   set_property(TARGET Arrow::arrow_bundled_dependencies

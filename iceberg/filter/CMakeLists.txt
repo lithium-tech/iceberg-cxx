@@ -1,2 +1,5 @@
 add_subdirectory(representation)
 add_subdirectory(stats_filter)
+if (ICECXX_USE_GANDIVA)
+  add_subdirectory(row_filter)
+endif()

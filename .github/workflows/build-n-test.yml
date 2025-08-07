@@ -40,6 +40,7 @@ jobs:
         ../iceberg/positional_delete/iceberg_positional_delete_test
         ../iceberg/filter/representation/filter_representation_ut
         ../iceberg/filter/stats_filter/stats_filter_ut
+        ../iceberg/filter/row_filter/row_filter_ut
         ../iceberg/streams/compute/ice_compute_ut
         ../iceberg/streams/iceberg_streams_ut
         ./iceberg_local_test
@@ -76,6 +77,7 @@ jobs:
         ../iceberg/positional_delete/iceberg_positional_delete_test
         ../iceberg/filter/representation/filter_representation_ut
         ../iceberg/filter/stats_filter/stats_filter_ut
+        ../iceberg/filter/row_filter/row_filter_ut
         ../iceberg/streams/compute/ice_compute_ut
         ../iceberg/streams/iceberg_streams_ut
         ./iceberg_local_test
