@@ -31,3 +31,10 @@ add_executable(row_filter_ut
   ut/row_filter_test.cpp
 )
 target_link_libraries(row_filter_ut gtest_main gmock iceberg_test_utils row_filter Arrow::arrow_static Gandiva::gandiva_static)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_link_options(row_filter_ut PRIVATE
+  -Wl,--export-dynamic-symbol=llvm_orc_registerEHFrameSectionWrapper
+  -Wl,--export-dynamic-symbol=llvm_orc_deregisterEHFrameSectionWrapper
+)
+endif()
