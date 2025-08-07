@@ -340,7 +340,7 @@ arrow::Result<GenericStats> Registry::Evaluate(FID function_id, std::vector<Gene
         return evaluator(lhs, rhs);
       }
     }
-    return arrow::Status::NotImplemented(__PRETTY_FUNCTION__, ": unexpected function id ",
+    return arrow::Status::NotImplemented(__PRETTY_FUNCTION__, ": number of arguments = 2, unexpected function id ",
                                          std::to_string(static_cast<int>(function_id)));
   }
   if (args.size() == 1) {
@@ -350,6 +350,8 @@ arrow::Result<GenericStats> Registry::Evaluate(FID function_id, std::vector<Gene
         return evaluator(arg);
       }
     }
+    return arrow::Status::NotImplemented(__PRETTY_FUNCTION__, ": number of arguments = 1, unexpected function id ",
+                                         std::to_string(static_cast<int>(function_id)));
   }
   return arrow::Status::NotImplemented(__PRETTY_FUNCTION__, ": unexpected number of arguments (", args.size(), ")");
 }
