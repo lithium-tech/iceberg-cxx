@@ -53,6 +53,7 @@ if(ICECXX_BUILD_ARROW)
 else()
   find_package(Arrow REQUIRED PATHS ${DEPS_PATH})
   find_package(Parquet REQUIRED PATHS ${DEPS_PATH})
+  find_package(Gandiva REQUIRED PATHS ${DEPS_PATH})
 
   # Fix up missing dependency declaration
   set_property(TARGET Arrow::arrow_bundled_dependencies
