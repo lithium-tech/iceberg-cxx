@@ -112,7 +112,8 @@ class AllEntriesStream : public IcebergEntriesStream {
         manifest_files_(std::move(manifest_files)),
         partition_specs_(partition_specs),
         schema_(schema),
-        config_(config) {}
+        config_(config),
+        use_avro_reader_schema_(use_reader_schema) {}
 
   static std::shared_ptr<AllEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                 const std::string& manifest_list_path, bool use_reader_schema,
@@ -137,6 +138,7 @@ class AllEntriesStream : public IcebergEntriesStream {
   std::shared_ptr<iceberg::Schema> schema_;
   const std::vector<std::shared_ptr<PartitionSpec>> partition_specs_;
   ManifestEntryDeserializerConfig config_;
+  bool use_avro_reader_schema_ = false;
 };
 
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,

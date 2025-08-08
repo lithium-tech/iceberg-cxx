@@ -346,7 +346,8 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
       throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
                                std::to_string(current_manifest_file.partition_spec_id));
     }
-    Manifest manifest = ice_tea::ReadManifestEntries(entries_content, maybe_partition_spec.value(), config_);
+    Manifest manifest =
+        ice_tea::ReadManifestEntries(entries_content, maybe_partition_spec.value(), config_, use_avro_reader_schema_);
     // it is impossible to construct queue from iterators before C++23
     entries_for_current_manifest_file_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(
         std::make_move_iterator(manifest.entries.begin()), std::make_move_iterator(manifest.entries.end())));
