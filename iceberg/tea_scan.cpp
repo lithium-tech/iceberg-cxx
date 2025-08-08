@@ -213,7 +213,7 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
     int64_t micros_max;
     if (spec_->fields[position].transform == hour_transform_prefix) {
       micros_min = HoursToMicros(minimum);
-      micros_min = HoursToMicros(maximum + 1);
+      micros_max = HoursToMicros(maximum + 1);
     } else {
       micros_min = HoursToMicros(DaysToHours(minimum));
       micros_max = HoursToMicros(DaysToHours(maximum));
@@ -423,8 +423,9 @@ std::queue<ManifestFile> FilterManifests(std::shared_ptr<filter::StatsFilter> st
 
     bool only_allowed_transforms = true;
     for (const auto& field : partition_spec->fields) {
-      only_allowed_transforms &= allowed_transforms.contains(field.name);
+      only_allowed_transforms &= allowed_transforms.contains(field.transform);
     }
+
     if (!only_allowed_transforms) {
       result.push(std::move(manifest));
       continue;
