@@ -7,7 +7,6 @@
 #include <chrono>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <type_traits>
 
@@ -224,9 +223,6 @@ class MonthTransform : public ITransform {
   bool CanTransform(const std::shared_ptr<types::Type>& src) const override;
   std::string ToString() const override;
   std::shared_ptr<types::Type> ResultType(const std::shared_ptr<types::Type>& src) const override;
-
- private:
-  std::mutex mutex_;
 };
 
 class YearTransform : public ITransform {
@@ -237,9 +233,6 @@ class YearTransform : public ITransform {
   bool CanTransform(const std::shared_ptr<types::Type>& src) const override;
   std::string ToString() const override;
   std::shared_ptr<types::Type> ResultType(const std::shared_ptr<types::Type>& src) const override;
-
- private:
-  std::mutex mutex_;
 };
 
 class DayTransform : public ITransform {
@@ -250,9 +243,6 @@ class DayTransform : public ITransform {
   bool CanTransform(const std::shared_ptr<types::Type>& src) const override;
   std::string ToString() const override;
   std::shared_ptr<types::Type> ResultType(const std::shared_ptr<types::Type>& src) const override;
-
- private:
-  std::mutex mutex_;
 };
 
 class HourTransform : public ITransform {
@@ -263,9 +253,6 @@ class HourTransform : public ITransform {
   bool CanTransform(const std::shared_ptr<types::Type>& src) const override;
   std::string ToString() const override;
   std::shared_ptr<types::Type> ResultType(const std::shared_ptr<types::Type>& src) const override;
-
- private:
-  std::mutex mutex_;
 };
 
 std::shared_ptr<ITransform> GetTransform(const std::string& name);
