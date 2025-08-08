@@ -136,6 +136,10 @@ int ConvertToInt(const std::vector<uint8_t>& value) {
 }
 
 int YearsToDays(int years) {
+  const int max_days_per_year = 366;
+  Ensure(years <= std::numeric_limits<int>::max() / max_days_per_year &&
+             years >= std::numeric_limits<int>::min() / max_days_per_year,
+         std::string(__PRETTY_FUNCTION__) + ": days can overflow");
   auto start = std::chrono::sys_days{std::chrono::year(1970) / 1 / 1};
   auto end = start + std::chrono::years(years);
   auto duration = end - start;
@@ -143,15 +147,31 @@ int YearsToDays(int years) {
 }
 
 int MonthsToDays(int months) {
+  const int max_days_per_month = 31;
+  Ensure(months <= std::numeric_limits<int>::max() / max_days_per_month &&
+             months >= std::numeric_limits<int>::min() / max_days_per_month,
+         std::string(__PRETTY_FUNCTION__) + ": days can overflow");
   auto start = std::chrono::sys_days{std::chrono::year(1970) / 1 / 1};
   auto end = start + std::chrono::months(months);
   auto duration = end - start;
   return std::chrono::duration_cast<std::chrono::days>(duration).count();
 }
 
-int DaysToHours(int days) { return days * 24; }
+int DaysToHours(int days) {
+  const int hours_per_day = 24;
+  Ensure(days <= std::numeric_limits<int>::max() / hours_per_day &&
+             days >= std::numeric_limits<int>::min() / hours_per_day,
+         std::string(__PRETTY_FUNCTION__) + ": hours will overflow");
+  return days * hours_per_day;
+}
 
-int64_t HoursToMicros(int hours) { return static_cast<int64_t>(hours) * 3600ll * 1000000ll; }
+int64_t HoursToMicros(int64_t hours) {
+  const int64_t micros_per_hour = 3600ll * 1000000ll;
+  Ensure(hours <= std::numeric_limits<int64_t>::max() / micros_per_hour &&
+             hours >= std::numeric_limits<int64_t>::min() / micros_per_hour,
+         std::string(__PRETTY_FUNCTION__) + ": micros will overflow");
+  return hours * micros_per_hour;
+}
 
 class ManifestFileStatsGetter : public filter::IStatsGetter {
  public:
