@@ -19,6 +19,7 @@
 #include "iceberg/streams/iceberg/mapper.h"
 #include "iceberg/streams/iceberg/plan.h"
 #include "iceberg/streams/iceberg/row_group_filter.h"
+#include "iceberg/streams/iceberg/schema_name_mapper.h"
 #include "parquet/type_fwd.h"
 
 namespace iceberg {
@@ -40,13 +41,15 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
                     std::shared_ptr<const FieldIdMapper> mapper,
                     std::shared_ptr<const IFileReaderProvider> file_reader_provider,
                     std::shared_ptr<const IRowGroupFilter> rg_filter,
-                    std::shared_ptr<const ice_filter::IRowFilter> row_filter, std::shared_ptr<ILogger> logger = nullptr)
+                    std::shared_ptr<const ice_filter::IRowFilter> row_filter,
+                    std::optional<SchemaNameMapper>&& schema_name_mapper, std::shared_ptr<ILogger> logger = nullptr)
       : field_ids_to_retrieve_(std::move(field_ids_to_retrieve)),
         equality_deletes_(equality_deletes),
         mapper_(mapper),
         file_reader_provider_(file_reader_provider),
         rg_filter_(rg_filter),
         row_filter_(row_filter),
+        schema_name_mapper_(std::move(schema_name_mapper)),
         logger_(logger) {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
@@ -77,71 +80,11 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
         : field_id(f), column_position(pos), parquet_name(std::move(par_name)), result_name(std::move(res_name)) {}
   };
 
-  std::vector<ParquetColumnInfo> GetColumnPositionsToRetrieveByFieldIds(const parquet::FileMetaData& metadata,
-                                                                        const std::vector<int>& field_ids) const {
-    const auto& schema = metadata.schema();
-    Ensure(schema != nullptr, std::string(__PRETTY_FUNCTION__) + ": schema is nullptr");
+  std::vector<ParquetColumnInfo> GetParquetColumnInfos(const parquet::FileMetaData& metadata,
+                                                       const std::vector<int>& field_ids) const;
 
-    const auto& group_node = schema->group_node();
-    Ensure(group_node != nullptr, std::string(__PRETTY_FUNCTION__) + ": group_node is nullptr");
-
-    const auto field_count = group_node->field_count();
-
-    std::vector<ParquetColumnInfo> column_infos;
-
-    for (const auto& field_id_to_find : field_ids) {
-      bool found = false;
-
-      for (int i = 0; i < field_count; ++i) {
-        auto field = group_node->field(i);
-        Ensure(field != nullptr, std::string(__PRETTY_FUNCTION__) + ": field is nullptr");
-
-        const int current_field_id = field->field_id();
-        if (field_id_to_find == current_field_id) {
-          found = true;
-          auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
-          column_infos.emplace_back(field_id_to_find, i, field->name(), std::move(result_name));
-          break;
-        }
-      }
-
-      if (!found) {
-        auto result_name = mapper_->FieldIdToColumnName(field_id_to_find);
-        column_infos.emplace_back(field_id_to_find, std::nullopt, "", std::move(result_name));
-      }
-    }
-
-    return column_infos;
-  }
-
-  static std::vector<int> GetRowGroupsToRetrieve(const parquet::FileMetaData& metadata,
-                                                 const std::vector<AnnotatedDataPath::Segment>& segments) {
-    std::vector<int> row_groups_to_process;
-
-    size_t last_not_mapped_part_id = 0;
-    for (int i = 0; i < metadata.num_row_groups(); ++i) {
-      auto rg_meta = metadata.RowGroup(i);
-      Ensure(rg_meta != nullptr, std::string(__PRETTY_FUNCTION__) + ": rg_meta is nullptr");
-
-      int64_t file_offset = RowGroupMetaToFileOffset(*rg_meta);
-      while (last_not_mapped_part_id < segments.size()) {
-        const auto seg_length = segments[last_not_mapped_part_id].length;  // 0 <=> to end
-        const auto& seg_start = segments[last_not_mapped_part_id].offset;
-        const auto& seg_end = segments[last_not_mapped_part_id].offset + segments[last_not_mapped_part_id].length;
-
-        if (seg_start <= file_offset && (file_offset < seg_end || seg_length == 0)) {
-          row_groups_to_process.emplace_back(i);
-          break;
-        }
-        if (file_offset >= seg_end) {
-          ++last_not_mapped_part_id;
-          continue;
-        }
-        break;
-      }
-    }
-    return row_groups_to_process;
-  }
+  std::vector<int> GetRowGroupsToRetrieve(const parquet::FileMetaData& metadata,
+                                          const std::vector<AnnotatedDataPath::Segment>& segments);
 
   StreamPtr<ArrowBatchWithRowPosition> MakeFinalStream(std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
                                                        const std::vector<int>& matching_row_groups,
@@ -156,6 +99,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::shared_ptr<const IFileReaderProvider> file_reader_provider_;
   std::shared_ptr<const IRowGroupFilter> rg_filter_;
   std::shared_ptr<const ice_filter::IRowFilter> row_filter_;
+  std::optional<SchemaNameMapper> schema_name_mapper_;
   std::shared_ptr<ILogger> logger_;
 };
 

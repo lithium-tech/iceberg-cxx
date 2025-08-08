@@ -16,6 +16,7 @@ add_executable(iceberg_streams_ut
   ut/positional_delete_applier_test.cpp
   ut/projection_stream_test.cpp
   ut/row_group_reader_test.cpp
+  ut/schema_name_mapping_test.cpp
   ut/parquet_stats_getter_test.cpp
 )
 
