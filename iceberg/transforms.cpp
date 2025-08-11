@@ -119,8 +119,6 @@ std::string GetTransformNameByType(TransformType type) {
 }
 
 std::shared_ptr<arrow::Scalar> MonthTransform::Transform(const std::shared_ptr<arrow::Scalar>& src) {
-  std::lock_guard lock(mutex_);
-
   int64_t millis_since_epoch = std::static_pointer_cast<arrow::Date64Scalar>(src)->value;
 
   auto tp = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>(
@@ -142,8 +140,6 @@ std::shared_ptr<types::Type> MonthTransform::ResultType(const std::shared_ptr<ty
 }
 
 std::shared_ptr<arrow::Scalar> YearTransform::Transform(const std::shared_ptr<arrow::Scalar>& src) {
-  std::lock_guard lock(mutex_);
-
   int64_t millis_since_epoch = std::static_pointer_cast<arrow::Date64Scalar>(src)->value;
 
   auto tp = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>(
@@ -165,8 +161,6 @@ std::shared_ptr<types::Type> YearTransform::ResultType(const std::shared_ptr<typ
 }
 
 std::shared_ptr<arrow::Scalar> DayTransform::Transform(const std::shared_ptr<arrow::Scalar>& src) {
-  std::lock_guard lock(mutex_);
-
   int64_t millis_since_epoch = std::static_pointer_cast<arrow::Date64Scalar>(src)->value;
 
   auto tp = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>(
@@ -188,8 +182,6 @@ std::shared_ptr<types::Type> DayTransform::ResultType(const std::shared_ptr<type
 }
 
 std::shared_ptr<arrow::Scalar> HourTransform::Transform(const std::shared_ptr<arrow::Scalar>& src) {
-  std::lock_guard lock(mutex_);
-
   int64_t millis_since_epoch = std::static_pointer_cast<arrow::Date64Scalar>(src)->value;
 
   auto tp = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>(
