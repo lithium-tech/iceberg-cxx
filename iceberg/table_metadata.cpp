@@ -769,6 +769,14 @@ std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
   return std::nullopt;
 }
 
+std::string TableMetadataV2::GetCurrentManifestListPathOrFail() const {
+  auto maybe_manifest_list_path = GetCurrentManifestListPath();
+  if (!maybe_manifest_list_path.has_value()) {
+    throw std::runtime_error("Manifest list path is not found");
+  }
+  return *maybe_manifest_list_path;
+}
+
 std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
   Ensure(current_snapshot_id.has_value() && !snapshots.empty(), std::string(__FUNCTION__) + ": no current snapshot");
 

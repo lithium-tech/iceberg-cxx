@@ -118,6 +118,7 @@ struct TableMetadataV2 {
                   std::vector<Statistics>&& statistics_);
 
   std::optional<std::string> GetCurrentManifestListPath() const;
+  std::string GetCurrentManifestListPathOrFail() const;
   std::shared_ptr<Schema> GetCurrentSchema() const;
   std::shared_ptr<SortOrder> GetSortOrder() const;
   std::shared_ptr<PartitionSpec> GetCurrentPartitionSpec() const;

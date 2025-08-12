@@ -15,7 +15,11 @@
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
+<<<<<<< HEAD
 #include "iceberg/common/error.h"
+=======
+#include "iceberg/common/threadpool.h"
+>>>>>>> 7971751 (v1)
 #include "iceberg/experimental_representations.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
@@ -122,6 +126,22 @@ std::string SerializePartitionTuple(const DataFile::PartitionTuple& partition_tu
   }
 
   return result;
+}
+
+std::vector<ManifestFile> GetManifestFiles(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                           const std::string& manifest_list_path) {
+  const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
+
+  std::stringstream ss(manifest_metadatas_content);
+  return ice_tea::ReadManifestList(ss);
+}
+
+void AddSequenceNumberOrFail(const ManifestFile& manifest, ManifestEntry& entry) {
+  if (!entry.sequence_number.has_value() && entry.status == ManifestEntry::Status::kAdded) {
+    entry.sequence_number = manifest.sequence_number;
+  }
+  Ensure(entry.sequence_number.has_value(),
+         "No sequence_number in iceberg::ManifestEntry for data file " + entry.data_file.file_path);
 }
 
 }  // namespace
@@ -232,6 +252,18 @@ static std::optional<std::vector<PartitionKeyField>> GetFieldsFromPartitionSpec(
   return partition_fields;
 }
 
+static Manifest GetManifest(std::shared_ptr<arrow::fs::FileSystem> fs, const ManifestFile& manifest_file,
+                            std::shared_ptr<iceberg::Schema> schema,
+                            const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, bool use_reader_schema,
+                            const ManifestEntryDeserializerConfig& config) {
+  const std::string entries_content = ValueSafe(ReadFile(fs, manifest_file.path));
+
+  auto maybe_partition_spec = GetFieldsFromPartitionSpec(*partition_specs.at(manifest_file.partition_spec_id), schema);
+  Ensure(maybe_partition_spec.has_value(), std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
+                                               std::to_string(manifest_file.partition_spec_id));
+  return ice_tea::ReadManifestEntries(entries_content, maybe_partition_spec.value(), config, use_reader_schema);
+}
+
 static bool MatchesSpecification(const PartitionSpec& partition_spec, std::shared_ptr<const iceberg::Schema> schema,
                                  const ContentFile::PartitionTuple& tuple) {
   std::optional<std::vector<PartitionKeyField>> partition_fields = GetFieldsFromPartitionSpec(partition_spec, schema);
@@ -280,10 +312,7 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
     std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& manifest_list_path, bool use_reader_schema,
     const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, std::shared_ptr<iceberg::Schema> schema,
     const ManifestEntryDeserializerConfig& config) {
-  const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
-
-  std::stringstream ss(manifest_metadatas_content);
-  std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
+  auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
   std::queue<ManifestFile> manifest_files_queue(std::deque<ManifestFile>(
       std::make_move_iterator(manifest_metadatas.begin()), std::make_move_iterator(manifest_metadatas.end())));
 
@@ -295,10 +324,14 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
                                                          bool use_reader_schema,
                                                          const ManifestEntryDeserializerConfig& config) {
+<<<<<<< HEAD
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
   Ensure(maybe_manifest_list_path.has_value(), "MakeIcebergEntriesStream: manifest list path is not found");
 
   const std::string manifest_list_path = maybe_manifest_list_path.value();
+=======
+  const std::string manifest_list_path = table_metadata->GetCurrentManifestListPathOrFail();
+>>>>>>> 7971751 (v1)
 
   return AllEntriesStream::Make(fs, manifest_list_path, use_reader_schema, table_metadata->partition_specs,
                                 table_metadata->GetCurrentSchema(), config);
@@ -310,11 +343,15 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
       auto entry = std::move(entries_for_current_manifest_file_.front());
       entries_for_current_manifest_file_.pop();
 
+<<<<<<< HEAD
       if (!entry.sequence_number.has_value() && entry.status == ManifestEntry::Status::kAdded) {
         entry.sequence_number = current_manifest_file.sequence_number;
       }
       Ensure(entry.sequence_number.has_value(),
              "No sequence_number in iceberg::ManifestEntry for data file " + entry.data_file.file_path);
+=======
+      AddSequenceNumberOrFail(current_manifest_file, entry);
+>>>>>>> 7971751 (v1)
 
       if (entry.status == ManifestEntry::Status::kDeleted) {
         continue;
@@ -330,6 +367,7 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
     current_manifest_file = std::move(manifest_files_.front());
     manifest_files_.pop();
 
+<<<<<<< HEAD
     const std::string manifest_path = current_manifest_file.path;
     const std::string entries_content = ValueSafe(ReadFile(fs_, manifest_path));
 
@@ -338,18 +376,25 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
     Ensure(maybe_partition_spec.has_value(), std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
                                                  std::to_string(current_manifest_file.partition_spec_id));
 
+=======
+>>>>>>> 7971751 (v1)
     Manifest manifest =
-        ice_tea::ReadManifestEntries(entries_content, maybe_partition_spec.value(), config_, use_avro_reader_schema_);
+        GetManifest(fs_, current_manifest_file, schema_, partition_specs_, use_avro_reader_schema_, config_);
     // it is impossible to construct queue from iterators before C++23
     entries_for_current_manifest_file_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(
         std::make_move_iterator(manifest.entries.begin()), std::make_move_iterator(manifest.entries.end())));
   }
 }
 
+arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                                         std::shared_ptr<TableMetadataV2> table_metadata,
+                                                         bool use_reader_schema, uint32_t threads_num,
+                                                         const ManifestEntryDeserializerConfig& config);
+
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
-                                            const GetScanMetadataConfig& config) {
+                                            uint32_t threads_num, const GetScanMetadataConfig& config) {
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
@@ -359,29 +404,20 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
     return arrow::Status::ExecutionError("GetScanMetadata: failed to parse metadata " + metadata_location +
                                          " (failed to get schema)");
   }
-  auto entries_stream =
-      AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
-                             config.manifest_entry_deserializer_config);
-  return GetScanMetadata(*entries_stream, *table_metadata);
+  if (threads_num == 0) {
+    auto entries_stream =
+        AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
+                               config.manifest_entry_deserializer_config);
+    return GetScanMetadata(*entries_stream, *table_metadata);
+  }
+  return GetScanMetadataMultiThreaded(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
+                                      threads_num, config.manifest_entry_deserializer_config);
 }
 
-class ScanMetadataBuilder {
+class ScanMetadataBuilderBase {
  public:
-  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata)
+  explicit ScanMetadataBuilderBase(const TableMetadataV2& table_metadata)
       : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()) {}
-
-  arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
-    if (entry.status == ManifestEntry::Status::kDeleted) {
-      return arrow::Status::OK();
-    }
-
-    ARROW_RETURN_NOT_OK(CheckPartitionTupleIsCorrect(entry));
-    std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
-
-    StoreEntry(std::move(serialized_partition_key), entry);
-
-    return arrow::Status::OK();
-  }
 
   ScanMetadata GetResult() {
     ScanMetadata result;
@@ -406,6 +442,19 @@ class ScanMetadataBuilder {
     return result;
   }
 
+  arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
+    if (entry.status == ManifestEntry::Status::kDeleted) {
+      return arrow::Status::OK();
+    }
+
+    ARROW_RETURN_NOT_OK(CheckPartitionTupleIsCorrect(entry));
+    std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
+
+    StoreEntry(std::move(serialized_partition_key), entry);
+
+    return arrow::Status::OK();
+  }
+
  private:
   void StoreEntry(std::string serialized_partition_key, const iceberg::ManifestEntry& entry) {
     SequenceNumber sequence_number = entry.sequence_number.value();
@@ -422,11 +471,10 @@ class ScanMetadataBuilder {
           }
           segments.emplace_back(split_offsets.back(), 0);
         }
-        partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
-            DataEntry(std::move(entry.data_file.file_path), std::move(segments)));
+        AddDataFile(serialized_partition_key, sequence_number, entry.data_file.file_path, std::move(segments));
         break;
       }
-      case ContentFile::FileContent::kPositionDeletes:
+      case ContentFile::FileContent::kPositionDeletes: {
         // A position delete file must be applied to a data file when all of the following are true:
         // - The data file's file_path is equal to the delete file's referenced_data_file if it is non-null
         // - The data file's data sequence number is less than or equal to the delete file's data sequence number
@@ -434,9 +482,10 @@ class ScanMetadataBuilder {
         // - There is no deletion vector that must be applied to the data file (when added, such a vector must
         // contain
         //   all deletes from existing position delete files)
-        partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
-            std::move(entry.data_file.file_path));
+        AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path);
         break;
+      }
+
       case ContentFile::FileContent::kEqualityDeletes:
         // An equality delete file must be applied to a data file when all of the following are true:
         // - The data file's data sequence number is strictly less than the delete's data sequence number
@@ -444,15 +493,26 @@ class ScanMetadataBuilder {
         // partition
         //   or the delete file's partition spec is unpartitioned
         if (serialized_partition_key.empty()) {
-          global_equality_deletes[sequence_number - 1].emplace_back(std::move(entry.data_file.file_path),
-                                                                    std::move(entry.data_file.equality_ids));
+          AddGlobalEqualityDeletes(sequence_number, entry.data_file.file_path, entry.data_file.equality_ids);
         } else {
-          partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(
-              std::move(entry.data_file.file_path), std::move(entry.data_file.equality_ids));
+          AddEqualityDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path,
+                             entry.data_file.equality_ids);
         }
         break;
     }
   }
+
+ protected:
+  virtual void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                           const std::string& path, std::vector<DataEntry::Segment>&& segments) = 0;
+
+  virtual void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                                  const std::string& path) = 0;
+
+  virtual void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
+                                        const std::vector<int>& equality_ids) = 0;
+  virtual void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                                  const std::string& path, const std::vector<int>& equality_ids) = 0;
 
   arrow::Status CheckPartitionTupleIsCorrect(const iceberg::ManifestEntry& entry) const {
     // https://iceberg.apache.org/docs/1.7.1/evolution/
@@ -489,10 +549,76 @@ class ScanMetadataBuilder {
   std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
 };
 
-class ReferencedDataFileAwareScanPlanner {
+template <bool mt>
+class ScanMetadataBuilder;
+
+template <>
+class ScanMetadataBuilder<false> : public ScanMetadataBuilderBase {
  public:
-  explicit ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
-      : default_scan_metadata_builder_(table_metadata) {}
+  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata) : ScanMetadataBuilderBase(table_metadata) {}
+
+ private:
+  void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number, const std::string& path,
+                   std::vector<DataEntry::Segment>&& segments) override {
+    partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
+        DataEntry(path, std::move(segments)));
+  }
+
+  void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                          const std::string& path) override {
+    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(path);
+  }
+
+  void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
+                                const std::vector<int>& equality_ids) override {
+    global_equality_deletes[sequence_number - 1].emplace_back(path, equality_ids);
+  }
+
+  void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                          const std::string& path, const std::vector<int>& equality_ids) override {
+    partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(path, equality_ids);
+  }
+};
+
+template <>
+class ScanMetadataBuilder<true> : public ScanMetadataBuilderBase {
+ public:
+  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata) : ScanMetadataBuilderBase(table_metadata) {}
+
+ private:
+  void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number, const std::string& path,
+                   std::vector<DataEntry::Segment>&& segments) override {
+    std::lock_guard<std::mutex> guard(mutex_);
+    partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
+        DataEntry(path, std::move(segments)));
+  }
+
+  void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                          const std::string& path) override {
+    std::lock_guard<std::mutex> guard(mutex_);
+    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(path);
+  }
+
+  void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
+                                const std::vector<int>& equality_ids) override {
+    std::lock_guard<std::mutex> guard(mutex_);
+    global_equality_deletes[sequence_number - 1].emplace_back(path, equality_ids);
+  }
+
+  void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                          const std::string& path, const std::vector<int>& equality_ids) override {
+    std::lock_guard<std::mutex> guard(mutex_);
+    partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(path, equality_ids);
+  }
+
+  // consider making separate mutexes for each variable
+  // partitions_mutex_, global_equality_deletes_mutex_
+  std::mutex mutex_;
+};
+
+class ReferencedDataFileAwareScanPlannerBase {
+ public:
+  ReferencedDataFileAwareScanPlannerBase(std::shared_ptr<ScanMetadataBuilderBase> builder) : builder_(builder) {}
 
   arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
     if (entry.status == iceberg::ManifestEntry::Status::kDeleted) {
@@ -502,28 +628,23 @@ class ReferencedDataFileAwareScanPlanner {
     switch (entry.data_file.content) {
       case iceberg::DataFile::FileContent::kData:
         break;
-      case iceberg::DataFile::FileContent::kEqualityDeletes:
-        has_equality_delete = true;
+      case iceberg::DataFile::FileContent::kEqualityDeletes: {
+        SetHasEqualityDelete();
         break;
+      }
       case iceberg::DataFile::FileContent::kPositionDeletes:
         if (entry.data_file.referenced_data_file.has_value()) {
-          has_referenced_data_file = true;
-          if (delete_file_path_to_referenced_data_file_path_.contains(entry.data_file.file_path)) {
-            return arrow::Status::ExecutionError("Two delete files with same path: " + entry.data_file.file_path);
-          }
-          delete_file_path_to_referenced_data_file_path_[entry.data_file.file_path] =
-              entry.data_file.referenced_data_file.value();
+          ARROW_RETURN_NOT_OK(HandlePositionDelete(entry));
         } else {
-          all_pos_deletes_annotated_with_referenced_data_file = false;
+          SetAllPosDeletes();
         }
         break;
     }
-
-    return default_scan_metadata_builder_.AddEntry(entry);
+    return builder_->AddEntry(entry);
   }
 
   arrow::Result<ScanMetadata> GetResult() {
-    ScanMetadata meta = default_scan_metadata_builder_.GetResult();
+    ScanMetadata meta = builder_->GetResult();
 
     {
       // there is nothing to optimize
@@ -546,7 +667,6 @@ class ReferencedDataFileAwareScanPlanner {
     // now we know that:
     // * all deletes are positional
     // * all deletes are annotated with reference data file
-
     ScanMetadata result;
     result.schema = meta.schema;
 
@@ -572,7 +692,11 @@ class ReferencedDataFileAwareScanPlanner {
     return result;
   }
 
- private:
+ protected:
+  virtual void SetHasEqualityDelete() = 0;
+  virtual void SetAllPosDeletes() = 0;
+  virtual arrow::Status HandlePositionDelete(const ManifestEntry& entry) = 0;
+
   arrow::Status HandlePartition(ScanMetadata::Partition&& part, ScanMetadata& result) {
     using LayerNumber = uint32_t;
 
@@ -629,16 +753,79 @@ class ReferencedDataFileAwareScanPlanner {
   }
 
   std::map<std::string, std::string> delete_file_path_to_referenced_data_file_path_;
-  ScanMetadataBuilder default_scan_metadata_builder_;
 
   bool all_pos_deletes_annotated_with_referenced_data_file = true;
   bool has_equality_delete = false;
   bool has_referenced_data_file = false;
+
+ private:
+  std::shared_ptr<ScanMetadataBuilderBase> builder_;
 };
+
+template <bool mt>
+class ReferencedDataFileAwareScanPlanner;
+
+template <>
+class ReferencedDataFileAwareScanPlanner<false> : public ReferencedDataFileAwareScanPlannerBase {
+ public:
+  explicit ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
+      : ReferencedDataFileAwareScanPlannerBase(std::make_shared<ScanMetadataBuilder<false>>(table_metadata)) {}
+
+ private:
+  void SetHasEqualityDelete() override { has_equality_delete = true; }
+
+  void SetAllPosDeletes() override { all_pos_deletes_annotated_with_referenced_data_file = true; }
+
+  arrow::Status HandlePositionDelete(const ManifestEntry& entry) override {
+    has_referenced_data_file = true;
+    if (delete_file_path_to_referenced_data_file_path_.contains(entry.data_file.file_path)) {
+      return arrow::Status::ExecutionError("Two delete files with same path: " + entry.data_file.file_path);
+    }
+    delete_file_path_to_referenced_data_file_path_[entry.data_file.file_path] =
+        entry.data_file.referenced_data_file.value();
+    return arrow::Status::OK();
+  }
+};
+
+template <>
+class ReferencedDataFileAwareScanPlanner<true> : public ReferencedDataFileAwareScanPlannerBase {
+ public:
+  explicit ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
+      : ReferencedDataFileAwareScanPlannerBase(std::make_shared<ScanMetadataBuilder<true>>(table_metadata)) {}
+
+ private:
+  void SetHasEqualityDelete() override {
+    std::lock_guard<std::mutex> guard(mutex_);
+    has_equality_delete = true;
+  }
+
+  void SetAllPosDeletes() override {
+    std::lock_guard<std::mutex> guard(mutex_);
+    all_pos_deletes_annotated_with_referenced_data_file = true;
+  }
+
+  arrow::Status HandlePositionDelete(const ManifestEntry& entry) override {
+    std::lock_guard<std::mutex> guard(mutex_);
+    has_referenced_data_file = true;
+    if (delete_file_path_to_referenced_data_file_path_.contains(entry.data_file.file_path)) {
+      return arrow::Status::ExecutionError("Two delete files with same path: " + entry.data_file.file_path);
+    }
+    delete_file_path_to_referenced_data_file_path_[entry.data_file.file_path] =
+        entry.data_file.referenced_data_file.value();
+    return arrow::Status::OK();
+  }
+
+  // consider making separate mutexes for each variable
+  // has_equality_delete_mutex_, referenced_data_file_mutex_, all_pos_deletes_mutex_;
+  std::mutex mutex_;
+};
+
+using SinglethreadedScanPlanner = ReferencedDataFileAwareScanPlanner<false>;
+using MultithreadedScanPlanner = ReferencedDataFileAwareScanPlanner<true>;
 
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
                                             const TableMetadataV2& table_metadata) {
-  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata);
+  SinglethreadedScanPlanner scan_metadata_builder(table_metadata);
 
   while (true) {
     std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();
@@ -651,6 +838,86 @@ arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream
   }
 
   return scan_metadata_builder.GetResult();
+}
+
+class ManifestEntryTask {
+ public:
+  ManifestEntryTask(iceberg::ManifestEntry&& entry, std::shared_ptr<MultithreadedScanPlanner> scan_metadata_builder,
+                    arrow::Status& status)
+      : entry_(std::move(entry)), scan_metadata_builder_(scan_metadata_builder), status_(status) {}
+
+  void operator()() { status_ = scan_metadata_builder_->AddEntry(entry_); }
+
+ private:
+  iceberg::ManifestEntry entry_;
+  std::shared_ptr<MultithreadedScanPlanner> scan_metadata_builder_;
+  arrow::Status& status_;
+};
+
+class ManifestFileTask {
+ public:
+  ManifestFileTask(std::shared_ptr<arrow::fs::FileSystem> fs, ManifestFile&& manifest_file,
+                   std::shared_ptr<ThreadPool> pool, std::shared_ptr<TableMetadataV2> table_metadata,
+                   std::shared_ptr<MultithreadedScanPlanner> scan_metadata_builder, bool use_reader_schema,
+                   std::vector<arrow::Status>& statuses, const ManifestEntryDeserializerConfig& config)
+      : fs_(fs),
+        manifest_file_(std::move(manifest_file)),
+        pool_(pool),
+        table_metadata_(table_metadata),
+        scan_metadata_builder_(scan_metadata_builder),
+        use_reader_schema_(use_reader_schema),
+        statuses_(statuses),
+        config_(config) {}
+
+  void operator()() {
+    Manifest manifest = GetManifest(fs_, manifest_file_, table_metadata_->GetCurrentSchema(),
+                                    table_metadata_->partition_specs, use_reader_schema_, config_);
+    statuses_.resize(manifest.entries.size());
+    for (size_t i = 0; i < manifest.entries.size(); ++i) {
+      AddSequenceNumberOrFail(manifest_file_, manifest.entries[i]);
+      if (manifest.entries[i].status != ManifestEntry::Status::kDeleted) {
+        pool_->Submit(ManifestEntryTask(std::move(manifest.entries[i]), scan_metadata_builder_, statuses_[i]));
+      }
+    }
+  }
+
+ private:
+  std::shared_ptr<arrow::fs::FileSystem> fs_;
+  ManifestFile manifest_file_;
+  std::shared_ptr<ThreadPool> pool_;
+  std::shared_ptr<TableMetadataV2> table_metadata_;
+  std::shared_ptr<MultithreadedScanPlanner> scan_metadata_builder_;
+  bool use_reader_schema_;
+  const ManifestEntryDeserializerConfig& config_;
+  std::vector<arrow::Status>& statuses_;
+};
+
+arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::fs::FileSystem> fs,
+                                                         std::shared_ptr<TableMetadataV2> table_metadata,
+                                                         bool use_reader_schema, uint32_t threads_num,
+                                                         const ManifestEntryDeserializerConfig& config) {
+  const std::string manifest_list_path = table_metadata->GetCurrentManifestListPathOrFail();
+  auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
+
+  auto scan_metadata_builder = std::make_shared<MultithreadedScanPlanner>(*table_metadata);
+  std::vector<std::vector<arrow::Status>> statuses(manifest_metadatas.size());
+  {
+    auto pool = std::make_shared<ThreadPool>(threads_num);
+    std::vector<std::future<void>> futures(manifest_metadatas.size());
+    for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
+      futures[i] = pool->Submit(ManifestFileTask(fs, std::move(manifest_metadatas[i]), pool, table_metadata,
+                                                 scan_metadata_builder, use_reader_schema, statuses[i], config));
+    }
+    for (auto& future : futures) {
+      future.get();
+    }
+  }
+  for (const auto& manifest_statuses : statuses) {
+    for (const auto& status : manifest_statuses) {
+      ARROW_RETURN_NOT_OK(status);
+    }
+  }
+  return scan_metadata_builder->GetResult();
 }
 
 }  // namespace iceberg::ice_tea

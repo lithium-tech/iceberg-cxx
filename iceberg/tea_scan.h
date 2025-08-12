@@ -91,10 +91,11 @@ struct GetScanMetadataConfig {
   ManifestEntryDeserializerConfig manifest_entry_deserializer_config;
 };
 
+// threads_num = 0 is usual GetScanMetadata mode, others are multithreaded
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
-                                            const GetScanMetadataConfig& config = {});
+                                            uint32_t threads_num = 0, const GetScanMetadataConfig& config = {});
 
 class IcebergEntriesStream {
  public:
