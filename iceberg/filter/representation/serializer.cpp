@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "arrow/status.h"
+#include "iceberg/common/error.h"
 #include "iceberg/filter/representation/function.h"
 #include "iceberg/filter/representation/node.h"
 #include "iceberg/filter/representation/value.h"
@@ -403,12 +404,6 @@ rapidjson::Value Serializer::Serialize(const std::shared_ptr<ScalarOverArrayFunc
   AddMember(result, field::kLhs, Serialize(node->scalar));
   AddMember(result, field::kRhs, Serialize(node->array));
   return result;
-}
-
-void Ensure(bool condition, const std::string& error_message) {
-  if (!condition) {
-    throw std::runtime_error(error_message);
-  }
 }
 
 template <typename T>

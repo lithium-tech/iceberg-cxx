@@ -37,9 +37,8 @@ class HiveClientImpl {
 
   std::string GetMetadataLocation(const std::string& db_name, const std::string& table_name) {
     Apache::Hadoop::Hive::Table table = GetTable(db_name, table_name);
-    if (table.tableName.empty()) {
-      throw std::runtime_error("No table '" + table_name + "'");
-    }
+    Ensure(!table.tableName.empty(), "No table '" + table_name + "'");
+
     if (auto it = table.parameters.find("metadata_location"); it == table.parameters.end()) {
       throw std::runtime_error("Table '" + table_name + "' has no metadata_location");
     } else {

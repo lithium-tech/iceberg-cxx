@@ -40,9 +40,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> FilterTable(const std::shared_p
   arrow::RecordBatchVector selected_batches;
 
   for (int index : row_indices) {
-    if (index < 0 || index >= table->num_rows()) {
-      throw std::runtime_error("out of range " + std::to_string(index) + " " + std::to_string(table->num_rows()));
-    }
+    Ensure(index >= 0 && index < table->num_rows(),
+           "out of range " + std::to_string(index) + " " + std::to_string(table->num_rows()));
 
     std::shared_ptr<arrow::RecordBatch> batch;
     arrow::TableBatchReader reader(*table);
@@ -85,9 +84,8 @@ class ParquetWriter {
                 const std::shared_ptr<arrow::Schema>& arrow_schema)
       : fs_(fs) {
     arrow::Result<std::shared_ptr<arrow::io::OutputStream>> maybe_outfile = fs_->OpenOutputStream(filename);
-    if (!maybe_outfile.ok()) {
-      throw std::runtime_error(maybe_outfile.status().message());
-    }
+    Ensure(maybe_outfile.ok(), maybe_outfile.status().message());
+
     outfile_ = maybe_outfile.ValueOrDie();
     parquet::WriterProperties::Builder builder;
     auto properties = builder.build();

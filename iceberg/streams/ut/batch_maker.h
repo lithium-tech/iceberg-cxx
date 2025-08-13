@@ -19,12 +19,12 @@ namespace iceberg {
 template <typename BuilderType, typename ValueType>
 std::shared_ptr<arrow::Array> MakeColumn(const std::vector<ValueType>& values) {
   BuilderType builder;
-  iceberg::Ensure(builder.Reserve(values.size()));
+  Ensure(builder.Reserve(values.size()));
   for (const auto& v : values) {
     if (v) {
-      iceberg::Ensure(builder.Append(*v));
+      Ensure(builder.Append(*v));
     } else {
-      iceberg::Ensure(builder.AppendNull());
+      Ensure(builder.AppendNull());
     }
   }
 
@@ -46,9 +46,7 @@ inline std::shared_ptr<arrow::Array> MakeStringArrowColumn(const std::vector<std
 
 inline std::shared_ptr<arrow::RecordBatch> MakeBatch(const std::vector<std::shared_ptr<arrow::Array>>& arrays,
                                                      const std::vector<std::string>& names) {
-  if (names.size() != arrays.size() || names.size() == 0) {
-    throw std::runtime_error("Error in test");
-  }
+  Ensure(names.size() == arrays.size() && names.size() > 0, "Error in test");
 
   arrow::FieldVector fields;
   for (size_t i = 0; i < arrays.size(); ++i) {

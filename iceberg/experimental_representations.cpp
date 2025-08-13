@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "iceberg/common/error.h"
 #include "iceberg/schema.h"
 #include "iceberg/tea_scan.h"
 #include "iceberg/tea_scan_hashers.h"
@@ -42,9 +43,7 @@ bool ValidateSegments(const std::vector<ice_tea::DataEntry::Segment>& segments) 
 }
 
 std::vector<ice_tea::DataEntry::Segment> UniteSegments(const std::vector<ice_tea::DataEntry::Segment>& segments) {
-  if (!ValidateSegments(segments)) {
-    throw std::runtime_error("Segments should be sorted");
-  }
+  Ensure(ValidateSegments(segments), "Segments should be sorted");
 
   std::vector<ice_tea::DataEntry::Segment> result;
 

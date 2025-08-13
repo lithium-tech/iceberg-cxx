@@ -23,9 +23,7 @@ class QuantileSketch {
   void AppendValue(const T& value) { sketch_.update(value); }
 
   std::vector<T> GetHistogramBounds(int number_of_values) const {
-    if (number_of_values < 2) {
-      throw std::runtime_error("QuantileSketch: number of values is " + std::to_string(number_of_values));
-    }
+    Ensure(number_of_values >= 2, "QuantileSketch: number of values is " + std::to_string(number_of_values));
     std::vector<T> result;
     for (int i = 0; i < number_of_values; ++i) {
       result.emplace_back(sketch_.get_quantile(static_cast<double>(i) / static_cast<double>(number_of_values - 1)));
@@ -81,10 +79,9 @@ class GenericQuantileSketch {
 
   template <typename DictionaryValue>
   GenericQuantileSketch FromDictionary(const IValuesProvider<int64_t, DictionaryValue>& dictionary_values) const {
-    if (!std::holds_alternative<QuantileSketch<int64_t>>(sketch_)) {
-      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) +
-                               ": trying to resolve dictionary in sketch, but sketch does not store integers");
-    }
+    Ensure(std::holds_alternative<QuantileSketch<int64_t>>(sketch_),
+           std::string(__PRETTY_FUNCTION__) +
+               ": trying to resolve dictionary in sketch, but sketch does not store integers");
 
     const auto& typed_sketch = std::get<QuantileSketch<int64_t>>(sketch_).GetSketch();
     auto result = ResolveDictionary<int64_t, DictionaryValue>(typed_sketch, dictionary_values);
@@ -95,10 +92,8 @@ class GenericQuantileSketch {
   void Merge(const GenericQuantileSketch& other) {
     std::visit(
         [&]<typename ValueType>(QuantileSketch<ValueType>& sketch) {
-          if (!std::holds_alternative<QuantileSketch<ValueType>>(other.sketch_)) {
-            throw std::runtime_error(std::string(__PRETTY_FUNCTION__) +
-                                     ": merging sketches with different types is impossible");
-          }
+          iceberg::Ensure(std::holds_alternative<QuantileSketch<ValueType>>(other.sketch_),
+                          std::string(__PRETTY_FUNCTION__) + ": merging sketches with different types is impossible");
           const auto& raw_sketch = std::get<QuantileSketch<ValueType>>(other.sketch_).GetSketch();
 
           sketch.GetSketch().merge(raw_sketch);

@@ -10,6 +10,7 @@
 
 #include "arrow/result.h"
 #include "arrow/status.h"
+#include "iceberg/common/error.h"
 
 namespace iceberg {
 
@@ -65,11 +66,9 @@ class PuffinFile {
 
     BlobMetadata GetBlobMetadata(size_t blob_number) const {
       auto footer = GetDeserializedFooter();
-      if (blob_number >= footer.blobs.size()) {
-        throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": requested blob number (" +
-                                 std::to_string(blob_number) + ") does not exist (total blob count is " +
-                                 std::to_string(footer.blobs.size()) + ")");
-      }
+      Ensure(blob_number < footer.blobs.size(),
+             std::string(__PRETTY_FUNCTION__) + ": requested blob number (" + std::to_string(blob_number) +
+                 ") does not exist (total blob count is " + std::to_string(footer.blobs.size()) + ")");
       return footer.blobs.at(blob_number);
     }
 
@@ -86,12 +85,9 @@ class PuffinFile {
     auto blob_meta = footer_.GetBlobMetadata(blob_number);
     int64_t offset = blob_meta.offset;
     int64_t length = blob_meta.length;
-
-    if (offset < 0 || length < 0 || static_cast<size_t>(offset + length) >= data_.size()) {
-      throw std::runtime_error(
-          std::string(__PRETTY_FUNCTION__) + ": unexpected blob request (offset = " + std::to_string(offset) +
-          ", length = " + std::to_string(length) + ") for file with size " + std::to_string(data_.size()));
-    }
+    Ensure(offset >= 0 && length >= 0 && static_cast<size_t>(offset + length) < data_.size(),
+           std::string(__PRETTY_FUNCTION__) + ": unexpected blob request (offset = " + std::to_string(offset) +
+               ", length = " + std::to_string(length) + ") for file with size " + std::to_string(data_.size()));
 
     return data_.substr(offset, length);
   }

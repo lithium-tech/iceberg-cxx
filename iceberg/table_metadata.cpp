@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "iceberg/common/error.h"
 #include "iceberg/common/json_parse.h"
 #include "iceberg/nested_field.h"
 #include "iceberg/type.h"
@@ -85,9 +86,8 @@ struct Names {
 auto Ref(const char* s) { return rapidjson::StringRef(s, strlen(s)); }
 
 void ProcessArray(const rapidjson::Value& array, std::function<void(const rapidjson::Value&)> callback) {
-  if (!array.IsArray()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !array.IsArray()");
-  }
+  Ensure(array.IsArray(), std::string(__FUNCTION__) + ": !array.IsArray()");
+
   for (const auto& elem : array.GetArray()) {
     callback(elem);
   }
@@ -133,9 +133,8 @@ class WriterContext {
       auto* list_type = static_cast<const types::ListType*>(&type);
       WriteJsonField(element, Names::element_id, list_type->ElementId());
       WriteJsonField(element, Names::element_required, list_type->ElementRequired());
-      if (!list_type->ElementType()) {
-        throw std::runtime_error(std::string(__FUNCTION__) + ": no type");
-      }
+      Ensure(list_type->ElementType() != nullptr, std::string(__FUNCTION__) + ": no type");
+
       WriteDataType(element, *list_type->ElementType(), Names::element);
 
       doc.AddMember(SaveRef(field_name), element.Move(), GetAllocator());
@@ -146,9 +145,8 @@ class WriterContext {
     WriteJsonField(doc, Names::id, field.field_id);
     WriteJsonField(doc, Names::name, field.name);
     WriteJsonField(doc, Names::required, field.is_required);
-    if (!field.type) {
-      throw std::runtime_error(std::string(__FUNCTION__) + ": no type");
-    }
+    Ensure(field.type != nullptr, std::string(__FUNCTION__) + ": no type");
+
     WriteDataType(doc, *field.type, Names::type);
   }
 
@@ -214,9 +212,7 @@ class WriterContext {
     }
     WriteJsonField(document, Names::timestamp_ms, snap.timestamp_ms);
 
-    if (!snap.summary.contains(Names::operation)) {
-      throw std::runtime_error(std::string(__FUNCTION__) + ": no operation in summary");
-    }
+    Ensure(snap.summary.contains(Names::operation), std::string(__FUNCTION__) + ": no operation in summary");
 
     rapidjson::Value summary(rapidjson::kObjectType);
     WriteStringMap(summary, snap.summary);
@@ -423,18 +419,15 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
     throw std::runtime_error(std::string(__FUNCTION__) + ": unknown type '" + str + "'");
   }
   if (value.IsObject()) {
-    if (!value.HasMember(Names::type)) {
-      throw std::runtime_error(std::string(__FUNCTION__) + ": !value.HasMember(\"type\"");
-    }
+    Ensure(value.HasMember(Names::type), std::string(__FUNCTION__) + ": !value.HasMember(\"type\"");
 
     std::string type = json_parse::ExtractStringField(value, Names::type);
     if (type == Names::list) {
       int32_t element_field_id = json_parse::ExtractInt32Field(value, Names::element_id);
       bool element_required = json_parse::ExtractBooleanField(value, Names::element_required);
 
-      if (!value.HasMember(Names::element)) {
-        throw std::runtime_error(std::string(__FUNCTION__) + ": !value.HasMember(\"element\"");
-      }
+      Ensure(value.HasMember(Names::element), std::string(__FUNCTION__) + ": !value.HasMember(\"element\"");
+
       std::shared_ptr<const types::Type> element_type = JsonToDataType(value[Names::element]);
 
       return std::make_shared<types::ListType>(element_field_id, element_required, element_type);
@@ -449,9 +442,7 @@ types::NestedField JsonToField(const rapidjson::Value& document) {
   result.name = json_parse::ExtractStringField(document, Names::name);
   result.is_required = json_parse::ExtractBooleanField(document, Names::required);
 
-  if (!document.HasMember(Names::type)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": document.HasMember(\"type\")");
-  }
+  Ensure(document.HasMember(Names::type), std::string(__FUNCTION__) + ": document.HasMember(\"type\")");
 
   result.type = JsonToDataType(document[Names::type]);
   return result;
@@ -459,9 +450,7 @@ types::NestedField JsonToField(const rapidjson::Value& document) {
 
 std::vector<types::NestedField> ExtractSchemaFields(const rapidjson::Value& document, const std::string& field_name) {
   const char* c_str = field_name.c_str();
-  if (!document.HasMember(c_str)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
+  Ensure(document.HasMember(c_str), std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
 
   std::vector<types::NestedField> result;
   ProcessArray(document[c_str],
@@ -470,9 +459,7 @@ std::vector<types::NestedField> ExtractSchemaFields(const rapidjson::Value& docu
 }
 
 std::shared_ptr<Schema> JsonToSchema(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   int32_t schema_id = json_parse::ExtractInt32Field(document, Names::schema_id);
   std::vector<types::NestedField> fields = ExtractSchemaFields(document, Names::fields);
@@ -482,9 +469,9 @@ std::shared_ptr<Schema> JsonToSchema(const rapidjson::Value& document) {
 
 std::vector<std::shared_ptr<Schema>> ExtractSchemas(const rapidjson::Value& document) {
   static constexpr const char* field_name = Names::schemas;
-  if (!document.HasMember(field_name)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
-  }
+  Ensure(document.HasMember(field_name),
+         std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
+
   std::vector<std::shared_ptr<Schema>> result;
   ProcessArray(document[field_name],
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToSchema(elem)); });
@@ -500,9 +487,7 @@ PartitionField JsonToPartitionField(const rapidjson::Value& document) {
 
 std::vector<PartitionField> ExtractPartitionFields(const rapidjson::Value& document) {
   static constexpr const char* field_name = Names::fields;
-  if (!document.HasMember(field_name)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
+  Ensure(document.HasMember(field_name), std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
 
   std::vector<PartitionField> result;
   ProcessArray(document[field_name],
@@ -511,9 +496,7 @@ std::vector<PartitionField> ExtractPartitionFields(const rapidjson::Value& docum
 }
 
 std::shared_ptr<PartitionSpec> JsonPartitionSpec(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   int32_t schema_id = json_parse::ExtractInt32Field(document, Names::spec_id);
   return std::make_shared<PartitionSpec>(PartitionSpec{schema_id, ExtractPartitionFields(document)});
@@ -521,9 +504,9 @@ std::shared_ptr<PartitionSpec> JsonPartitionSpec(const rapidjson::Value& documen
 
 std::vector<std::shared_ptr<PartitionSpec>> ExtractPartitionSpecs(const rapidjson::Value& document) {
   static constexpr const char* field_name = Names::partition_specs;
-  if (!document.HasMember(field_name)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
-  }
+  Ensure(document.HasMember(field_name),
+         std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
+
   std::vector<std::shared_ptr<PartitionSpec>> result;
   ProcessArray(document[field_name],
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonPartitionSpec(elem)); });
@@ -531,9 +514,7 @@ std::vector<std::shared_ptr<PartitionSpec>> ExtractPartitionSpecs(const rapidjso
 }
 
 std::shared_ptr<Snapshot> JsonToSnapshot(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   int64_t snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id);
   std::optional<int64_t> parent_snapshot_id =
@@ -542,9 +523,8 @@ std::shared_ptr<Snapshot> JsonToSnapshot(const rapidjson::Value& document) {
   int64_t timestamp_ms = json_parse::ExtractInt64Field(document, Names::timestamp_ms);
   std::string manifest_list = json_parse::ExtractStringField(document, Names::manifest_list);
   std::map<std::string, std::string> summary = json_parse::ExtractStringMap(document, Names::summary);
-  if (!summary.contains(Names::operation)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !summary.contains(\"operation\")");
-  }
+  Ensure(summary.contains(Names::operation), std::string(__FUNCTION__) + ": !summary.contains(\"operation\")");
+
   std::optional<int64_t> schema_id = json_parse::ExtractOptionalInt64Field(document, Names::schema_id);
   return std::make_shared<Snapshot>(Snapshot{.snapshot_id = snapshot_id,
                                              .parent_snapshot_id = parent_snapshot_id,
@@ -556,17 +536,14 @@ std::shared_ptr<Snapshot> JsonToSnapshot(const rapidjson::Value& document) {
 }
 
 int32_t JsonToFieldId(const rapidjson::Value& document) {
-  if (!document.IsInt()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsInt()");
-  }
+  Ensure(document.IsInt(), std::string(__FUNCTION__) + ": !document.IsInt()");
   return document.GetInt();
 }
 
 std::vector<int32_t> ExtractFieldIds(const rapidjson::Value& document) {
   static constexpr const char* field_name = Names::fields;
-  if (!document.HasMember(field_name)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
+  Ensure(document.HasMember(field_name), std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
+
   std::vector<int32_t> result;
   ProcessArray(document[field_name],
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToFieldId(elem)); });
@@ -585,9 +562,8 @@ BlobMetadata JsonToBlobMetadata(const rapidjson::Value& document) {
 
 std::vector<BlobMetadata> ExtractBlobMetadata(const rapidjson::Value& document) {
   static constexpr const char* field_name = Names::blob_metadata;
-  if (!document.HasMember(field_name)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
-  }
+  Ensure(document.HasMember(field_name), std::string(__FUNCTION__) + ": !document.HasMember(" + field_name + ")");
+
   std::vector<BlobMetadata> result;
   ProcessArray(document[field_name],
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToBlobMetadata(elem)); });
@@ -595,9 +571,7 @@ std::vector<BlobMetadata> ExtractBlobMetadata(const rapidjson::Value& document) 
 }
 
 Statistics JsonToStatistics(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   Statistics statistics;
   statistics.statistics_path = json_parse::ExtractStringField(document, Names::statistics_path);
@@ -623,9 +597,7 @@ std::optional<std::vector<std::shared_ptr<Snapshot>>> ExtractSnapshots(const rap
 }
 
 SnapshotLog JsonToSnapshotLogEntry(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   int64_t timestamp_ms = json_parse::ExtractInt64Field(document, Names::timestamp_ms);
   int64_t snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id);
@@ -645,9 +617,7 @@ std::optional<std::vector<SnapshotLog>> ExtractSnapshotLog(const rapidjson::Valu
 }
 
 MetadataLog JsonToMetadataLogEntry(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   int64_t timestamp_ms = json_parse::ExtractInt64Field(document, Names::timestamp_ms);
   std::string metadata_file = json_parse::ExtractStringField(document, Names::metadata_file);
@@ -675,9 +645,7 @@ std::optional<std::map<std::string, std::string>> ExtractProperties(const rapidj
 }
 
 SortField JsonToSortField(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   // TODO(chertus): lower_case
   auto str_direction = json_parse::ExtractStringField(document, Names::direction);
@@ -691,9 +659,7 @@ SortField JsonToSortField(const rapidjson::Value& document) {
 }
 
 std::shared_ptr<SortOrder> JsonToSortOrders(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   int32_t order_id = json_parse::ExtractInt32Field(document, Names::order_id);
   std::vector<SortField> fields;
@@ -704,9 +670,9 @@ std::shared_ptr<SortOrder> JsonToSortOrders(const rapidjson::Value& document) {
 
 std::vector<std::shared_ptr<SortOrder>> ExtractSortOrders(const rapidjson::Value& document) {
   static constexpr const char* field_name = Names::sort_orders;
-  if (!document.HasMember(field_name)) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
-  }
+  Ensure(document.HasMember(field_name),
+         std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
+
   std::vector<std::shared_ptr<SortOrder>> result;
   ProcessArray(document[field_name],
                [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToSortOrders(elem)); });
@@ -714,9 +680,7 @@ std::vector<std::shared_ptr<SortOrder>> ExtractSortOrders(const rapidjson::Value
 }
 
 SnapshotRef JsonToRef(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   return SnapshotRef{
       .snapshot_id = json_parse::ExtractInt64Field(document, Names::snapshot_id),
@@ -727,15 +691,12 @@ SnapshotRef JsonToRef(const rapidjson::Value& document) {
 }
 
 std::map<std::string, SnapshotRef> JsonToRefsMap(const rapidjson::Value& document) {
-  if (!document.IsObject()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": !document.IsObject()");
-  }
+  Ensure(document.IsObject(), std::string(__FUNCTION__) + ": !document.IsObject()");
 
   std::map<std::string, SnapshotRef> result;
   for (auto it = document.MemberBegin(); it != document.MemberEnd(); ++it) {
-    if (!it->name.IsString()) {
-      throw std::runtime_error(std::string(__FUNCTION__) + ": !it->name.IsString()");
-    }
+    Ensure(it->name.IsString(), std::string(__FUNCTION__) + ": !it->name.IsString()");
+
     result.emplace(it->name.GetString(), JsonToRef(it->value));
   }
   return result;
@@ -809,21 +770,18 @@ std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
 }
 
 std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
-  if (!current_snapshot_id.has_value() || snapshots.empty()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": no current snapshot");
-  }
+  Ensure(current_snapshot_id.has_value() && !snapshots.empty(), std::string(__FUNCTION__) + ": no current snapshot");
+
   std::optional<int64_t> schema_id;
   for (const auto& snapshot : snapshots) {
     if (snapshot->snapshot_id == current_snapshot_id.value()) {
-      if (!snapshot->schema_id.has_value()) {
-        throw std::runtime_error(std::string(__FUNCTION__) + ": no schema id");
-      }
+      Ensure(snapshot->schema_id.has_value(), std::string(__FUNCTION__) + ": no schema id");
+
       schema_id = snapshot->schema_id.value();
     }
   }
-  if (!schema_id.has_value()) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": no current snapshot");
-  }
+  Ensure(schema_id.has_value(), std::string(__FUNCTION__) + ": no current snapshot");
+
   for (const auto& schema : schemas) {
     if (schema->SchemaId() == schema_id.value()) {
       return schema;

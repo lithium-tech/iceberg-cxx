@@ -29,9 +29,7 @@ std::vector<int64_t> SplitOffsets(std::shared_ptr<parquet::FileMetaData> parquet
   split_offsets.reserve(parquet_meta->num_row_groups());
   for (int i = 0; i < parquet_meta->num_row_groups(); ++i) {
     auto rg_meta = parquet_meta->RowGroup(i);
-    if (!rg_meta) {
-      throw std::runtime_error("No row group for id " + std::to_string(i));
-    }
+    Ensure(rg_meta != nullptr, "No row group for id " + std::to_string(i));
     split_offsets.push_back(rg_meta->file_offset());
   }
   std::sort(split_offsets.begin(), split_offsets.end());
@@ -41,15 +39,12 @@ std::vector<int64_t> SplitOffsets(std::shared_ptr<parquet::FileMetaData> parquet
 std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::io::RandomAccessFile> input_file) {
   parquet::arrow::FileReaderBuilder reader_builder;
   auto status = reader_builder.Open(input_file, parquet::default_reader_properties());
-  if (!status.ok()) {
-    throw std::runtime_error("cannot open parquet file");
-  }
+  Ensure(status.ok(), "cannot open parquet file");
 
   reader_builder.memory_pool(arrow::default_memory_pool());
   auto maybe_arrow_reader = reader_builder.Build();
-  if (!maybe_arrow_reader.ok()) {
-    throw std::runtime_error(maybe_arrow_reader.status().message());
-  }
+  Ensure(maybe_arrow_reader.ok(), maybe_arrow_reader.status().message());
+
   auto arrow_reader = maybe_arrow_reader.MoveValueUnsafe();
   return arrow_reader->parquet_reader()->metadata();
 }
@@ -57,13 +52,9 @@ std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::io
 std::shared_ptr<parquet::FileMetaData> ParquetMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                        const std::string& file_path, uint64_t& file_size) {
   auto input_file = fs->OpenInputFile(file_path);
-  if (!input_file.ok()) {
-    throw std::runtime_error("Cannot open input file: " + file_path);
-  }
+  Ensure(input_file.ok(), "Cannot open input file: " + file_path);
   auto size_rez = (*input_file)->GetSize();
-  if (!size_rez.ok()) {
-    throw std::runtime_error("Cannot get input file size: " + file_path);
-  }
+  Ensure(size_rez.ok(), "Cannot get input file size: " + file_path);
   file_size = *size_rez;
   return ParquetMetadata(*input_file);
 }
@@ -190,9 +181,7 @@ template <typename T>
 T Deserialize(const avro::GenericDatum& datum)
 requires(std::is_same_v<std::pair<typename T::first_type, typename T::second_type>, T>)
 {
-  if (datum.type() != avro::AVRO_RECORD) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
-  }
+  Ensure(datum.type() == avro::AVRO_RECORD, std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
   const auto& record = datum.value<avro::GenericRecord>();
   auto first = Extract<typename T::first_type>(record, "key");
   auto second = Extract<typename T::second_type>(record, "value");
@@ -214,33 +203,26 @@ requires(std::is_same_v<std::map<typename T::key_type, typename T::value_type::s
 
 template <>
 int Deserialize(const avro::GenericDatum& datum) {
-  if (datum.type() != avro::AVRO_INT) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
-  }
+  Ensure(datum.type() == avro::AVRO_INT, std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
   return datum.value<int>();
 }
 
 template <>
 int64_t Deserialize(const avro::GenericDatum& datum) {
-  if (datum.type() != avro::AVRO_LONG) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
-  }
+  Ensure(datum.type() == avro::AVRO_LONG, std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
   return datum.value<int64_t>();
 }
 
 template <>
 std::string Deserialize(const avro::GenericDatum& datum) {
-  if (datum.type() != avro::AVRO_STRING) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
-  }
+  Ensure(datum.type() == avro::AVRO_STRING, std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
   return datum.value<std::string>();
 }
 
 template <>
 DataFile::PartitionTuple Deserialize(const avro::GenericDatum& datum) {
-  if (datum.type() != avro::AVRO_RECORD) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
-  }
+  Ensure(datum.type() == avro::AVRO_RECORD, std::string(__PRETTY_FUNCTION__) + ": unexpected datum type");
+
   const auto& record = datum.value<avro::GenericRecord>();
   DataFile::PartitionTuple result;
   const auto& schema = record.schema();
@@ -312,10 +294,8 @@ DataFile::PartitionTuple Deserialize(const avro::GenericDatum& datum) {
       continue;
     }
 
-    if (logical_type.type() != avro::LogicalType::NONE) {
-      throw std::runtime_error("Unexpected logical type in avro: " +
-                               std::to_string(static_cast<int>(logical_type.type())));
-    }
+    Ensure(logical_type.type() == avro::LogicalType::NONE,
+           "Unexpected logical type in avro: " + std::to_string(static_cast<int>(logical_type.type())));
 
     if (field.type() == avro::AVRO_STRING) {
       result.fields.emplace_back(name, field.value<std::string>(),
@@ -352,9 +332,8 @@ class DataFileDeserializer {
   DataFileDeserializer(const DataFileDeserializerConfig& config) : config_(config) {}
 
   DataFile Deserialize(const avro::GenericDatum& datum) {
-    if (datum.type() != avro::AVRO_RECORD) {
-      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": data.type() is not record");
-    }
+    Ensure(datum.type() == avro::AVRO_RECORD, std::string(__PRETTY_FUNCTION__) + ": data.type() is not record");
+
     const auto& record = datum.value<avro::GenericRecord>();
 
     DataFile data_file{};
@@ -398,9 +377,8 @@ class ManifestEntryDeserializer {
   ManifestEntryDeserializer(const ManifestEntryDeserializerConfig& config) : config_(config) {}
 
   ManifestEntry Deserialize(const avro::GenericDatum& datum) {
-    if (datum.type() != avro::AVRO_RECORD) {
-      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": datum.type() is not record");
-    }
+    Ensure(datum.type() == avro::AVRO_RECORD, std::string(__PRETTY_FUNCTION__) + ": datum.type() is not record");
+
     const auto& record = datum.value<avro::GenericRecord>();
 
     ManifestEntry entry = [&]() {
@@ -829,10 +807,8 @@ void SerializePartition(const std::vector<PartitionKeyField>& partition_spec, co
   for (const auto& info : partition.fields) {
     if (record.hasField(info.name)) {
       std::shared_ptr<const types::Type> type = ExtractTypeFromPartitionSpec(partition_spec, info.name);
-      if (!type) {
-        throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": internal error. Field '" + info.name +
-                                 "' not found in partition_spec");
-      }
+      Ensure(type != nullptr, std::string(__PRETTY_FUNCTION__) + ": internal error. Field '" + info.name +
+                                  "' not found in partition_spec");
       bool is_null = std::holds_alternative<std::monostate>(info.value);
       switch (type->TypeId()) {
         case TypeID::kBoolean:
@@ -934,20 +910,14 @@ avro::NodePtr Find(avro::NodePtr root, const std::string& name) {
 
 void ValidatePartitionSpec(const std::vector<PartitionKeyField>& partition_spec, avro::NodePtr root) {
   avro::NodePtr data_file = Find(root, "data_file");
-  if (!data_file) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": data_file is not found in avro.schema");
-  }
+  Ensure(data_file != nullptr, std::string(__PRETTY_FUNCTION__) + ": data_file is not found in avro.schema");
 
   avro::NodePtr partition = Find(data_file, "partition");
-  if (!partition) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": partition is not found in avro.schema");
-  }
+  Ensure(partition != nullptr, std::string(__PRETTY_FUNCTION__) + ": partition is not found in avro.schema");
 
-  if (partition_spec.size() != partition->leaves()) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": partition_spec has " +
-                             std::to_string(partition_spec.size()) + ", but partition in avro contains " +
-                             std::to_string(partition->leaves()) + " fields");
-  }
+  Ensure(partition_spec.size() == partition->leaves(),
+         std::string(__PRETTY_FUNCTION__) + ": partition_spec has " + std::to_string(partition_spec.size()) +
+             ", but partition in avro contains " + std::to_string(partition->leaves()) + " fields");
 
   // TODO(gmusya): improve test coverage
   std::map<std::string, int> name_to_leaf;
@@ -955,10 +925,8 @@ void ValidatePartitionSpec(const std::vector<PartitionKeyField>& partition_spec,
     name_to_leaf[partition->nameAt(i)] = i;
   }
   for (const auto& spec_field : partition_spec) {
-    if (!name_to_leaf.contains(spec_field.name)) {
-      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": partition_spec has field '" + spec_field.name +
-                               "', but partition in avro does not");
-    }
+    Ensure(name_to_leaf.contains(spec_field.name), std::string(__PRETTY_FUNCTION__) + ": partition_spec has field '" +
+                                                       spec_field.name + "', but partition in avro does not");
 
     // TODO(gmusya): validate logical types
   }
@@ -966,9 +934,7 @@ void ValidatePartitionSpec(const std::vector<PartitionKeyField>& partition_spec,
 
 Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKeyField>& partition_spec,
                              const ManifestEntryDeserializerConfig& config, bool use_reader_schema) {
-  if (!input) {
-    throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": input is invalid");
-  }
+  Ensure(!!input, std::string(__PRETTY_FUNCTION__) + ": input is invalid");
 
   auto istream = avro::istreamInputStream(input);
   avro::DataFileReader<avro::GenericDatum> data_file_reader = [&]() {

@@ -8,6 +8,8 @@
 #include <variant>
 #include <vector>
 
+#include "iceberg/common/error.h"
+
 namespace iceberg::filter {
 
 enum class ValueType {
@@ -224,20 +226,16 @@ class Value {
   const PhysicalType<value_type>& GetValue() const {
     const auto& maybe_value = GetOptional<value_type>();
 
-    if (!maybe_value.has_value()) {
-      throw std::runtime_error("Value (GetValue): value is not set");
-    }
+    Ensure(maybe_value.has_value(), "Value (GetValue): value is not set");
 
     return maybe_value.value();
   }
 
   template <ValueType value_type>
   const PhysicalNullableType<value_type>& GetOptional() const {
-    if (value_type_ != value_type) {
-      throw std::runtime_error("Value (GetOptional): expected value type " +
-                               std::to_string(static_cast<int>(value_type)) + ", stored " +
-                               std::to_string(static_cast<int>(value_type_)));
-    }
+    Ensure(value_type_ == value_type, "Value (GetOptional): expected value type " +
+                                          std::to_string(static_cast<int>(value_type)) + ", stored " +
+                                          std::to_string(static_cast<int>(value_type_)));
 
     return std::get<PhysicalNullableType<value_type>>(value_);
   }

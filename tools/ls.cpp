@@ -14,6 +14,7 @@
 #include <thrift/transport/TSocket.h>
 #include <thrift/transport/TTransportUtils.h>
 
+#include "iceberg/common/error.h"
 #include "iceberg/nested_field.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"
@@ -32,18 +33,14 @@ using iceberg::tools::StringFix;
 namespace {
 
 bool CopyDir(std::shared_ptr<S3Client> s3client, const std::string& src, const std::string& dst, bool use_threads) {
-  if (!s3client) {
-    throw std::runtime_error(std::string("cannot copy dir ") + src + " to " + dst);
-  }
+  iceberg::Ensure(s3client != nullptr, std::string("cannot copy dir ") + src + " to " + dst);
   return s3client->CopyDir(src, dst, use_threads);
 }
 
 std::string GpTypeStr(const iceberg::types::Type* type) {
   using iceberg::TypeID;
 
-  if (!type) {
-    throw std::runtime_error("cannot convert type - nullptr");
-  }
+  Ensure(type != nullptr, "cannot convert type - nullptr");
 
   switch (type->TypeId()) {
     case TypeID::kBoolean:
@@ -135,9 +132,7 @@ int main(int argc, char** argv) {
 
     bool gp_types = (convert_types == "GP");
 
-    if (tmpdir.empty()) {
-      throw std::runtime_error("Wrong args: tmpdir should not be empty");
-    }
+    iceberg::Ensure(!tmpdir.empty(), "Wrong args: tmpdir should not be empty");
 
     hive::Table src_table;
     {
@@ -167,9 +162,9 @@ int main(int argc, char** argv) {
       }
     }
 
-    if (!src_table.parameters.contains("metadata_location")) {
-      throw std::runtime_error(std::string("no 'metadata_location' parameter for table '") + src_tablename + "'");
-    }
+    iceberg::Ensure(src_table.parameters.contains("metadata_location"),
+                    std::string("no 'metadata_location' parameter for table '") + src_tablename + "'");
+
     const std::filesystem::path src_meta_json = src_table.parameters["metadata_location"];
     std::string src_metadata_path = std::filesystem::path(src_meta_json).parent_path();
 
@@ -182,21 +177,18 @@ int main(int argc, char** argv) {
 
     std::cerr << "copying table '" << src_tablename << "' meta form " << src_metadata_path << " to " << meta_tmpdir
               << std::endl;
-    if (!CopyDir(s3client, src_metadata_path, meta_tmpdir, false)) {
-      throw std::runtime_error(std::string("cannot copy dir ") + src_metadata_path + " to " + meta_tmpdir.string());
-    }
+    iceberg::Ensure(CopyDir(s3client, src_metadata_path, meta_tmpdir, false),
+                    std::string("cannot copy dir ") + src_metadata_path + " to " + meta_tmpdir.string());
 
     std::filesystem::path meta_tmpdir_json = meta_tmpdir / src_meta_json.filename();
     std::shared_ptr<iceberg::TableMetadataV2> table_metadata;
     {
-      if (!std::filesystem::is_regular_file(meta_tmpdir_json)) {
-        throw std::runtime_error("No metadata file '" + meta_tmpdir_json.string() + "'");
-      }
+      iceberg::Ensure(std::filesystem::is_regular_file(meta_tmpdir_json),
+                      "No metadata file '" + meta_tmpdir_json.string() + "'");
+
       std::ifstream input_metadata(meta_tmpdir_json.string());
       table_metadata = iceberg::ice_tea::ReadTableMetadataV2(input_metadata);
-      if (!table_metadata) {
-        throw std::runtime_error("Cannot read metadata file '" + meta_tmpdir_json.string() + "'");
-      }
+      iceberg::Ensure(table_metadata != nullptr, "Cannot read metadata file '" + meta_tmpdir_json.string() + "'");
     }
 
     if (print_location) {

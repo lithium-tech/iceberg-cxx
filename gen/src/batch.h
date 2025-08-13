@@ -11,6 +11,7 @@
 #include "arrow/record_batch.h"
 #include "arrow/type.h"
 #include "arrow/type_fwd.h"
+#include "iceberg/common/error.h"
 
 namespace gen {
 
@@ -31,17 +32,13 @@ class Batch {
   int32_t NumColumns() const { return arrays_.size(); }
 
   std::shared_ptr<arrow::Array> Column(int32_t i) const {
-    if (i < 0 || i >= static_cast<int>(arrays_.size())) {
-      throw std::runtime_error("Index " + std::to_string(i) + " is out of bounds");
-    }
+    iceberg::Ensure(i >= 0 && i < static_cast<int>(arrays_.size()), "Index " + std::to_string(i) + " is out of bounds");
     return arrays_[i];
   }
 
   std::shared_ptr<arrow::Array> ColumnByName(const std::string& column_name) const {
     auto it = std::find(column_names_.begin(), column_names_.end(), column_name);
-    if (it == column_names_.end()) {
-      throw std::runtime_error("Column " + column_name + " not found in columns");
-    }
+    iceberg::Ensure(it != column_names_.end(), "Column " + column_name + " not found in columns");
     return Column(std::distance(column_names_.begin(), it));
   }
 

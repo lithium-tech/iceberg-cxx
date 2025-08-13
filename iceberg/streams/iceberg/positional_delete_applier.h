@@ -11,10 +11,10 @@
 #include <vector>
 
 #include "iceberg/common/defer.h"
+#include "iceberg/common/error.h"
 #include "iceberg/common/fs/file_reader_provider.h"
 #include "iceberg/positional_delete/positional_delete.h"
 #include "iceberg/result.h"
-#include "iceberg/streams/arrow/error.h"
 #include "iceberg/streams/iceberg/iceberg_batch.h"
 #include "iceberg/streams/iceberg/plan.h"
 

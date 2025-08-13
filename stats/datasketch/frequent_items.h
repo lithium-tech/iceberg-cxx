@@ -98,10 +98,9 @@ class GenericFrequentItemsSketch {
 
   template <typename DictionaryValue>
   GenericFrequentItemsSketch FromDictionary(const IValuesProvider<int64_t, DictionaryValue>& dictionary_values) const {
-    if (!std::holds_alternative<FrequentItemsSketch<int64_t>>(sketch_)) {
-      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) +
-                               ": trying to resolve dictionary in sketch, but sketch does not store integers");
-    }
+    iceberg::Ensure(std::holds_alternative<FrequentItemsSketch<int64_t>>(sketch_),
+                    std::string(__PRETTY_FUNCTION__) +
+                        ": trying to resolve dictionary in sketch, but sketch does not store integers");
 
     const auto& typed_sketch = std::get<FrequentItemsSketch<int64_t>>(sketch_).GetSketch();
     auto result = ResolveDictionary<int64_t, DictionaryValue>(typed_sketch, dictionary_values);
@@ -112,10 +111,9 @@ class GenericFrequentItemsSketch {
   void Merge(const GenericFrequentItemsSketch& other) {
     std::visit(
         [&]<typename ValueType>(FrequentItemsSketch<ValueType>& sketch) {
-          if (!std::holds_alternative<FrequentItemsSketch<ValueType>>(other.sketch_)) {
-            throw std::runtime_error(std::string(__PRETTY_FUNCTION__) +
-                                     ": merging sketches with different types is impossible");
-          }
+          iceberg::Ensure(std::holds_alternative<FrequentItemsSketch<ValueType>>(other.sketch_),
+                          std::string(__PRETTY_FUNCTION__) + ": merging sketches with different types is impossible");
+
           const auto& raw_sketch = std::get<FrequentItemsSketch<ValueType>>(other.sketch_).GetSketch();
 
           sketch.GetSketch().merge(raw_sketch);

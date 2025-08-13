@@ -1,8 +1,8 @@
 #pragma once
 
+#include "iceberg/common/error.h"
 #include "iceberg/filter/representation/node.h"
 #include "iceberg/filter/stats_filter/stats_filter.h"
-#include "iceberg/streams/arrow/error.h"
 #include "iceberg/streams/iceberg/parquet_stats_getter.h"
 #include "iceberg/streams/iceberg/row_group_filter.h"
 
@@ -26,11 +26,10 @@ class RowGroupFilter : public iceberg::IRowGroupFilter {
  private:
   ParquetStatsGetter GetCurrentParquetStatsGetter(const parquet::RowGroupMetaData& meta) const {
     const parquet::SchemaDescriptor* schema = meta.schema();
-    iceberg::Ensure(schema != nullptr, std::string(__PRETTY_FUNCTION__) + ": internal error. schema is nullptr");
+    Ensure(schema != nullptr, std::string(__PRETTY_FUNCTION__) + ": internal error. schema is nullptr");
 
     const parquet::schema::GroupNode* group_node = schema->group_node();
-    iceberg::Ensure(group_node != nullptr,
-                    std::string(__PRETTY_FUNCTION__) + ": internal error. group_node is nullptr");
+    Ensure(group_node != nullptr, std::string(__PRETTY_FUNCTION__) + ": internal error. group_node is nullptr");
 
     int field_count = group_node->field_count();
 
@@ -38,8 +37,7 @@ class RowGroupFilter : public iceberg::IRowGroupFilter {
 
     for (int i = 0; i < field_count; ++i) {
       parquet::schema::NodePtr field_descr = group_node->field(i);
-      iceberg::Ensure(field_descr != nullptr,
-                      std::string(__PRETTY_FUNCTION__) + ": internal error. field_descr is nullptr");
+      Ensure(field_descr != nullptr, std::string(__PRETTY_FUNCTION__) + ": internal error. field_descr is nullptr");
 
       int32_t field_id = field_descr->field_id();
       if (field_id == -1) {

@@ -4,7 +4,7 @@
 #include <string>
 
 #include "arrow/status.h"
-#include "iceberg/streams/arrow/error.h"
+#include "iceberg/common/error.h"
 #include "iceberg/streams/iceberg/data_entries_meta_stream.h"
 #include "iceberg/streams/iceberg/iceberg_batch.h"
 

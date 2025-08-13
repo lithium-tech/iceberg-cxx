@@ -58,12 +58,8 @@ class RowFilterVisitor {
   RowFilterVisitor(std::shared_ptr<const IArrowFieldResolver> arrow_field_resolver,
                    std::shared_ptr<const IGandivaFunctionRegistry> function_registry)
       : arrow_field_resolver_(arrow_field_resolver), function_registry_(function_registry) {
-    if (!arrow_field_resolver) {
-      throw std::runtime_error("RowFilterVisitor: arrow_field_resolver is not set");
-    }
-    if (!function_registry) {
-      throw std::runtime_error("RowFilterVisitor: function_registry is not set");
-    }
+    Ensure(arrow_field_resolver != nullptr, "RowFilterVisitor: arrow_field_resolver is not set");
+    Ensure(function_registry != nullptr, "RowFilterVisitor: function_registry is not set");
   }
   using ResultType = arrow::Result<gandiva::NodePtr>;
 
@@ -343,9 +339,7 @@ class RowFilterVisitor {
 
 RowFilter::RowFilter(iceberg::filter::NodePtr root, std::shared_ptr<iceberg::ILogger> logger)
     : root_(root), logger_(logger) {
-  if (!root_) {
-    throw std::runtime_error("RowFilter: root is not set");
-  }
+  Ensure(root_ != nullptr, "RowFilter: root is not set");
 }
 
 arrow::Status RowFilter::BuildFilter(std::shared_ptr<const IArrowFieldResolver> arrow_field_resolver,

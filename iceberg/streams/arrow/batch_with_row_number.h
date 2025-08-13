@@ -4,7 +4,7 @@
 #include <string>
 
 #include "arrow/record_batch.h"
-#include "iceberg/streams/arrow/error.h"
+#include "iceberg/common/error.h"
 
 namespace iceberg {
 

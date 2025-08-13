@@ -44,9 +44,7 @@ std::shared_ptr<Table> SqlCatalog::CreateTable(const catalog::TableIdentifier& i
                                                std::shared_ptr<TableMetadataV2> table_metadata) {
   auto dir_path = root_dir_ + "/" + identifier.db + "/" + identifier.name;
   auto status = fs_->CreateDir(dir_path);
-  if (!status.ok()) {
-    throw std::runtime_error("Could not create dir " + dir_path);
-  }
+  Ensure(status.ok(), "Could not create dir " + dir_path);
   return std::make_shared<SqlTable>(identifier, dir_path, std::vector<std::string>{}, table_metadata, fs_);
 }
 

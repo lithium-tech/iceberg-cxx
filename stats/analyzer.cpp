@@ -10,8 +10,8 @@
 #ifdef ENABLE_PRIVATE_PUBLIC_HACK
 #define private public
 #endif
+#include "iceberg/common/error.h"
 #include "iceberg/result.h"
-#include "iceberg/streams/arrow/error.h"
 #include "parquet/column_page.h"
 #include "parquet/column_reader.h"
 #include "parquet/encoding.h"
@@ -433,9 +433,8 @@ void Analyzer::AnalyzeColumn(const parquet::RowGroupMetaData& rg_metadata, int c
         materialized_sketch = frequent_items_for_col.FromDictionary(values_provider);
       }
 
-      if (!materialized_sketch) {
-        throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unexpected type " + std::to_string(type));
-      }
+      iceberg::Ensure(materialized_sketch.has_value(),
+                      std::string(__PRETTY_FUNCTION__) + ": unexpected type " + std::to_string(type));
 
       column_result.frequent_items_sketch->Merge(*materialized_sketch);
 

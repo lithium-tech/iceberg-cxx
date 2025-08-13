@@ -6,6 +6,7 @@
 #include "arrow/api.h"
 #include "arrow/compute/api.h"
 #include "arrow/compute/api_aggregate.h"
+#include "iceberg/common/error.h"
 #include "iceberg/filter/representation/function.h"
 
 namespace iceberg::compute {
@@ -16,9 +17,7 @@ const char* GetFunctionName(SsaOperation op);
 bool IsOperationValid(SsaOperation op, size_t num_args);
 
 inline void ValidateOperation(SsaOperation op, size_t num_args) {
-  if (!IsOperationValid(op, num_args)) {
-    throw std::runtime_error("Wrong arguments count for function");
-  }
+  Ensure(IsOperationValid(op, num_args), "Wrong arguments count for function");
 }
 
 class Assign {

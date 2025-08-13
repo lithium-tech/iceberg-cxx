@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "iceberg/common/error.h"
 #include "iceberg/manifest_entry.h"
 // TODO(k.i.vedernikov): make iceberg-parquet as independent library
 #include "iceberg/parquet/io.h"
@@ -32,9 +33,8 @@ void Transaction::AppendTable(const std::shared_ptr<arrow::Table>& table) {
 }
 
 void Transaction::Commit() {
-  if (commited_) {
-    throw std::runtime_error("Transaction can not be commited twice.");
-  }
+  Ensure(!commited_, "Transaction can not be commited twice.");
+
   commited_ = true;
   table_->DoCommit(data_files_);
 }
