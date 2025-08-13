@@ -15,12 +15,12 @@
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
+#include "iceberg/common/error.h"
 #include "iceberg/experimental_representations.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
 #include "iceberg/result.h"
 #include "iceberg/schema.h"
-#include "iceberg/streams/arrow/error.h"
 #include "iceberg/table_metadata.h"
 #include "iceberg/type.h"
 
@@ -127,9 +127,7 @@ std::string SerializePartitionTuple(const DataFile::PartitionTuple& partition_tu
 }  // namespace
 
 DataEntry operator+(const DataEntry& lhs, const DataEntry& rhs) {
-  if (lhs.path != rhs.path) {
-    throw std::runtime_error("Pathes of left and right entries are not equals: " + lhs.path + ", " + rhs.path);
-  }
+  Ensure(lhs.path == rhs.path, "Pathes of left and right entries are not equals: " + lhs.path + ", " + rhs.path);
 
   std::vector<DataEntry::Segment> all_segments = lhs.parts;
   for (const auto& elem : rhs.parts) {
@@ -142,9 +140,7 @@ DataEntry operator+(const DataEntry& lhs, const DataEntry& rhs) {
 }
 
 DataEntry& DataEntry::operator+=(const DataEntry& other) {
-  if (path != other.path) {
-    throw std::runtime_error("Pathes of left and right entries are not equals: " + path + ", " + other.path);
-  }
+  Ensure(path == other.path, "Pathes of left and right entries are not equals: " + path + ", " + other.path);
 
   for (const auto& elem : other.parts) {
     parts.push_back(elem);
@@ -300,9 +296,8 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
                                                          bool use_reader_schema,
                                                          const ManifestEntryDeserializerConfig& config) {
   auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
-  if (!maybe_manifest_list_path.has_value()) {
-    throw std::runtime_error("MakeIcebergEntriesStream: manifest list path is not found");
-  }
+  Ensure(maybe_manifest_list_path.has_value(), "MakeIcebergEntriesStream: manifest list path is not found");
+
   const std::string manifest_list_path = maybe_manifest_list_path.value();
 
   return AllEntriesStream::Make(fs, manifest_list_path, use_reader_schema, table_metadata->partition_specs,
@@ -318,10 +313,8 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
       if (!entry.sequence_number.has_value() && entry.status == ManifestEntry::Status::kAdded) {
         entry.sequence_number = current_manifest_file.sequence_number;
       }
-      if (!entry.sequence_number.has_value()) {
-        throw std::runtime_error("No sequence_number in iceberg::ManifestEntry for data file " +
-                                 entry.data_file.file_path);
-      }
+      Ensure(entry.sequence_number.has_value(),
+             "No sequence_number in iceberg::ManifestEntry for data file " + entry.data_file.file_path);
 
       if (entry.status == ManifestEntry::Status::kDeleted) {
         continue;
@@ -342,10 +335,9 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
 
     auto maybe_partition_spec =
         GetFieldsFromPartitionSpec(*partition_specs_.at(current_manifest_file.partition_spec_id), schema_);
-    if (!maybe_partition_spec) {
-      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
-                               std::to_string(current_manifest_file.partition_spec_id));
-    }
+    Ensure(maybe_partition_spec.has_value(), std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
+                                                 std::to_string(current_manifest_file.partition_spec_id));
+
     Manifest manifest =
         ice_tea::ReadManifestEntries(entries_content, maybe_partition_spec.value(), config_, use_avro_reader_schema_);
     // it is impossible to construct queue from iterators before C++23

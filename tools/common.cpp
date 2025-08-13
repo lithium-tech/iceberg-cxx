@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "iceberg/common/error.h"
 #include "iceberg/write.h"
 #include "tools/metadata_tree.h"
 
@@ -18,63 +19,39 @@ namespace iceberg::tools {
 
 void EnsureSameSchema(std::shared_ptr<iceberg::Schema> src_schema, std::shared_ptr<iceberg::Schema> dst_schema,
                       bool require_same_id, bool require_same_field_ids) {
-  if (!src_schema || !dst_schema) {
-    throw std::runtime_error("no schema");
-  }
+  Ensure(src_schema != nullptr && dst_schema != nullptr, "no schema");
+
   const std::vector<iceberg::types::NestedField>& src_columns = src_schema->Columns();
   const std::vector<iceberg::types::NestedField>& dst_columns = dst_schema->Columns();
 
-  if (require_same_id && src_schema->SchemaId() != dst_schema->SchemaId()) {
-    throw std::runtime_error("schema mismatch: schema id");
-  }
-
-  if (src_columns.size() != dst_columns.size()) {
-    throw std::runtime_error("schema mismatch: num columns");
-  }
+  Ensure(!require_same_id || src_schema->SchemaId() == dst_schema->SchemaId(), "schema mismatch: schema id");
+  Ensure(src_columns.size() == dst_columns.size(), "schema mismatch: num columns");
 
   for (size_t i = 0; i < src_columns.size(); ++i) {
     const auto& src_field = src_columns[i];
     const auto& dst_field = dst_columns[i];
-    if (!src_field.type) {
-      throw std::runtime_error("no type for src field " + src_field.name);
-    }
-    if (!dst_field.type) {
-      throw std::runtime_error("no type for dst field " + dst_field.name);
-    }
-    if (src_field.name != dst_field.name || src_field.type->TypeId() != dst_field.type->TypeId()) {
-      throw std::runtime_error("schema mismatch: " + src_field.name + " (" + src_field.type->ToString() + ") vs " +
-                               dst_field.name + " (" + dst_field.type->ToString() + ")");
-    }
-    if (require_same_field_ids && src_field.field_id != dst_field.field_id) {
-      throw std::runtime_error("schema mismatch: field_id");
-    }
+    Ensure(src_field.type != nullptr, "no type for src field " + src_field.name);
+    Ensure(dst_field.type != nullptr, "no type for dst field " + dst_field.name);
+    Ensure(src_field.name == dst_field.name && src_field.type->TypeId() == dst_field.type->TypeId(),
+           "schema mismatch: " + src_field.name + " (" + src_field.type->ToString() + ") vs " + dst_field.name + " (" +
+               dst_field.type->ToString() + ")");
+    Ensure(!require_same_field_ids || src_field.field_id == dst_field.field_id, "schema mismatch: field_id");
   }
 }
 
 void EnsureSameSortOrder(std::shared_ptr<iceberg::SortOrder> src_order, std::shared_ptr<iceberg::SortOrder> dst_order,
                          bool require_same_id, bool require_same_transform) {
-  if (!src_order || !dst_order) {
-    throw std::runtime_error("no sort order");
-  }
-
-  if (require_same_id && src_order->order_id != dst_order->order_id) {
-    throw std::runtime_error("sort order id mismatch");
-  }
-
-  if (src_order->fields.size() != dst_order->fields.size()) {
-    throw std::runtime_error("sort order mismatch: num fields");
-  }
+  Ensure(src_order != nullptr && dst_order != nullptr, "no sort order");
+  Ensure(!require_same_id || src_order->order_id == dst_order->order_id, "sort order id mismatch");
+  Ensure(src_order->fields.size() == dst_order->fields.size(), "sort order mismatch: num fields");
 
   for (size_t i = 0; i < src_order->fields.size(); ++i) {
     const auto& src_field = src_order->fields[i];
     const auto& dst_field = dst_order->fields[i];
-    if (src_field.source_id != dst_field.source_id || src_field.direction != dst_field.direction ||
-        src_field.null_order != dst_field.null_order) {
-      throw std::runtime_error("sort order mismatch");
-    }
-    if (require_same_transform && src_field.transform != dst_field.transform) {
-      throw std::runtime_error("sort order mismatch: transform");
-    }
+    Ensure(src_field.source_id == dst_field.source_id && src_field.direction == dst_field.direction &&
+               src_field.null_order == dst_field.null_order,
+           "sort order mismatch");
+    Ensure(!require_same_transform || src_field.transform == dst_field.transform, "sort order mismatch: transform");
   }
 }
 
@@ -142,9 +119,7 @@ Manifest SnapshotMaker::MakeEntries(const std::filesystem::path& local_data_loca
         entry.data_file.sort_order_id = sort_order->order_id;
       }
       if (content == iceberg::ContentFile::FileContent::kEqualityDeletes) {
-        if (!sort_order) {
-          throw std::runtime_error("Equality delete file require equality_ids");
-        }
+        Ensure(sort_order != nullptr, "Equality delete file require equality_ids");
         entry.data_file.equality_ids = sort_order->FieldIds();
       }
     }
@@ -243,9 +218,7 @@ SnapshotMaker::SnapshotMaker(std::shared_ptr<arrow::fs::FileSystem> fs_,
       break;
     }
   }
-  if (parent_snapshot_id && !parent_snap) {
-    throw std::runtime_error("no snapshot for snapshot_id " + std::to_string(*parent_snapshot_id));
-  }
+  Ensure(!(parent_snapshot_id && !parent_snap), "no snapshot for snapshot_id " + std::to_string(*parent_snapshot_id));
 }
 
 void SnapshotMaker::MakeMetadataFiles(const std::filesystem::path& out_metadata_location,

@@ -12,10 +12,10 @@
 #include <vector>
 
 #include "iceberg/common/defer.h"
+#include "iceberg/common/error.h"
 #include "iceberg/common/fs/file_reader_provider.h"
 #include "iceberg/equality_delete/handler.h"
 #include "iceberg/result.h"
-#include "iceberg/streams/arrow/error.h"
 #include "iceberg/streams/iceberg/iceberg_batch.h"
 #include "iceberg/streams/iceberg/mapper.h"
 #include "iceberg/streams/iceberg/plan.h"
@@ -139,7 +139,7 @@ class EqualityDeleteApplier : public IcebergStream {
 
     for (const auto& [layer_id, deletes] : partition_deletes) {
       for (const auto& del : deletes) {
-        iceberg::Ensure(equality_delete_handler_->AppendDelete(del.path, del.field_ids, layer_id));
+        Ensure(equality_delete_handler_->AppendDelete(del.path, del.field_ids, layer_id));
       }
     }
   }

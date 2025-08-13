@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "iceberg/common/error.h"
+
 #ifdef __APPLE__
 #include <net/if_dl.h>
 #endif
@@ -164,9 +166,7 @@ UuidGenerator::UuidGenerator(Uuid::Version version) : version_(version) {
     }
     return;
   }
-  if (!SetMacAddress()) {
-    throw std::runtime_error("Error while getting mac address of node");
-  }
+  Ensure(SetMacAddress(), "Error while getting mac address of node");
 }
 
 bool UuidGenerator::SetMacAddress() {

@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "arrow/status.h"
+#include "iceberg/common/error.h"
 #include "rapidjson/document.h"
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
@@ -113,12 +114,6 @@ rapidjson::Value Serializer::Serialize(const PuffinFile::Footer::DeserializedFoo
   AddMember(result, field::kBlobs, Serialize(footer.blobs));
   AddMember(result, field::kProperties, Serialize(footer.properties));
   return result;
-}
-
-void Ensure(bool condition, const std::string& error_message) {
-  if (!condition) {
-    throw std::runtime_error(error_message);
-  }
 }
 
 template <typename T>
@@ -299,15 +294,9 @@ PuffinFile::Footer::DeserializedFooter PuffinFile::Footer::GetDeserializedFooter
 }
 
 PuffinFile PuffinFileBuilder::Build() && {
-  if (blobs_.empty()) {
-    throw std::runtime_error("PuffinFileBuilder: building puffin file without blobs is not supported");
-  }
-  if (!sequence_number_.has_value()) {
-    throw std::runtime_error("PuffinFileBuilder: sequence_number is not set");
-  }
-  if (!snapshot_id_.has_value()) {
-    throw std::runtime_error("PuffinFileBuilder: snapshot_id is not set");
-  }
+  Ensure(!blobs_.empty(), "PuffinFileBuilder: building puffin file without blobs is not supported");
+  Ensure(sequence_number_.has_value(), "PuffinFileBuilder: sequence_number is not set");
+  Ensure(snapshot_id_.has_value(), "PuffinFileBuilder: snapshot_id is not set");
 
   std::vector<PuffinFile::Footer::BlobMetadata> blob_meta;
 
@@ -347,9 +336,8 @@ PuffinFile PuffinFileBuilder::Build() && {
   result += kPuffinMagicBytes;
 
   auto maybe_puffin_file = PuffinFile::Make(std::move(result));
-  if (!maybe_puffin_file.ok()) {
-    throw std::runtime_error(maybe_puffin_file.status().message());
-  }
+  Ensure(maybe_puffin_file.ok(), maybe_puffin_file.status().message());
+
   return maybe_puffin_file.MoveValueUnsafe();
 }
 

@@ -5,6 +5,7 @@
 #include "avro/Compiler.hh"
 #include "avro/DataFile.hh"
 #include "avro/ValidSchema.hh"
+#include "iceberg/common/error.h"
 #include "iceberg/generated/manifest_file.hh"
 #include "iceberg/generated/manifest_file_schema.h"
 #include "iceberg/manifest_file.h"
@@ -117,9 +118,7 @@ avro::ValidSchema ManifestListSchema() {
 }  // namespace
 
 std::vector<ManifestFile> ReadManifestList(std::istream& input) {
-  if (!input) {
-    throw std::runtime_error(std::string(__FUNCTION__) + ": input is invalid");
-  }
+  Ensure(!!input, std::string(__FUNCTION__) + ": input is invalid");
 
   auto istream = avro::istreamInputStream(input);
   avro::DataFileReader<iceberg::manifest_file> data_file_reader(std::move(istream), ManifestListSchema());

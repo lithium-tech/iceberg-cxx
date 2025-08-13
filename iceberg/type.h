@@ -8,6 +8,8 @@
 #include <string>
 #include <utility>
 
+#include "iceberg/common/error.h"
+
 namespace iceberg {
 
 enum class TypeID {
@@ -81,12 +83,7 @@ class DecimalType final : public PrimitiveType {
  public:
   DecimalType(int32_t precision, int32_t scale)
       : PrimitiveType(TypeID::kDecimal), precision_(precision), scale_(scale) {
-    if (precision <= 0) {
-      throw std::runtime_error("DecimalType: precision = " + std::to_string(precision));
-    }
-    if (precision > kMaxPrecision) {
-      throw std::runtime_error("DecimalType: precision = " + std::to_string(precision));
-    }
+    Ensure(precision > 0 && precision <= kMaxPrecision, "DecimalType: precision = " + std::to_string(precision));
   }
 
   std::string ToString() const override {
@@ -106,9 +103,7 @@ class DecimalType final : public PrimitiveType {
 class FixedType final : public PrimitiveType {
  public:
   FixedType(int32_t size) : PrimitiveType(TypeID::kFixed), size_(size) {
-    if (size <= 0) {
-      throw std::runtime_error("FixedType: size = " + std::to_string(size));
-    }
+    Ensure(size > 0, "FixedType: size = " + std::to_string(size));
   }
 
   std::string ToString() const override { return "fixed(" + std::to_string(size_) + ")"; }

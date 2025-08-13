@@ -2,13 +2,10 @@
 
 #include <zlib.h>
 
+#include "iceberg/common/error.h"
+
 namespace iceberg {
 namespace {
-void Ensure(bool condition, const std::string& message) {
-  if (!condition) {
-    throw std::runtime_error(message);
-  }
-}
 
 std::string UItoLittleEndianBytes(uint32_t value) {
   std::string res;

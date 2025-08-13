@@ -2,6 +2,8 @@
 
 #include <stdexcept>
 
+#include "iceberg/common/error.h"
+
 namespace iceberg {
 
 int64_t RowGroupMetaToFileOffset(const parquet::RowGroupMetaData& meta) {
@@ -15,9 +17,7 @@ int64_t RowGroupMetaToFileOffset(const parquet::RowGroupMetaData& meta) {
     // offset is used only for balancing, so we do not care if data_page_offset matches file_offset
     row_group_offset = meta.ColumnChunk(0)->data_page_offset();
 
-    if (row_group_offset == 0) {
-      throw std::runtime_error("File offset is not set in file");
-    }
+    Ensure(row_group_offset != 0, "File offset is not set in file");
   }
 
   return row_group_offset;

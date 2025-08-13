@@ -8,10 +8,10 @@
 #include "absl/container/flat_hash_set.h"
 #include "arrow/record_batch.h"
 #include "arrow/status.h"
+#include "iceberg/common/error.h"
 #include "iceberg/common/logger.h"
 #include "iceberg/equality_delete/common.h"
 #include "iceberg/equality_delete/delete.h"
-#include "iceberg/streams/arrow/error.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_reader.h"
 #include "parquet/file_reader.h"
@@ -186,8 +186,7 @@ EqualityDeleteHandler::EqualityDeleteHandler(ReaderMethodType get_reader_method,
       logger_(logger) {}
 
 bool EqualityDeleteHandler::IsDeleted(uint64_t row) const {
-  iceberg::Ensure(current_data_layer_.has_value(),
-                  std::string(__PRETTY_FUNCTION__) + ": current_data_layer is not set");
+  Ensure(current_data_layer_.has_value(), std::string(__PRETTY_FUNCTION__) + ": current_data_layer is not set");
 
   for (const auto& [delete_ptr, arrow_arrays] : prepared_batches_) {
     if (delete_ptr->IsDeleted(arrow_arrays, row, *current_data_layer_)) {

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "arrow/type.h"
+#include "iceberg/common/error.h"
 #include "parquet/schema.h"
 #include "parquet/types.h"
 
@@ -39,9 +40,8 @@ inline std::shared_ptr<parquet::schema::Node> MakeStringNode(std::string_view na
 }
 
 inline parquet::Type::type GetDecimalPhysicalType(int32_t precision) {
-  if (precision <= 0) {
-    throw std::runtime_error("Precision must be positive");
-  } else if (precision <= 9) {
+  iceberg::Ensure(precision > 0, "Precision must be positive");
+  if (precision <= 9) {
     return parquet::Type::INT32;
   } else if (precision <= 18) {
     return parquet::Type::INT64;

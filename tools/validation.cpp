@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "arrow/util/key_value_metadata.h"
+#include "iceberg/common/error.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
 #include "iceberg/table_metadata.h"
@@ -69,11 +70,7 @@ class ErrorLog {
     return true;
   }
 
-  void ThrowIfWasError() {
-    if (!errors_.empty()) {
-      throw std::runtime_error(error_message + errors_);
-    }
-  }
+  void ThrowIfWasError() { Ensure(errors_.empty(), error_message + errors_); }
 
  private:
   static constexpr char error_message[] = "The following restrictions have been violated:\n";
@@ -81,11 +78,6 @@ class ErrorLog {
   std::unordered_set<std::string> was_;
 };
 
-void Ensure(bool condition, const std::string& message) {
-  if (!condition) {
-    throw std::runtime_error(message);
-  }
-}
 }  // namespace
 
 void IcebergMetadataValidator::ValidateTableMetadata(const iceberg::TableMetadataV2& table_metadata) const {

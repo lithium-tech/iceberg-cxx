@@ -76,9 +76,7 @@ std::shared_ptr<Table> RemoteCatalog::CreateTable(const catalog::TableIdentifier
                                                   std::shared_ptr<TableMetadataV2> table_metadata) {
   auto dir_path = "/" + identifier.db + "/" + identifier.name;
   auto status = s3fs_->CreateDir(dir_path);
-  if (!status.ok()) {
-    throw std::runtime_error("Could not create dir " + dir_path);
-  }
+  Ensure(status.ok(), "Could not create dir " + dir_path);
   return std::make_shared<RemoteTable>(identifier, dir_path, table_metadata, s3fs_);
 }
 

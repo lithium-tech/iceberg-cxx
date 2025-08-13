@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "frequent_items_sketch.hpp"
+#include "iceberg/common/error.h"
 #include "quantiles_sketch.hpp"
 #include "serde.hpp"
 
@@ -26,10 +27,9 @@ class SpanValuesProvider : public IValuesProvider<IndexValue, DictionaryValue> {
   explicit SpanValuesProvider(std::span<DictionaryValue> values) : values_(values) {}
 
   DictionaryValue Get(const IndexValue& index) const override {
-    if (index < 0 || index >= values_.size()) {
-      throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": out of bounds (index = " + std::to_string(index) +
-                               ", size = " + std::to_string(values_.size()));
-    }
+    Ensure(index >= 0 && index < values_.size(), std::string(__PRETTY_FUNCTION__) +
+                                                     ": out of bounds (index = " + std::to_string(index) +
+                                                     ", size = " + std::to_string(values_.size()));
     return values_[index];
   }
 

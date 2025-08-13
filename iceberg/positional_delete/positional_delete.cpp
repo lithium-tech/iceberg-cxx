@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "arrow/status.h"
+#include "iceberg/common/error.h"
 #include "iceberg/common/logger.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/column_reader.h"
@@ -243,10 +244,9 @@ void PositionalDeleteStream::EnqueueIf(bool cond, ReaderHolder&& holder) {
 
 DeleteRows PositionalDeleteStream::GetDeleted(const std::string& url, int64_t begin, int64_t end, Layer data_layer) {
   if (last_query_.has_value()) {
-    if (std::tie(last_query_->url, last_query_->end) > std::tie(url, begin)) {
-      throw std::runtime_error("Internal error in " + std::string(__PRETTY_FUNCTION__) +
-                               ": queries must be disjoint and in ascending order");
-    }
+    Ensure(
+        std::tie(last_query_->url, last_query_->end) <= std::tie(url, begin),
+        "Internal error in " + std::string(__PRETTY_FUNCTION__) + ": queries must be disjoint and in ascending order");
   }
   last_query_ = Query{.url = url, .begin = begin, .end = end};
 

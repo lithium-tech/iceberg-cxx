@@ -15,6 +15,7 @@
 #include <variant>
 #include <vector>
 
+#include "iceberg/common/error.h"
 #include "iceberg/type.h"
 
 namespace iceberg {
@@ -73,9 +74,7 @@ struct ContentFile {
     template <typename Type>
     PartitionKey(std::string n, Type v, std::shared_ptr<iceberg::types::Type> t)
         : name(std::move(n)), value(std::move(v)), type(t) {
-      if (!type) {
-        throw std::runtime_error("PartitionInfoField: type must be set");
-      }
+      Ensure(type != nullptr, "PartitionInfoField: type must be set");
       Validate();
     }
 
@@ -84,13 +83,6 @@ struct ContentFile {
     bool operator==(const PartitionKey& other) const {
       return name == other.name && value == other.value &&
              (type ? type->ToString() : "null") == (other.type ? other.type->ToString() : "null");
-    }
-
-   private:
-    static void Ensure(bool condition, const std::string& message) {
-      if (!condition) {
-        throw std::runtime_error(message);
-      }
     }
   };
 

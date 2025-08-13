@@ -6,6 +6,7 @@
 
 #include "arrow/api.h"
 #include "cpr/api.h"
+#include "iceberg/common/error.h"
 #include "iceberg/tea_remote_catalog.h"
 #include "iceberg/tea_scan.h"
 
@@ -26,18 +27,15 @@ std::optional<rapidjson::Document> RESTClientImpl::GetTable(const std::string& d
   rapidjson::Document doc;
   doc.Parse(response.text.c_str());
 
-  if (doc.HasParseError()) {
-    throw std::runtime_error("Failed to parse JSON response for table: " + table_name);
-  }
+  Ensure(!doc.HasParseError(), "Failed to parse JSON response for table: " + table_name);
 
   return doc;
 }
 
 std::string RESTClientImpl::GetMetadataLocation(const std::string& db_name, const std::string& table_name) {
   rapidjson::Document table_doc = GetTable(db_name, table_name).value();
-  if (!table_doc.IsObject() || !table_doc.HasMember("content")) {
-    throw std::runtime_error("Incorrect table representation in JSON - should have content field");
-  }
+  Ensure(table_doc.IsObject() && table_doc.HasMember("content"),
+         "Incorrect table representation in JSON - should have content field");
   auto content = table_doc["content"].GetObject();
 
   if (content.HasMember("metadataLocation")) {

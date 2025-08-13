@@ -13,8 +13,9 @@
 #include <utility>
 #include <vector>
 
-namespace iceberg::tools {
+#include "iceberg/common/error.h"
 
+namespace iceberg::tools {
 struct CopyOptions {
   bool use_threads = false;
   bool no_check_dest = false;
@@ -48,9 +49,7 @@ struct S3Init {
     if (!arrow::fs::IsS3Initialized()) {
       arrow::fs::S3GlobalOptions global_options{};
       global_options.log_level = log_level;
-      if (!arrow::fs::InitializeS3(global_options).ok()) {
-        throw std::runtime_error("Cannot Initialize S3");
-      }
+      Ensure(arrow::fs::InitializeS3(global_options).ok(), "Cannot Initialize S3");
     }
   }
 
@@ -114,17 +113,14 @@ class S3Client {
       fs_ = std::make_shared<arrow::fs::LocalFileSystem>();
 
       auto s3fs_res = arrow::fs::S3FileSystem::Make(src_access_.options);
-      if (!s3fs_res.ok()) {
-        throw std::runtime_error(s3fs_res.status().ToString());
-      }
+      Ensure(s3fs_res.ok(), s3fs_res.status().ToString());
+
       src_s3fs_ = *s3fs_res;
 
       if (!dst_env_prefix.empty()) {
         dst_access_.LoadEnvOptions(dst_env_prefix);
         s3fs_res = arrow::fs::S3FileSystem::Make(dst_access_.options);
-        if (!s3fs_res.ok()) {
-          throw std::runtime_error(s3fs_res.status().ToString());
-        }
+        Ensure(s3fs_res.ok(), s3fs_res.status().ToString());
         dst_s3fs_ = *s3fs_res;
       }
     } else {
@@ -139,9 +135,7 @@ class S3Client {
     if (file_loc.path == name) {
       file_loc.filesystem = fs_;
     }
-    if (!file_loc.filesystem) {
-      throw std::runtime_error("fs is not set");
-    }
+    Ensure(file_loc.filesystem != nullptr, "fs is not set");
     return file_loc;
   }
 
@@ -188,9 +182,8 @@ class S3Client {
   bool CopyFiles(const std::vector<arrow::fs::FileLocator>& src, const std::vector<arrow::fs::FileLocator>& dst,
                  bool use_threads) {
     auto status = arrow::fs::CopyFiles(src, dst, io_context_, copy_chunk_size_, use_threads);
-    if (!status.ok()) {
-      throw std::runtime_error(status.ToString());
-    }
+    Ensure(status.ok(), status.ToString());
+
     return true;
   }
 
@@ -205,9 +198,7 @@ class S3Client {
 
     auto status = arrow::fs::CopyFiles(src_locator.filesystem, selector, dst_locator.filesystem, dst_locator.path,
                                        io_context_, copy_chunk_size_, use_threads);
-    if (!status.ok()) {
-      throw std::runtime_error(status.ToString());
-    }
+    Ensure(status.ok(), status.ToString());
     return true;
   }
 
@@ -277,9 +268,7 @@ inline bool CopyFiles(std::shared_ptr<S3Client> s3client, const std::unordered_m
 
 inline void CopyFilesOrThrow(std::shared_ptr<S3Client> s3client,
                              const std::unordered_map<std::string, std::string>& renames, const CopyOptions& opts) {
-  if (!CopyFiles(s3client, renames, opts)) {
-    throw std::runtime_error("cannot copy files");
-  }
+  Ensure(CopyFiles(s3client, renames, opts), "cannot copy files");
 }
 
 }  // namespace iceberg::tools

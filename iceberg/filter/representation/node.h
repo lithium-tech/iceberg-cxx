@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "iceberg/common/error.h"
 #include "iceberg/filter/representation/function.h"
 #include "iceberg/filter/representation/value.h"
 
@@ -46,15 +47,9 @@ struct IfNode : public Node {
 
   explicit IfNode(NodePtr condition, NodePtr then_node, NodePtr else_node)
       : Node(NodeType::kIf), condition(condition), then_node(then_node), else_node(else_node) {
-    if (!condition) {
-      throw std::runtime_error("IfNode: condition must be set");
-    }
-    if (!then_node) {
-      throw std::runtime_error("IfNode: ThenNode must be set");
-    }
-    if (!else_node) {
-      throw std::runtime_error("IfNode: ElseNode must be set");
-    }
+    Ensure(condition != nullptr, "IfNode: condition must be set");
+    Ensure(then_node != nullptr, "IfNode: ThenNode must be set");
+    Ensure(else_node != nullptr, "IfNode: ElseNode must be set");
   }
 };
 
@@ -66,12 +61,10 @@ struct LogicalNode : public Node {
 
   explicit LogicalNode(Operation op, std::vector<NodePtr> arguments)
       : Node(NodeType::kLogical), operation(op), arguments(std::move(arguments)) {
-    if (std::any_of(this->arguments.begin(), this->arguments.end(), [](const auto& arg) { return arg == nullptr; })) {
-      throw std::runtime_error("LogicalNode: arguments must be set");
-    }
-    if (operation == Operation::kNot && this->arguments.size() != 1) {
-      throw std::runtime_error("LogicalNode: Operation::kNot expects one argument");
-    }
+    Ensure(std::all_of(this->arguments.begin(), this->arguments.end(), [](const auto& arg) { return arg != nullptr; }),
+           "LogicalNode: arguments must be set");
+    Ensure(!(operation == Operation::kNot && this->arguments.size() != 1),
+           "LogicalNode: Operation::kNot expects one argument");
   }
 };
 
@@ -81,12 +74,10 @@ struct FunctionNode : public Node {
 
   explicit FunctionNode(FunctionSignature function_signature, std::vector<NodePtr> arguments)
       : Node(NodeType::kFunction), function_signature(std::move(function_signature)), arguments(std::move(arguments)) {
-    if (std::any_of(this->arguments.begin(), this->arguments.end(), [](const auto& arg) { return arg == nullptr; })) {
-      throw std::runtime_error("FunctionNode: arguments must be set");
-    }
-    if (this->function_signature.argument_types.size() != this->arguments.size()) {
-      throw std::runtime_error("FunctionNode: argument_types.size() != arguments.size()");
-    }
+    Ensure(std::all_of(this->arguments.begin(), this->arguments.end(), [](const auto& arg) { return arg != nullptr; }),
+           "FunctionNode: arguments must be set");
+    Ensure(this->function_signature.argument_types.size() == this->arguments.size(),
+           "FunctionNode: argument_types.size() != arguments.size()");
   }
 };
 
@@ -105,15 +96,10 @@ struct ScalarOverArrayFunctionNode : public Node {
         use_or(use_or),
         scalar(lhs),
         array(std::move(array)) {
-    if (!scalar) {
-      throw std::runtime_error("ScalarOverArrayFunctionNode: scalar must be set");
-    }
-    if (this->array.Size() == 0) {
-      throw std::runtime_error("ScalarOverArrayFunctionNode: array must contain at least one element");
-    }
-    if (this->function_signature.argument_types.size() != 2) {
-      throw std::runtime_error("ScalarOverArrayFunctionNode: function signature must have 2 arguments");
-    }
+    Ensure(scalar != nullptr, "ScalarOverArrayFunctionNode: scalar must be set");
+    Ensure(this->array.Size() > 0, "ScalarOverArrayFunctionNode: array must contain at least one element");
+    Ensure(this->function_signature.argument_types.size() == 2,
+           "ScalarOverArrayFunctionNode: function signature must have 2 arguments");
   }
 };
 

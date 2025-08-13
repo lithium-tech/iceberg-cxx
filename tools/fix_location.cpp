@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <iostream>
 
+#include "iceberg/common/error.h"
 #include "tools/metadata_tree.h"
 
 ABSL_FLAG(std::string, metadata, "", "path to iceberg metadata JSON file");
@@ -25,9 +26,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path outdir = absl::GetFlag(FLAGS_outdir);
     const bool clean = absl::GetFlag(FLAGS_clean);
 
-    if (metadata_path.empty()) {
-      throw std::runtime_error("No metadata set");
-    }
+    iceberg::Ensure(!metadata_path.empty(), "No metadata set");
 
     std::vector<MetadataTree> prev_meta;
     MetadataTree meta_tree(metadata_path);
@@ -59,9 +58,7 @@ int main(int argc, char** argv) {
         }
       }
       if (!std::filesystem::exists(outdir)) {
-        if (!std::filesystem::create_directories(outdir)) {
-          throw std::runtime_error("cannot create direcotry " + outdir.string());
-        }
+        iceberg::Ensure(std::filesystem::create_directories(outdir), "cannot create direcotry " + outdir.string());
       }
 
       for (auto& prev_tree : prev_meta) {

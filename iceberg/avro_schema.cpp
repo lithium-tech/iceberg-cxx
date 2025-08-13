@@ -3,7 +3,7 @@
 #include <stdexcept>
 
 #include "arrow/type.h"
-#include "iceberg/streams/arrow/error.h"
+#include "iceberg/common/error.h"
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/rapidjson.h"
@@ -21,14 +21,10 @@ constexpr std::string_view kAdjustToUtc = "adjust-to-utc";
 
 int MinimumBytesToStoreDecimal(int precision) {
   const int kMaxPrecision = 38;
-  if (precision > kMaxPrecision) {
-    throw std::runtime_error("MinimumBytesToStoreDecimal: precision is greater than " + std::to_string(kMaxPrecision) +
-                             " is not supported");
-  }
-  if (precision <= 0) {
-    throw std::runtime_error("MinimumBytesToStoreDecimal: precision is less than or equal to " + std::to_string(0) +
-                             " is not supported");
-  }
+  iceberg::Ensure(precision <= kMaxPrecision, "MinimumBytesToStoreDecimal: precision is greater than " +
+                                                  std::to_string(kMaxPrecision) + " is not supported");
+  iceberg::Ensure(precision > 0, "MinimumBytesToStoreDecimal: precision is less than or equal to " + std::to_string(0) +
+                                     " is not supported");
   return arrow::DecimalType::DecimalSize(precision);
 }
 

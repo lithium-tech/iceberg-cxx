@@ -17,12 +17,12 @@ class RowGroupReader : public IBatchStream {
   RowGroupReader(std::shared_ptr<parquet::arrow::FileReader> input_file, int row_group_to_read,
                  const std::vector<int>& columns) {
     Ensure(input_file != nullptr, std::string(__PRETTY_FUNCTION__) + ": input_file is nullptr");
-    iceberg::Ensure(input_file->GetRecordBatchReader({row_group_to_read}, columns, &record_batch_reader_));
+    Ensure(input_file->GetRecordBatchReader({row_group_to_read}, columns, &record_batch_reader_));
   }
 
   std::shared_ptr<arrow::RecordBatch> ReadNext() override {
     std::shared_ptr<arrow::RecordBatch> batch;
-    iceberg::Ensure(record_batch_reader_->ReadNext(&batch));
+    Ensure(record_batch_reader_->ReadNext(&batch));
     return batch;
   }
 

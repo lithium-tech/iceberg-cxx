@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "iceberg/common/error.h"
 #include "iceberg/write.h"
 
 namespace iceberg::tools {
@@ -53,12 +54,8 @@ void MetadataTree::MetadataFile::RemoveOtherSnapshots(int64_t snapshot_id, bool 
       break;
     }
   }
-  if (!snapshot) {
-    throw std::runtime_error("no snapshot " + std::to_string(snapshot_id));
-  }
-  if (!snapshot->schema_id) {
-    throw std::runtime_error("snapshot " + std::to_string(snapshot_id) + " has no schema_id");
-  }
+  Ensure(snapshot != nullptr, "no snapshot " + std::to_string(snapshot_id));
+  Ensure(snapshot->schema_id.has_value(), "snapshot " + std::to_string(snapshot_id) + " has no schema_id");
 
   table_metadata->current_snapshot_id = snapshot_id;
   table_metadata->snapshots = {snapshot};
@@ -72,10 +69,8 @@ void MetadataTree::MetadataFile::RemoveOtherSnapshots(int64_t snapshot_id, bool 
       break;
     }
   }
-  if (!schema_found) {
-    throw std::runtime_error("no schema " + std::to_string(table_metadata->current_schema_id) +
-                             " needed for shapshot " + std::to_string(snapshot_id));
-  }
+  Ensure(schema_found, "no schema " + std::to_string(table_metadata->current_schema_id) + " needed for shapshot " +
+                           std::to_string(snapshot_id));
 
   for (auto& log : table_metadata->snapshot_log) {
     if (log.snapshot_id == snapshot_id) {
@@ -126,9 +121,7 @@ MetadataTree::MetadataTree(const std::filesystem::path& path, const std::string&
 
   auto& known_refs = medatada_file.Refs();
   auto it = known_refs.find(ref);
-  if (it == known_refs.end()) {
-    throw std::runtime_error("No ref (branch or tag) '" + ref + "' in '" + path.string() + "'");
-  }
+  Ensure(it != known_refs.end(), "No ref (branch or tag) '" + ref + "' in '" + path.string() + "'");
 
   int64_t snapshot_id = it->second.snapshot_id;
 
@@ -138,25 +131,20 @@ MetadataTree::MetadataTree(const std::filesystem::path& path, const std::string&
 }
 
 MetadataTree::MetadataFile MetadataTree::ReadMetadataFile(const std::filesystem::path& path) {
-  if (!std::filesystem::exists(path)) {
-    throw std::runtime_error("No metadata file '" + path.string() + "'");
-  }
+  Ensure(std::filesystem::exists(path), "No metadata file '" + path.string() + "'");
+
   std::ifstream input_metadata(path);
   MetadataFile metadata;
   metadata.table_metadata = iceberg::ice_tea::ReadTableMetadataV2(input_metadata);
-  if (!metadata.table_metadata) {
-    throw std::runtime_error("Cannot read metadata file '" + path.string() + "'");
-  }
+  Ensure(metadata.table_metadata != nullptr, "Cannot read metadata file '" + path.string() + "'");
+
   return metadata;
 }
 
 MetadataTree::MetadataFile MetadataTree::MakeEmptyMetadataFile(const std::string& table_uuid,
                                                                const std::string& location,
                                                                std::shared_ptr<iceberg::Schema> schema) {
-  if (!schema) {
-    throw std::runtime_error("No schema");
-  }
-
+  Ensure(schema != nullptr, "No schema");
   const int32_t last_column_id = schema->MaxColumnId();
   const int64_t last_updated_ms{};
   const int32_t last_partition_id{};
@@ -165,9 +153,7 @@ MetadataTree::MetadataFile MetadataTree::MakeEmptyMetadataFile(const std::string
   std::vector<std::shared_ptr<iceberg::SortOrder>> sort_orders = {std::make_shared<iceberg::SortOrder>()};
   std::vector<std::shared_ptr<iceberg::PartitionSpec>> partition_specs = {std::make_shared<iceberg::PartitionSpec>()};
 
-  if (last_column_id < 0) {
-    throw std::runtime_error("No columns in schema");
-  }
+  Ensure(last_column_id >= 0, "No columns in schema");
 
   MetadataFile metadata;
   metadata.table_metadata = std::make_shared<iceberg::TableMetadataV2>(iceberg::TableMetadataV2(
@@ -309,9 +295,7 @@ void LoadTree(MetadataTree& meta_tree, const std::filesystem::path& metadata_pat
       MetadataTree old_meta(path);
       prev_meta.emplace_back(std::move(old_meta));
     } catch (std::exception& ex) {
-      if (!ignore_missing_snapshots) {
-        throw std::runtime_error("Error while processing '" + path.string() + "': " + ex.what());
-      }
+      Ensure(ignore_missing_snapshots, "Error while processing '" + path.string() + "': " + ex.what());
     }
   }
 }

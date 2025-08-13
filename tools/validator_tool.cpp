@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "arrow/filesystem/s3fs.h"
+#include "iceberg/common/error.h"
 #include "iceberg/tea_scan.h"
 #include "tools/validation.h"
 
@@ -88,9 +89,8 @@ int main(int argc, char* argv[]) {
         }
         auto content = maybe_content.MoveValueUnsafe();
         auto meta = iceberg::ice_tea::ReadTableMetadataV2(content);
-        if (!meta) {
-          throw std::runtime_error("Failed to read meta from iceberg");
-        }
+        iceberg::Ensure(meta != nullptr, "Failed to read meta from iceberg");
+
         validator.ValidateTableMetadata(meta);
       }
     } else {

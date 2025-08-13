@@ -1,5 +1,7 @@
 #include "iceberg/streams/compute/projection.h"
 
+#include "iceberg/common/error.h"
+
 namespace iceberg::compute {
 
 static int ColumnIndexByName(const std::shared_ptr<arrow::Schema>& schema, const std::string& name) {
@@ -18,9 +20,7 @@ std::shared_ptr<arrow::Schema> ProjectionImpl(const std::shared_ptr<arrow::Schem
   for (auto& name : column_names) {
     int pos = ColumnIndexByName(src_schema, name);
     if (pos < 0) {
-      if (throw_if_column_not_found) {
-        throw std::runtime_error("No column in block " + src_schema->ToString());
-      }
+      Ensure(!throw_if_column_not_found, "No column in block " + src_schema->ToString());
       continue;
     }
     fields.push_back(src_schema->field(pos));
@@ -48,9 +48,7 @@ static std::shared_ptr<arrow::RecordBatch> ProjectionImpl(const std::shared_ptr<
   for (auto& name : column_names) {
     int pos = ColumnIndexByName(src_schema, name);
     if (pos < 0) {
-      if (throw_if_column_not_found) {
-        throw std::runtime_error("No column in block " + src_schema->ToString());
-      }
+      Ensure(!throw_if_column_not_found, "No column in block " + src_schema->ToString());
       continue;
     }
     fields.push_back(src_schema->field(pos));

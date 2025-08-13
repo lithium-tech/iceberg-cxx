@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "iceberg/common/error.h"
+
 namespace iceberg {
 
 /// A type erased callable object which may only be invoked once.
@@ -71,9 +73,7 @@ class ThreadPool {
   template <typename Foo>
   std::future<std::invoke_result_t<Foo>> Submit(Foo func) {
     std::lock_guard lg(mutex_);
-    if (status != Status::kRunning) {
-      throw std::runtime_error("Submit is impossible, thread pool is stopped");
-    }
+    Ensure(status == Status::kRunning, "Submit is impossible, thread pool is stopped");
 
     std::packaged_task<std::invoke_result_t<Foo>()> task(std::move(func));
     auto future = task.get_future();
@@ -114,9 +114,7 @@ class ThreadPool {
       }
     }
 
-    if (has_exception) {
-      throw std::runtime_error("ThreadPool::Stop() failed");
-    }
+    Ensure(!has_exception, "ThreadPool::Stop() failed");
   }
 
   ~ThreadPool() {

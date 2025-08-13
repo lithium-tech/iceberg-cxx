@@ -46,9 +46,7 @@ class RandomDevice {
 class UniformInt64Distribution {
  public:
   UniformInt64Distribution(int64_t min_value, int64_t max_value) : uid_(min_value, max_value) {
-    if (max_value < min_value) {
-      throw std::runtime_error("UniformInt64Distribution: max_value must be greater than min_value");
-    }
+    iceberg::Ensure(min_value <= max_value, "UniformInt64Distribution: max_value must be greater than min_value");
   }
 
   int64_t operator()(RandomDevice& random_device) { return uid_(random_device); }
@@ -379,9 +377,7 @@ class FromArrayGenerator : public TrivialGenerator<ArrowType> {
   explicit FromArrayGenerator(const std::vector<ValueType>& values) : values_(values) {}
 
   ValueType GenerateValue() override {
-    if (last_index_ >= values_.size()) {
-      throw std::runtime_error("FromArrayGenerator: index out of range");
-    }
+    iceberg::Ensure(last_index_ < values_.size(), "FromArrayGenerator: index out of range");
     return values_[last_index_++];
   }
 
