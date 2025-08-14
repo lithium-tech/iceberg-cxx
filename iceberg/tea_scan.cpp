@@ -767,15 +767,14 @@ arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream
 class ManifestEntryTask {
  public:
   ManifestEntryTask(iceberg::ManifestEntry&& entry,
-                    std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder, arrow::Status& status)
-      : entry_(std::move(entry)), scan_metadata_builder_(scan_metadata_builder), status_(status) {}
+                    std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder)
+      : entry_(std::move(entry)), scan_metadata_builder_(scan_metadata_builder) {}
 
-  void operator()() { status_ = scan_metadata_builder_->AddEntry(entry_); }
+  arrow::Status operator()() { return scan_metadata_builder_->AddEntry(entry_); }
 
  private:
   iceberg::ManifestEntry entry_;
   std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder_;
-  arrow::Status& status_;
 };
 
 class ManifestFileTask {
@@ -783,26 +782,24 @@ class ManifestFileTask {
   ManifestFileTask(std::shared_ptr<arrow::fs::FileSystem> fs, ManifestFile&& manifest_file,
                    std::shared_ptr<ThreadPool> pool, std::shared_ptr<TableMetadataV2> table_metadata,
                    std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder, bool use_reader_schema,
-                   std::vector<arrow::Status>& statuses, const ManifestEntryDeserializerConfig& config)
+                   const ManifestEntryDeserializerConfig& config)
       : fs_(fs),
         manifest_file_(std::move(manifest_file)),
         pool_(pool),
         table_metadata_(table_metadata),
         scan_metadata_builder_(scan_metadata_builder),
         use_reader_schema_(use_reader_schema),
-        statuses_(statuses),
         config_(config) {}
 
-  void operator()() {
+  std::vector<std::future<arrow::Status>> operator()() {
     Manifest manifest = GetManifest(fs_, manifest_file_, table_metadata_->GetCurrentSchema(),
                                     table_metadata_->partition_specs, use_reader_schema_, config_);
-    statuses_.resize(manifest.entries.size());
+    std::vector<std::future<arrow::Status>> statuses(manifest.entries.size());
     for (size_t i = 0; i < manifest.entries.size(); ++i) {
       AddSequenceNumberOrFail(manifest_file_, manifest.entries[i]);
-      if (manifest.entries[i].status != ManifestEntry::Status::kDeleted) {
-        pool_->Submit(ManifestEntryTask(std::move(manifest.entries[i]), scan_metadata_builder_, statuses_[i]));
-      }
+      statuses[i] = pool_->Submit(ManifestEntryTask(std::move(manifest.entries[i]), scan_metadata_builder_));
     }
+    return statuses;
   }
 
  private:
@@ -813,7 +810,6 @@ class ManifestFileTask {
   std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder_;
   bool use_reader_schema_;
   ManifestEntryDeserializerConfig config_;
-  std::vector<arrow::Status>& statuses_;
 };
 
 arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::fs::FileSystem> fs,
@@ -824,21 +820,21 @@ arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::
   auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
 
   auto scan_metadata_builder = std::make_shared<ReferencedDataFileAwareScanPlannerMT>(*table_metadata);
-  std::vector<std::vector<arrow::Status>> statuses(manifest_metadatas.size());
+  std::vector<std::vector<std::future<arrow::Status>>> statuses(manifest_metadatas.size());
   {
     auto pool = std::make_shared<ThreadPool>(threads_num);
-    std::vector<std::future<void>> futures(manifest_metadatas.size());
+    std::vector<std::future<std::vector<std::future<arrow::Status>>>> futures(manifest_metadatas.size());
     for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
       futures[i] = pool->Submit(ManifestFileTask(fs, std::move(manifest_metadatas[i]), pool, table_metadata,
-                                                 scan_metadata_builder, use_reader_schema, statuses[i], config));
+                                                 scan_metadata_builder, use_reader_schema, config));
     }
-    for (auto& future : futures) {
-      future.get();
+    for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
+      statuses[i] = futures[i].get();
     }
   }
-  for (const auto& manifest_statuses : statuses) {
-    for (const auto& status : manifest_statuses) {
-      ARROW_RETURN_NOT_OK(status);
+  for (auto& manifest_statuses : statuses) {
+    for (auto& status : manifest_statuses) {
+      ARROW_RETURN_NOT_OK(status.get());
     }
   }
   return scan_metadata_builder->GetResult();
