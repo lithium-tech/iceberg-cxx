@@ -15,11 +15,7 @@
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
-<<<<<<< HEAD
-#include "iceberg/common/error.h"
-=======
 #include "iceberg/common/threadpool.h"
->>>>>>> 7971751 (v1)
 #include "iceberg/experimental_representations.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
@@ -324,14 +320,7 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
                                                          bool use_reader_schema,
                                                          const ManifestEntryDeserializerConfig& config) {
-<<<<<<< HEAD
-  auto maybe_manifest_list_path = table_metadata->GetCurrentManifestListPath();
-  Ensure(maybe_manifest_list_path.has_value(), "MakeIcebergEntriesStream: manifest list path is not found");
-
-  const std::string manifest_list_path = maybe_manifest_list_path.value();
-=======
   const std::string manifest_list_path = table_metadata->GetCurrentManifestListPathOrFail();
->>>>>>> 7971751 (v1)
 
   return AllEntriesStream::Make(fs, manifest_list_path, use_reader_schema, table_metadata->partition_specs,
                                 table_metadata->GetCurrentSchema(), config);
@@ -343,15 +332,7 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
       auto entry = std::move(entries_for_current_manifest_file_.front());
       entries_for_current_manifest_file_.pop();
 
-<<<<<<< HEAD
-      if (!entry.sequence_number.has_value() && entry.status == ManifestEntry::Status::kAdded) {
-        entry.sequence_number = current_manifest_file.sequence_number;
-      }
-      Ensure(entry.sequence_number.has_value(),
-             "No sequence_number in iceberg::ManifestEntry for data file " + entry.data_file.file_path);
-=======
       AddSequenceNumberOrFail(current_manifest_file, entry);
->>>>>>> 7971751 (v1)
 
       if (entry.status == ManifestEntry::Status::kDeleted) {
         continue;
@@ -367,17 +348,6 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
     current_manifest_file = std::move(manifest_files_.front());
     manifest_files_.pop();
 
-<<<<<<< HEAD
-    const std::string manifest_path = current_manifest_file.path;
-    const std::string entries_content = ValueSafe(ReadFile(fs_, manifest_path));
-
-    auto maybe_partition_spec =
-        GetFieldsFromPartitionSpec(*partition_specs_.at(current_manifest_file.partition_spec_id), schema_);
-    Ensure(maybe_partition_spec.has_value(), std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
-                                                 std::to_string(current_manifest_file.partition_spec_id));
-
-=======
->>>>>>> 7971751 (v1)
     Manifest manifest =
         GetManifest(fs_, current_manifest_file, schema_, partition_specs_, use_avro_reader_schema_, config_);
     // it is impossible to construct queue from iterators before C++23
@@ -414,9 +384,9 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
                                       threads_num, config.manifest_entry_deserializer_config);
 }
 
-class ScanMetadataBuilderBase {
+class ScanMetadataBuilder {
  public:
-  explicit ScanMetadataBuilderBase(const TableMetadataV2& table_metadata)
+  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata)
       : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()) {}
 
   ScanMetadata GetResult() {
@@ -504,15 +474,25 @@ class ScanMetadataBuilderBase {
 
  protected:
   virtual void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                           const std::string& path, std::vector<DataEntry::Segment>&& segments) = 0;
+                           const std::string& path, std::vector<DataEntry::Segment>&& segments) {
+    partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
+        DataEntry(path, std::move(segments)));
+  }
 
   virtual void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                                  const std::string& path) = 0;
+                                  const std::string& path) {
+    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(path);
+  }
 
   virtual void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
-                                        const std::vector<int>& equality_ids) = 0;
+                                        const std::vector<int>& equality_ids) {
+    global_equality_deletes[sequence_number - 1].emplace_back(path, equality_ids);
+  }
+
   virtual void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                                  const std::string& path, const std::vector<int>& equality_ids) = 0;
+                                  const std::string& path, const std::vector<int>& equality_ids) {
+    partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(path, equality_ids);
+  }
 
   arrow::Status CheckPartitionTupleIsCorrect(const iceberg::ManifestEntry& entry) const {
     // https://iceberg.apache.org/docs/1.7.1/evolution/
@@ -549,66 +529,33 @@ class ScanMetadataBuilderBase {
   std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
 };
 
-template <bool mt>
-class ScanMetadataBuilder;
-
-template <>
-class ScanMetadataBuilder<false> : public ScanMetadataBuilderBase {
+class ScanMetadataBuilderMT : public ScanMetadataBuilder {
  public:
-  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata) : ScanMetadataBuilderBase(table_metadata) {}
-
- private:
-  void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number, const std::string& path,
-                   std::vector<DataEntry::Segment>&& segments) override {
-    partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
-        DataEntry(path, std::move(segments)));
-  }
-
-  void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                          const std::string& path) override {
-    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(path);
-  }
-
-  void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
-                                const std::vector<int>& equality_ids) override {
-    global_equality_deletes[sequence_number - 1].emplace_back(path, equality_ids);
-  }
-
-  void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                          const std::string& path, const std::vector<int>& equality_ids) override {
-    partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(path, equality_ids);
-  }
-};
-
-template <>
-class ScanMetadataBuilder<true> : public ScanMetadataBuilderBase {
- public:
-  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata) : ScanMetadataBuilderBase(table_metadata) {}
+  explicit ScanMetadataBuilderMT(const TableMetadataV2& table_metadata) : ScanMetadataBuilder(table_metadata) {}
 
  private:
   void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number, const std::string& path,
                    std::vector<DataEntry::Segment>&& segments) override {
     std::lock_guard<std::mutex> guard(mutex_);
-    partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
-        DataEntry(path, std::move(segments)));
+    ScanMetadataBuilder::AddDataFile(serialized_partition_key, sequence_number, path, std::move(segments));
   }
 
   void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
                           const std::string& path) override {
     std::lock_guard<std::mutex> guard(mutex_);
-    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(path);
+    ScanMetadataBuilder::AddPositionDeletes(serialized_partition_key, sequence_number, path);
   }
 
   void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
                                 const std::vector<int>& equality_ids) override {
     std::lock_guard<std::mutex> guard(mutex_);
-    global_equality_deletes[sequence_number - 1].emplace_back(path, equality_ids);
+    ScanMetadataBuilder::AddGlobalEqualityDeletes(sequence_number, path, equality_ids);
   }
 
   void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
                           const std::string& path, const std::vector<int>& equality_ids) override {
     std::lock_guard<std::mutex> guard(mutex_);
-    partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(path, equality_ids);
+    ScanMetadataBuilder::AddEqualityDeletes(serialized_partition_key, sequence_number, path, equality_ids);
   }
 
   // consider making separate mutexes for each variable
@@ -616,9 +563,10 @@ class ScanMetadataBuilder<true> : public ScanMetadataBuilderBase {
   std::mutex mutex_;
 };
 
-class ReferencedDataFileAwareScanPlannerBase {
+class ReferencedDataFileAwareScanPlanner {
  public:
-  ReferencedDataFileAwareScanPlannerBase(std::shared_ptr<ScanMetadataBuilderBase> builder) : builder_(builder) {}
+  ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
+      : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata)) {}
 
   arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
     if (entry.status == iceberg::ManifestEntry::Status::kDeleted) {
@@ -693,9 +641,20 @@ class ReferencedDataFileAwareScanPlannerBase {
   }
 
  protected:
-  virtual void SetHasEqualityDelete() = 0;
-  virtual void SetAllPosDeletes() = 0;
-  virtual arrow::Status HandlePositionDelete(const ManifestEntry& entry) = 0;
+  ReferencedDataFileAwareScanPlanner(std::shared_ptr<ScanMetadataBuilder> builder) : builder_(builder) {}
+
+  virtual void SetHasEqualityDelete() { has_equality_delete = true; }
+  virtual void SetAllPosDeletes() { all_pos_deletes_annotated_with_referenced_data_file = true; }
+
+  virtual arrow::Status HandlePositionDelete(const ManifestEntry& entry) {
+    has_referenced_data_file = true;
+    if (delete_file_path_to_referenced_data_file_path_.contains(entry.data_file.file_path)) {
+      return arrow::Status::ExecutionError("Two delete files with same path: " + entry.data_file.file_path);
+    }
+    delete_file_path_to_referenced_data_file_path_[entry.data_file.file_path] =
+        entry.data_file.referenced_data_file.value();
+    return arrow::Status::OK();
+  }
 
   arrow::Status HandlePartition(ScanMetadata::Partition&& part, ScanMetadata& result) {
     using LayerNumber = uint32_t;
@@ -759,60 +718,28 @@ class ReferencedDataFileAwareScanPlannerBase {
   bool has_referenced_data_file = false;
 
  private:
-  std::shared_ptr<ScanMetadataBuilderBase> builder_;
+  std::shared_ptr<ScanMetadataBuilder> builder_;
 };
 
-template <bool mt>
-class ReferencedDataFileAwareScanPlanner;
-
-template <>
-class ReferencedDataFileAwareScanPlanner<false> : public ReferencedDataFileAwareScanPlannerBase {
+class ReferencedDataFileAwareScanPlannerMT : public ReferencedDataFileAwareScanPlanner {
  public:
-  explicit ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
-      : ReferencedDataFileAwareScanPlannerBase(std::make_shared<ScanMetadataBuilder<false>>(table_metadata)) {}
-
- private:
-  void SetHasEqualityDelete() override { has_equality_delete = true; }
-
-  void SetAllPosDeletes() override { all_pos_deletes_annotated_with_referenced_data_file = true; }
-
-  arrow::Status HandlePositionDelete(const ManifestEntry& entry) override {
-    has_referenced_data_file = true;
-    if (delete_file_path_to_referenced_data_file_path_.contains(entry.data_file.file_path)) {
-      return arrow::Status::ExecutionError("Two delete files with same path: " + entry.data_file.file_path);
-    }
-    delete_file_path_to_referenced_data_file_path_[entry.data_file.file_path] =
-        entry.data_file.referenced_data_file.value();
-    return arrow::Status::OK();
-  }
-};
-
-template <>
-class ReferencedDataFileAwareScanPlanner<true> : public ReferencedDataFileAwareScanPlannerBase {
- public:
-  explicit ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
-      : ReferencedDataFileAwareScanPlannerBase(std::make_shared<ScanMetadataBuilder<true>>(table_metadata)) {}
+  explicit ReferencedDataFileAwareScanPlannerMT(const TableMetadataV2& table_metadata)
+      : ReferencedDataFileAwareScanPlanner(std::make_shared<ScanMetadataBuilderMT>(table_metadata)) {}
 
  private:
   void SetHasEqualityDelete() override {
     std::lock_guard<std::mutex> guard(mutex_);
-    has_equality_delete = true;
+    ReferencedDataFileAwareScanPlanner::SetHasEqualityDelete();
   }
 
   void SetAllPosDeletes() override {
     std::lock_guard<std::mutex> guard(mutex_);
-    all_pos_deletes_annotated_with_referenced_data_file = true;
+    ReferencedDataFileAwareScanPlanner::SetAllPosDeletes();
   }
 
   arrow::Status HandlePositionDelete(const ManifestEntry& entry) override {
     std::lock_guard<std::mutex> guard(mutex_);
-    has_referenced_data_file = true;
-    if (delete_file_path_to_referenced_data_file_path_.contains(entry.data_file.file_path)) {
-      return arrow::Status::ExecutionError("Two delete files with same path: " + entry.data_file.file_path);
-    }
-    delete_file_path_to_referenced_data_file_path_[entry.data_file.file_path] =
-        entry.data_file.referenced_data_file.value();
-    return arrow::Status::OK();
+    return ReferencedDataFileAwareScanPlanner::HandlePositionDelete(entry);
   }
 
   // consider making separate mutexes for each variable
@@ -820,12 +747,9 @@ class ReferencedDataFileAwareScanPlanner<true> : public ReferencedDataFileAwareS
   std::mutex mutex_;
 };
 
-using SinglethreadedScanPlanner = ReferencedDataFileAwareScanPlanner<false>;
-using MultithreadedScanPlanner = ReferencedDataFileAwareScanPlanner<true>;
-
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
                                             const TableMetadataV2& table_metadata) {
-  SinglethreadedScanPlanner scan_metadata_builder(table_metadata);
+  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata);
 
   while (true) {
     std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();
@@ -842,15 +766,15 @@ arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream
 
 class ManifestEntryTask {
  public:
-  ManifestEntryTask(iceberg::ManifestEntry&& entry, std::shared_ptr<MultithreadedScanPlanner> scan_metadata_builder,
-                    arrow::Status& status)
+  ManifestEntryTask(iceberg::ManifestEntry&& entry,
+                    std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder, arrow::Status& status)
       : entry_(std::move(entry)), scan_metadata_builder_(scan_metadata_builder), status_(status) {}
 
   void operator()() { status_ = scan_metadata_builder_->AddEntry(entry_); }
 
  private:
   iceberg::ManifestEntry entry_;
-  std::shared_ptr<MultithreadedScanPlanner> scan_metadata_builder_;
+  std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder_;
   arrow::Status& status_;
 };
 
@@ -858,7 +782,7 @@ class ManifestFileTask {
  public:
   ManifestFileTask(std::shared_ptr<arrow::fs::FileSystem> fs, ManifestFile&& manifest_file,
                    std::shared_ptr<ThreadPool> pool, std::shared_ptr<TableMetadataV2> table_metadata,
-                   std::shared_ptr<MultithreadedScanPlanner> scan_metadata_builder, bool use_reader_schema,
+                   std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder, bool use_reader_schema,
                    std::vector<arrow::Status>& statuses, const ManifestEntryDeserializerConfig& config)
       : fs_(fs),
         manifest_file_(std::move(manifest_file)),
@@ -886,9 +810,9 @@ class ManifestFileTask {
   ManifestFile manifest_file_;
   std::shared_ptr<ThreadPool> pool_;
   std::shared_ptr<TableMetadataV2> table_metadata_;
-  std::shared_ptr<MultithreadedScanPlanner> scan_metadata_builder_;
+  std::shared_ptr<ReferencedDataFileAwareScanPlannerMT> scan_metadata_builder_;
   bool use_reader_schema_;
-  const ManifestEntryDeserializerConfig& config_;
+  ManifestEntryDeserializerConfig config_;
   std::vector<arrow::Status>& statuses_;
 };
 
@@ -899,7 +823,7 @@ arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::
   const std::string manifest_list_path = table_metadata->GetCurrentManifestListPathOrFail();
   auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
 
-  auto scan_metadata_builder = std::make_shared<MultithreadedScanPlanner>(*table_metadata);
+  auto scan_metadata_builder = std::make_shared<ReferencedDataFileAwareScanPlannerMT>(*table_metadata);
   std::vector<std::vector<arrow::Status>> statuses(manifest_metadatas.size());
   {
     auto pool = std::make_shared<ThreadPool>(threads_num);

@@ -771,9 +771,8 @@ std::optional<std::string> TableMetadataV2::GetCurrentManifestListPath() const {
 
 std::string TableMetadataV2::GetCurrentManifestListPathOrFail() const {
   auto maybe_manifest_list_path = GetCurrentManifestListPath();
-  if (!maybe_manifest_list_path.has_value()) {
-    throw std::runtime_error("Manifest list path is not found");
-  }
+  Ensure(maybe_manifest_list_path.has_value(), "Manifest list path is not found");
+
   return *maybe_manifest_list_path;
 }
 
