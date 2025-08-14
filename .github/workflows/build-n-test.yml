@@ -36,7 +36,7 @@ jobs:
         cd _build/tests/
         ../iceberg/iceberg-cpp-test
         ../iceberg/common/fs/iceberg_common_fs_test
-        ../iceberg/common/iceberg_cxx_common_test
+        ../iceberg/common/iceberg_common_test
         ../iceberg/equality_delete/iceberg_equality_delete_test
         ../iceberg/positional_delete/iceberg_positional_delete_test
         ../iceberg/filter/representation/filter_representation_ut
@@ -74,7 +74,7 @@ jobs:
         cd _build/tests/
         ../iceberg/iceberg-cpp-test
         ../iceberg/common/fs/iceberg_common_fs_test
-        ../iceberg/common/iceberg_cxx_common_test
+        ../iceberg/common/iceberg_common_test
         ../iceberg/equality_delete/iceberg_equality_delete_test
         ../iceberg/positional_delete/iceberg_positional_delete_test
         ../iceberg/filter/representation/filter_representation_ut
