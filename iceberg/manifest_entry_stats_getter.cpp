@@ -126,8 +126,7 @@ std::optional<iceberg::filter::GenericMinMaxStats> GenericStatsFromTypedStats(co
                                                                std::move(max_value.value()));
 }
 
-using StatsConverter = std::optional<iceberg::filter::GenericMinMaxStats> (*)(const std::vector<uint8_t>& min,
-                                                                              const std::vector<uint8_t>& max);
+}  // namespace
 
 StatsConverter TypesToStatsConverter(iceberg::TypeID ice_type, iceberg::filter::ValueType value_type) {
   using ValType = iceberg::filter::ValueType;
@@ -162,7 +161,6 @@ StatsConverter TypesToStatsConverter(iceberg::TypeID ice_type, iceberg::filter::
 
   return nullptr;
 }
-}  // namespace
 
 std::optional<iceberg::filter::GenericStats> ManifestEntryStatsGetter::GetStats(
     const std::string& column_name, iceberg::filter::ValueType value_type) const {
