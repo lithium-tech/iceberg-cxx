@@ -820,18 +820,23 @@ arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::
   auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
 
   auto scan_metadata_builder = std::make_shared<ReferencedDataFileAwareScanPlannerMT>(*table_metadata);
-  std::vector<std::vector<std::future<arrow::Status>>> statuses(manifest_metadatas.size());
-  {
-    auto pool = std::make_shared<ThreadPool>(threads_num);
-    std::vector<std::future<std::vector<std::future<arrow::Status>>>> futures(manifest_metadatas.size());
-    for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
-      futures[i] = pool->Submit(ManifestFileTask(fs, std::move(manifest_metadatas[i]), pool, table_metadata,
-                                                 scan_metadata_builder, use_reader_schema, config));
-    }
-    for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
-      statuses[i] = futures[i].get();
-    }
+
+  auto pool = std::make_shared<ThreadPool>(threads_num);
+  std::vector<std::future<std::vector<std::future<arrow::Status>>>> futures;
+  futures.reserve(manifest_metadatas.size());
+
+  for (auto& manifest : manifest_metadatas) {
+    futures.emplace_back(pool->Submit(ManifestFileTask(fs, std::move(manifest), pool, table_metadata,
+                                                       scan_metadata_builder, use_reader_schema, config)));
   }
+
+  std::vector<std::vector<std::future<arrow::Status>>> statuses;
+  statuses.reserve(manifest_metadatas.size());
+
+  for (auto& future : futures) {
+    statuses.emplace_back(future.get());
+  }
+
   for (auto& manifest_statuses : statuses) {
     for (auto& status : manifest_statuses) {
       ARROW_RETURN_NOT_OK(status.get());
