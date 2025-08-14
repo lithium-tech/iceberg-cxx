@@ -33,7 +33,7 @@ class FnOnce<R(A...)> {
   FnOnce(Fn fn) : impl_(new FnImpl<Fn>(std::move(fn))) {  // NOLINT runtime/explicit
   }
 
-  explicit operator bool() const { return impl_ != NULLPTR; }
+  explicit operator bool() const { return impl_ != nullptr; }
 
   R operator()(A... a) && {
     auto bye = std::move(impl_);
