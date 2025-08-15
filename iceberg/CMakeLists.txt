@@ -4,6 +4,8 @@ set(iceberg_cpp_files
   catalog.h
   deletion_vector.cpp
   deletion_vector.h
+  literals.cpp
+  literals.h
   manifest_entry.cpp
   manifest_entry.h
   manifest_file.h

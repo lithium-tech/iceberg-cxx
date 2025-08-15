@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include "iceberg/literals.h"
 #include "iceberg/type.h"
 
 namespace iceberg::types {
@@ -13,6 +14,8 @@ struct NestedField {
   int32_t field_id;
   bool is_required = false;
   std::shared_ptr<const types::Type> type;
+  std::optional<Literal> initial_default;
+  std::optional<Literal> write_default;
 
   bool operator==(const NestedField& other) const {
     auto left_type = type->ToString();

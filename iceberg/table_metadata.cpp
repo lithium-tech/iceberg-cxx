@@ -1,6 +1,7 @@
 #include "iceberg/table_metadata.h"
 
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -54,6 +55,8 @@ struct Names {
   static constexpr const char* id = "id";
   static constexpr const char* name = "name";
   static constexpr const char* required = "required";
+  static constexpr const char* initial_default = "initial-default";
+  static constexpr const char* write_default = "write-default";
   static constexpr const char* source_id = "source-id";
   static constexpr const char* field_id = "field-id";
   static constexpr const char* transform = "transform";
@@ -100,7 +103,7 @@ class WriterContext {
 
   template <typename T>
   void WriteJsonField(rapidjson::Value& doc, std::string_view field_name, T value) {
-    doc.AddMember(rapidjson::StringRef(field_name.data(), field_name.size()), value, GetAllocator());
+    doc.AddMember(SaveRef(std::string(field_name)), value, GetAllocator());
   }
 
   void WriteJsonField(rapidjson::Value& doc, std::string_view field_name, const char* str_value) {
@@ -148,6 +151,12 @@ class WriterContext {
     Ensure(field.type != nullptr, std::string(__FUNCTION__) + ": no type");
 
     WriteDataType(doc, *field.type, Names::type);
+    if (field.initial_default.has_value()) {
+      WriteJsonField(doc, Names::initial_default, SerializeLiteral(field.type, *field.initial_default));
+    }
+    if (field.write_default.has_value()) {
+      WriteJsonField(doc, Names::write_default, SerializeLiteral(field.type, *field.write_default));
+    }
   }
 
   void WriteSchemas(rapidjson::Value& doc, const std::vector<std::shared_ptr<Schema>>& array) {
@@ -385,10 +394,82 @@ class WriterContext {
 
   auto& GetAllocator() { return allocator_; }
 
+  std::string ConvertBinaryToHexadecimal(const std::string& binary) {
+    std::string hex;
+    hex.reserve(binary.size() * 2);
+    for (unsigned char byte : binary) {
+      static const char* hexDigits = "0123456789abcdef";
+      hex.push_back(hexDigits[byte >> 4]);
+      hex.push_back(hexDigits[byte & 0x0F]);
+    }
+    return hex;
+  }
+
   rapidjson::GenericStringRef<char> SaveRef(std::string str) {
-    strings_.emplace_back(std::make_shared<std::string>(std::move(str)));
-    auto& saved_str = *strings_.back();
-    return rapidjson::StringRef(saved_str.data(), saved_str.size());
+    strings_.push_back(std::make_shared<std::string>(std::move(str)));
+    return rapidjson::GenericStringRef<char>(strings_.back()->data(), strings_.back()->size());
+  }
+
+  rapidjson::Value SerializeLiteral(std::shared_ptr<const types::Type> type, const Literal& literal) {
+    auto scalar = literal.GetScalar();
+    switch (type->TypeId()) {
+      case TypeID::kBoolean:
+        return rapidjson::Value(std::static_pointer_cast<arrow::BooleanScalar>(scalar)->value);
+      case TypeID::kInt:
+        return rapidjson::Value(std::static_pointer_cast<arrow::Int32Scalar>(scalar)->value);
+      case TypeID::kLong:
+        return rapidjson::Value(std::static_pointer_cast<arrow::Int64Scalar>(scalar)->value);
+      case TypeID::kFloat:
+        return rapidjson::Value(std::static_pointer_cast<arrow::FloatScalar>(scalar)->value);
+      case TypeID::kDouble:
+        return rapidjson::Value(std::static_pointer_cast<arrow::DoubleScalar>(scalar)->value);
+      case TypeID::kDecimal: {
+        auto str = scalar->ToString();
+        auto decimal_type = std::static_pointer_cast<const types::DecimalType>(type);
+        auto precision = decimal_type->Precision(), scale = decimal_type->Scale();
+        for (int i = 0; i < -scale; ++i) {
+          if (str.empty() || str.back() != '0') {
+            throw std::runtime_error("Decimals with a negative scale must have at least -scale zeros at the end");
+          }
+          str.pop_back();
+        }
+        str += "E+" + std::to_string(-scale);
+        return rapidjson::Value(SaveRef(str));
+      }
+      case TypeID::kDate:
+      case TypeID::kTime:
+      case TypeID::kTimestamp:
+      case TypeID::kTimestamptz:
+      case TypeID::kTimestampNs:
+      case TypeID::kTimestamptzNs:
+      case TypeID::kString:
+        return rapidjson::Value(SaveRef(scalar->ToString()));
+      case TypeID::kUuid: {
+        auto str = ConvertBinaryToHexadecimal(scalar->ToString());
+        if (str.size() != 32) {
+          throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": uuid length must be 36 characters");
+        }
+        for (int ind = 20; ind >= 8; ind -= 4) {
+          str.insert(str.begin() + ind, '-');
+        }
+        return rapidjson::Value(SaveRef(std::move(str)));
+      }
+      case TypeID::kFixed:
+      case TypeID::kBinary:
+        return rapidjson::Value(SaveRef(ConvertBinaryToHexadecimal(scalar->ToString())));
+      case TypeID::kList: {
+        auto arrow_array = std::static_pointer_cast<arrow::ListScalar>(scalar)->value;
+        auto list_type = std::static_pointer_cast<const types::ListType>(type);
+        rapidjson::Value array(rapidjson::kArrayType);
+        for (int i = 0; i < arrow_array->length(); ++i) {
+          array.PushBack(SerializeLiteral(list_type->ElementType(), Literal(arrow_array->GetScalar(i).ValueOrDie())),
+                         GetAllocator());
+        }
+        return array;
+      }
+      default:
+        throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": Unsupported type");
+    }
   }
 };
 
@@ -436,6 +517,15 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
   throw std::runtime_error(std::string(__FUNCTION__) + ": unknown type");
 }
 
+std::optional<Literal> ExtractOptionalLiteral(const rapidjson::Value& document, const std::string& field_name,
+                                              std::shared_ptr<const types::Type> type) {
+  const char* c_str = field_name.c_str();
+  if (!document.HasMember(c_str)) {
+    return std::nullopt;
+  }
+  return DeserializeLiteral(type, document[c_str]);
+}
+
 types::NestedField JsonToField(const rapidjson::Value& document) {
   types::NestedField result;
   result.field_id = json_parse::ExtractInt32Field(document, Names::id);
@@ -445,6 +535,8 @@ types::NestedField JsonToField(const rapidjson::Value& document) {
   Ensure(document.HasMember(Names::type), std::string(__FUNCTION__) + ": document.HasMember(\"type\")");
 
   result.type = JsonToDataType(document[Names::type]);
+  result.initial_default = ExtractOptionalLiteral(document, Names::initial_default, result.type);
+  result.write_default = ExtractOptionalLiteral(document, Names::write_default, result.type);
   return result;
 }
 
