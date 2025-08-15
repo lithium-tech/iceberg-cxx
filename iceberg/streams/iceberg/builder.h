@@ -36,26 +36,18 @@ class IcebergScanBuilder {
 
     auto mapper = MakeMapper(schema);
 
-<<<<<<< HEAD
     std::optional<SchemaNameMapper> schema_name_mapper;
     if (schema_name_mapping.has_value()) {
       schema_name_mapper = SchemaNameMapper(*schema_name_mapping);
     }
 
-    // this class takes an AnnotatedDataPath as input and returns IcebergStream
-    // (which reads some columns from row groups matching rg-filter of data file)
-    auto stream_builder =
-        std::make_shared<FileReaderBuilder>(field_ids_to_retrieve, equality_deletes, mapper, file_reader_provider,
-                                            rg_filter, row_filter, std::move(schema_name_mapper), logger);
-=======
     auto default_value_map = MakeDefaultValueMap(schema);
 
     // this class takes an AnnotatedDataPath as input and returns IcebergStream
     // (which reads some columns from row groups matching rg-filter of data file)
     auto stream_builder = std::make_shared<FileReaderBuilder>(
-        field_ids_to_retrieve, equality_deletes, mapper, file_reader_provider, rg_filter,
-        std::move(schema_name_mapping), MakeDefaultValueMap(schema), logger);
->>>>>>> 661b90c (tmp)
+        field_ids_to_retrieve, equality_deletes, mapper, file_reader_provider, rg_filter, row_filter,
+        std::move(schema_name_mapper), MakeDefaultValueMap(schema), logger);
 
     // convert stream of AnnotatedDatapath into concatenation of streams created with FileReaderBuilder
     IcebergStreamPtr stream = std::make_shared<DataScanner>(meta_stream, stream_builder);

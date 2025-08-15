@@ -27,8 +27,11 @@ class DefaultValueApplier : public IStream<ArrowBatchWithRowPosition> {
 
     auto arrow_batch = batch->GetRecordBatch();
 
-    for (const auto &[field_id, name] : remaining_field_ids_with_names_) {
-        arrow_batch = arrow_batch->AddColumn(arrow_batch->num_columns(), name, default_value_map_->at(field_id).MakeColumn(arrow_batch->num_rows())).ValueOrDie();
+    for (const auto& [field_id, name] : remaining_field_ids_with_names_) {
+      arrow_batch = arrow_batch
+                        ->AddColumn(arrow_batch->num_columns(), name,
+                                    default_value_map_->at(field_id).MakeColumn(arrow_batch->num_rows()))
+                        .ValueOrDie();
     }
     return std::make_shared<ArrowBatchWithRowPosition>(arrow_batch, batch->row_position);
   }

@@ -92,7 +92,17 @@ StreamPtr<ArrowBatchWithRowPosition> FileReaderBuilder::MakeFinalStream(
   StreamPtr<ArrowBatchWithRowPosition> result =
       std::make_shared<ParquetFileReader>(arrow_reader, matching_row_groups, col_positions, logger);
 
-  return std::make_shared<ProjectionStream>(parquet_name_to_result_name, result);
+  result = std::make_shared<ProjectionStream>(parquet_name_to_result_name, result);
+
+  std::vector<std::pair<int, std::string>> remaining_field_ids_with_names;
+  for (const auto& col : cols) {
+    if (!col.column_position.has_value() && default_value_map_->contains(col.field_id)) {
+      remaining_field_ids_with_names.emplace_back(col.field_id, col.result_name);
+    }
+  }
+
+  return result = std::make_shared<DefaultValueApplier>(result, default_value_map_,
+                                                        std::move(remaining_field_ids_with_names));
 }
 
 IcebergStreamPtr FileReaderBuilder::Build(const AnnotatedDataPath& annotated_data_path) {

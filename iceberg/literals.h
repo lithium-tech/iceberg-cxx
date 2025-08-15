@@ -12,9 +12,7 @@ class Literal {
   explicit Literal(std::shared_ptr<arrow::Scalar> scalar) : scalar_(scalar) {}
   std::shared_ptr<arrow::Array> MakeColumn(int64_t length) const;
 
-  std::shared_ptr<arrow::Scalar> GetScalar() const {
-    return scalar_;
-  }
+  std::shared_ptr<arrow::Scalar> GetScalar() const { return scalar_; }
 
  private:
   std::shared_ptr<arrow::Scalar> scalar_;
