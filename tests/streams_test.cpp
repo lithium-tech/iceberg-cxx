@@ -112,8 +112,8 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
 
   return IcebergScanBuilder::MakeIcebergStream(
       meta_stream, pos_del_info, std::make_shared<EqualityDeletes>(std::move(eq_del_info)), std::move(eq_del_config),
-      nullptr, *metadata->GetCurrentSchema(), field_ids_to_retrieve, std::make_shared<FileReaderProvider>(fs_provider),
-      schema_name_mapping);
+      nullptr, nullptr, *metadata->GetCurrentSchema(), field_ids_to_retrieve,
+      std::make_shared<FileReaderProvider>(fs_provider), schema_name_mapping);
 }
 
 std::shared_ptr<arrow::Scalar> CreateStringListScalar(const std::vector<std::string>& values) {

@@ -40,13 +40,8 @@ TEST_F(FileReaderBuilderTest, Trivial) {
   auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {3, "col123"}});
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-<<<<<<< HEAD
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
-                                        std::nullopt);
-=======
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
-                                        std::make_shared<const std::map<int, Literal>>());
->>>>>>> 661b90c (tmp)
+                                        std::nullopt, std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int64_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{1, 2, 3, 4};
@@ -80,7 +75,7 @@ TEST_F(FileReaderBuilderTest, RowFilter) {
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
                                         std::make_shared<FileReaderProvider>(fs_provider_), nullptr, row_filter,
-                                        std::nullopt);
+                                        std::nullopt, std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -115,14 +110,9 @@ TEST_F(FileReaderBuilderTest, SchemaNameMapping) {
       "[ { \"field-id\": 2, \"names\": [\"yyy\"] },"
       " { \"field-id\": 1, \"names\": [\"xxx\"] } ]";
 
-  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-<<<<<<< HEAD
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
-                                        schema_name_mapping);
-=======
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
->>>>>>> 661b90c (tmp)
+  FileReaderBuilder file_reader_builder(
+      field_ids_to_retrieve, equality_deletes_, field_id_mapper, std::make_shared<FileReaderProvider>(fs_provider_),
+      nullptr, nullptr, SchemaNameMapper(schema_name_mapping), std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -153,14 +143,9 @@ TEST_F(FileReaderBuilderTest, FieldIdFirst) {
       "[ { \"field-id\": 1, \"names\": [\"yyy\"] },"
       " { \"field-id\": 2, \"names\": [\"xxx\"] } ]";
 
-  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-<<<<<<< HEAD
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
-                                        schema_name_mapping);
-=======
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
->>>>>>> 661b90c (tmp)
+  FileReaderBuilder file_reader_builder(
+      field_ids_to_retrieve, equality_deletes_, field_id_mapper, std::make_shared<FileReaderProvider>(fs_provider_),
+      nullptr, nullptr, SchemaNameMapper(schema_name_mapping), std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -190,14 +175,9 @@ TEST_F(FileReaderBuilderTest, FieldIDsAreNotInjective) {
       "[ { \"field-id\": 1, \"names\": [\"yyy\"] },"
       " { \"field-id\": 2, \"names\": [\"xxx\"] } ]";
 
-  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-<<<<<<< HEAD
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
-                                        schema_name_mapping);
-=======
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
->>>>>>> 661b90c (tmp)
+  FileReaderBuilder file_reader_builder(
+      field_ids_to_retrieve, equality_deletes_, field_id_mapper, std::make_shared<FileReaderProvider>(fs_provider_),
+      nullptr, nullptr, SchemaNameMapper(schema_name_mapping), std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -222,14 +202,9 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingMissingColumn) {
       "[ { \"field-id\": 2, \"names\": [\"abc\"] },"
       " { \"field-id\": 1, \"names\": [\"xxx\"] } ]";
 
-  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-<<<<<<< HEAD
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
-                                        schema_name_mapping);
-=======
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
->>>>>>> 661b90c (tmp)
+  FileReaderBuilder file_reader_builder(
+      field_ids_to_retrieve, equality_deletes_, field_id_mapper, std::make_shared<FileReaderProvider>(fs_provider_),
+      nullptr, nullptr, SchemaNameMapper(schema_name_mapping), std::make_shared<const std::map<int, Literal>>());
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{5, 6, 7, 8};
@@ -258,14 +233,9 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingWithArray) {
   const std::string schema_name_mapping =
       "[ { \"field-id\": 1, \"names\": [\"xxx\"], \"fields\": [ { \"field-id\": 3, \"names\": [\"element\"] } ] } ]";
 
-  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-<<<<<<< HEAD
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
-                                        schema_name_mapping);
-=======
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping, std::make_shared<const std::map<int, Literal>>());
->>>>>>> 661b90c (tmp)
+  FileReaderBuilder file_reader_builder(
+      field_ids_to_retrieve, equality_deletes_, field_id_mapper, std::make_shared<FileReaderProvider>(fs_provider_),
+      nullptr, nullptr, SchemaNameMapper(schema_name_mapping), std::make_shared<const std::map<int, Literal>>());
 
   ArrayContainer col1_data = {
       .arrays = {OptionalVector<int32_t>{3, 1}, OptionalVector<int32_t>{4}, OptionalVector<int32_t>{9, 2, 5}}};
@@ -305,10 +275,11 @@ TEST_F(FileReaderBuilderTest, DefaultValue) {
 
   auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}});
 
-  FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
-                                        std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
-                                            {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
+  FileReaderBuilder file_reader_builder(
+      field_ids_to_retrieve, equality_deletes_, field_id_mapper, std::make_shared<FileReaderProvider>(fs_provider_),
+      nullptr, nullptr, std::nullopt,
+      std::make_shared<const std::map<int, Literal>>(
+          std::map<int, Literal>{{2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
 
   auto col1_data = OptionalVector<int32_t>{1, 2, 3, 4};
   auto col2_data = OptionalVector<int32_t>{10, 10, 10, 10};
@@ -335,7 +306,8 @@ TEST_F(FileReaderBuilderTest, ColumnFirst) {
   auto field_id_mapper = std::make_shared<FieldIdMapper>(std::map<int, std::string>{{1, "col1"}, {2, "col2"}});
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, std::nullopt,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
+                                        std::nullopt,
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
                                             {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
@@ -370,8 +342,8 @@ TEST_F(FileReaderBuilderTest, SchemaNameMappingFirst) {
       " { \"field-id\": 1, \"names\": [\"xxx\"] } ]";
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
+                                        SchemaNameMapper(schema_name_mapping),
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
                                             {2, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
@@ -405,8 +377,8 @@ TEST_F(FileReaderBuilderTest, Combination) {
   const std::string schema_name_mapping = "[ { \"field-id\": 2, \"names\": [\"xxx\"] } ]";
 
   FileReaderBuilder file_reader_builder(field_ids_to_retrieve, equality_deletes_, field_id_mapper,
-                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr,
-                                        schema_name_mapping,
+                                        std::make_shared<FileReaderProvider>(fs_provider_), nullptr, nullptr,
+                                        SchemaNameMapper(schema_name_mapping),
                                         std::make_shared<const std::map<int, Literal>>(std::map<int, Literal>{
                                             {1, Literal(std::make_shared<arrow::Int32Scalar>(2))},
                                             {3, Literal(std::make_shared<arrow::Int32Scalar>(10))}}));
