@@ -208,10 +208,18 @@ int main(int argc, char** argv) {
     eq_del_config.max_rows = 1'000'000;
     eq_del_config.throw_if_memory_limit_exceeded = false;
 
+    auto schema_name_mapping = [table_metadata]() -> std::optional<std::string> {
+      auto it = table_metadata->properties.find("schema.name-mapping.default");
+      if (it == table_metadata->properties.end()) {
+        return std::nullopt;
+      }
+      return it->second;
+    }();
+
     auto data_stream = iceberg::IcebergScanBuilder::MakeIcebergStream(
         meta_stream, pos_del_info, std::make_shared<iceberg::EqualityDeletes>(std::move(eq_del_info)),
         std::move(eq_del_config), nullptr, nullptr, *table_metadata->GetCurrentSchema(), {1},
-        std::make_shared<iceberg::FileReaderProvider>(fs_provider));
+        std::make_shared<iceberg::FileReaderProvider>(fs_provider), std::move(schema_name_mapping));
 
     while (true) {
       auto batch = data_stream->ReadNext();

@@ -1,4 +1,5 @@
 add_library(iceberg_streams STATIC
+  schema_name_mapper.cpp
   file_reader_builder.cpp
   parquet_stats_getter.cpp
   filtering_stream.cpp
