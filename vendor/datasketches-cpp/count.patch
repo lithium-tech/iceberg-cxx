@@ -1,0 +1,46 @@
+diff --git a/common/test/CMakeLists.txt b/common/test/CMakeLists.txt
+index c598c35..a12a703 100644
+--- a/common/test/CMakeLists.txt
++++ b/common/test/CMakeLists.txt
+@@ -74,7 +74,7 @@ target_sources(common_test
+ # now the integration test part
+ add_executable(integration_test)
+
+-target_link_libraries(integration_test count cpc density fi hll kll req sampling theta tuple common_test_lib)
++target_link_libraries(integration_test dsk_count cpc density fi hll kll req sampling theta tuple common_test_lib)
+
+ set_target_properties(integration_test PROPERTIES
+   CXX_STANDARD 11
+diff --git a/count/CMakeLists.txt b/count/CMakeLists.txt
+index f2952ef..3eea4ce 100644
+--- a/count/CMakeLists.txt
++++ b/count/CMakeLists.txt
+@@ -15,23 +15,23 @@
+ # specific language governing permissions and limitations
+ # under the License.
+
+-add_library(count INTERFACE)
++add_library(dsk_count INTERFACE)
+
+-add_library(${PROJECT_NAME}::COUNT ALIAS count)
++add_library(${PROJECT_NAME}::COUNT ALIAS dsk_count)
+
+ if (BUILD_TESTS)
+     add_subdirectory(test)
+ endif()
+
+-target_include_directories(count
++target_include_directories(dsk_count
+         INTERFACE
+         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+         $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include>
+         )
+
+-target_link_libraries(count INTERFACE common)
++target_link_libraries(dsk_count INTERFACE common)
+
+-install(TARGETS count
++install(TARGETS dsk_count
+         EXPORT ${PROJECT_NAME}
+         )
+

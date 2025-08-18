@@ -91,6 +91,8 @@ FetchContent_Declare(
   datasketches-cpp
   GIT_REPOSITORY ${GITHUB}/apache/datasketches-cpp.git
   GIT_TAG de8553ba372e618382c2e7b44b0ffc9422b9458c # 5.2.0
+  PATCH_COMMAND git reset --hard HEAD
+    && git apply ${CMAKE_CURRENT_SOURCE_DIR}/datasketches-cpp/count.patch
 )
 
 FetchContent_Declare(
