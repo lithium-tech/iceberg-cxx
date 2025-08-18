@@ -69,7 +69,7 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
 
   auto fs = std::make_shared<arrow::fs::LocalFileSystem>();
 
-  auto entries_stream = ice_tea::AllEntriesStream::Make(fs, metadata);
+  auto entries_stream = ice_tea::AllEntriesStream::Make(fs, metadata, false);
   Ensure(!!entries_stream, "Failed to make AllEntriesStream");
 
   auto maybe_scan_metadata = ice_tea::GetScanMetadata(*entries_stream, *metadata);
