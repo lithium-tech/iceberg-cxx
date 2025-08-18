@@ -110,7 +110,8 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
     for (const bool use_avro_reader_schema : {false, true}) {
       for (const size_t threads_num : {0, 5, 30}) {
         auto maybe_scan_metadata = ice_tea::GetScanMetadata(
-            fs, test_info.meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, threads_num);
+            fs, test_info.meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr,
+            threads_num);
         ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK()) << test_info.meta_path;
         EXPECT_EQ(maybe_scan_metadata->partitions.size(), test_info.partitions)
             << test_info.meta_path << "\n Threads num: " << threads_num;
@@ -139,7 +140,7 @@ TEST(GetScanMetadata, WithNoMatchingPartitionSpec) {
                            fs,
                            "s3://warehouse/partitioned_table_with_missing_spec/metadata/"
                            "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
-                           [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, threads_num)
+                           [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, threads_num)
                            .ok());
     }
   }
@@ -175,7 +176,7 @@ TEST(GetScanMetadata, WithMultipleMatchingPartitionSpecs) {
           fs,
           "s3://warehouse/partitioned_table_with_multiple_spec/metadata/"
           "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
-          [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, threads_num);
+          [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, threads_num);
       ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
       std::string error_message = maybe_scan_metadata.status().message();
 

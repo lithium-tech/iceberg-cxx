@@ -128,7 +128,6 @@ std::string SerializePartitionTuple(const DataFile::PartitionTuple& partition_tu
   return result;
 }
 
-<<<<<<< HEAD
 std::vector<ManifestFile> GetManifestFiles(std::shared_ptr<arrow::fs::FileSystem> fs,
                                            const std::string& manifest_list_path) {
   const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
@@ -144,7 +143,7 @@ void AddSequenceNumberOrFail(const ManifestFile& manifest, ManifestEntry& entry)
   Ensure(entry.sequence_number.has_value(),
          "No sequence_number in iceberg::ManifestEntry for data file " + entry.data_file.file_path);
 }
-=======
+
 int ConvertToInt(const std::vector<uint8_t>& value) {
   Ensure(value.size() == sizeof(int), std::string(__PRETTY_FUNCTION__) + ": byte array size doesn't match");
   int res;
@@ -273,7 +272,6 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
   const std::vector<PartitionFieldSummary>& partitions_;
   std::shared_ptr<PartitionSpec> spec_;
 };
->>>>>>> fd541a2 (v1)
 
 }  // namespace
 
@@ -498,17 +496,8 @@ std::queue<ManifestFile> FilterManifests(std::shared_ptr<filter::StatsFilter> st
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
     std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& manifest_list_path, bool use_reader_schema,
     const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, std::shared_ptr<iceberg::Schema> schema,
-<<<<<<< HEAD
-    const ManifestEntryDeserializerConfig& config) {
-  auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
-  std::queue<ManifestFile> manifest_files_queue(std::deque<ManifestFile>(
-      std::make_move_iterator(manifest_metadatas.begin()), std::make_move_iterator(manifest_metadatas.end())));
-=======
     std::shared_ptr<filter::StatsFilter> stats_filter, const ManifestEntryDeserializerConfig& config) {
-  const std::string manifest_metadatas_content = ValueSafe(ReadFile(fs, manifest_list_path));
-
-  std::stringstream ss(manifest_metadatas_content);
-  std::vector<ManifestFile> manifest_metadatas = ice_tea::ReadManifestList(ss);
+  std::vector<ManifestFile> manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
 
   std::queue<ManifestFile> manifest_files_queue = [&]() {
     if (stats_filter != nullptr && schema != nullptr) {
@@ -517,7 +506,6 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
     return std::queue<ManifestFile>(std::deque<ManifestFile>(std::make_move_iterator(manifest_metadatas.begin()),
                                                              std::make_move_iterator(manifest_metadatas.end())));
   }();
->>>>>>> fd541a2 (v1)
 
   return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue), use_reader_schema, partition_specs,
                                             schema, config);
@@ -572,12 +560,8 @@ arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
-<<<<<<< HEAD
-                                            uint32_t threads_num, const GetScanMetadataConfig& config) {
-=======
-                                            std::shared_ptr<filter::StatsFilter> stats_filter,
+                                            std::shared_ptr<filter::StatsFilter> stats_filter, uint32_t threads_num,
                                             const GetScanMetadataConfig& config) {
->>>>>>> fd541a2 (v1)
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
@@ -587,21 +571,14 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
     return arrow::Status::ExecutionError("GetScanMetadata: failed to parse metadata " + metadata_location +
                                          " (failed to get schema)");
   }
-<<<<<<< HEAD
   if (threads_num == 0) {
     auto entries_stream =
         AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
-                               config.manifest_entry_deserializer_config);
+                               stats_filter, config.manifest_entry_deserializer_config);
     return GetScanMetadata(*entries_stream, *table_metadata);
   }
   return GetScanMetadataMultiThreaded(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
                                       threads_num, config.manifest_entry_deserializer_config);
-=======
-  auto entries_stream =
-      AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
-                             stats_filter, config.manifest_entry_deserializer_config);
-  return GetScanMetadata(*entries_stream, *table_metadata);
->>>>>>> fd541a2 (v1)
 }
 
 class ScanMetadataBuilder {
