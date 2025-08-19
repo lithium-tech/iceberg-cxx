@@ -427,6 +427,10 @@ class WriterContext {
         auto str = scalar->ToString();
         auto decimal_type = std::static_pointer_cast<const types::DecimalType>(type);
         auto precision = decimal_type->Precision(), scale = decimal_type->Scale();
+
+        // https://iceberg.apache.org/spec/#json-single-value-serialization
+        // from spec: for values with a negative scale, the scientific notation is used and the exponent must equal the
+        // negated scale
         for (int i = 0; i < -scale; ++i) {
           if (str.empty() || str.back() != '0') {
             throw std::runtime_error("Decimals with a negative scale must have at least -scale zeros at the end");
@@ -446,8 +450,10 @@ class WriterContext {
         return rapidjson::Value(SaveRef(scalar->ToString()));
       case TypeID::kUuid: {
         auto str = ConvertBinaryToHexadecimal(scalar->ToString());
-        if (str.size() != 32) {
-          throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": uuid length must be 36 characters");
+        constexpr size_t expected_size = 32;
+        if (str.size() != expected_size) {
+          throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": uuid length must be" +
+                                   std::to_string(expected_size) + " characters without delimiters");
         }
         for (int ind = 20; ind >= 8; ind -= 4) {
           str.insert(str.begin() + ind, '-');
@@ -462,7 +468,9 @@ class WriterContext {
         auto list_type = std::static_pointer_cast<const types::ListType>(type);
         rapidjson::Value array(rapidjson::kArrayType);
         for (int i = 0; i < arrow_array->length(); ++i) {
-          array.PushBack(SerializeLiteral(list_type->ElementType(), Literal(arrow_array->GetScalar(i).ValueOrDie())),
+          auto maybe_scalar = arrow_array->GetScalar(i);
+          Ensure(maybe_scalar.ok(), std::string(__PRETTY_FUNCTION__) + ": failed to get scalar");
+          array.PushBack(SerializeLiteral(list_type->ElementType(), Literal(maybe_scalar.MoveValueUnsafe())),
                          GetAllocator());
         }
         return array;

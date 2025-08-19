@@ -41,8 +41,6 @@ class IcebergScanBuilder {
       schema_name_mapper = SchemaNameMapper(*schema_name_mapping);
     }
 
-    auto default_value_map = MakeDefaultValueMap(schema);
-
     // this class takes an AnnotatedDataPath as input and returns IcebergStream
     // (which reads some columns from row groups matching rg-filter of data file)
     auto stream_builder = std::make_shared<FileReaderBuilder>(

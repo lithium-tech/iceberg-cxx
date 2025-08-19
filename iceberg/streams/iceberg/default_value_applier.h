@@ -2,6 +2,7 @@
 
 #include <map>
 
+#include "iceberg/common/error.h"
 #include "iceberg/literals.h"
 #include "iceberg/streams/arrow/batch_with_row_number.h"
 #include "iceberg/streams/arrow/stream.h"
@@ -28,10 +29,10 @@ class DefaultValueApplier : public IStream<ArrowBatchWithRowPosition> {
     auto arrow_batch = batch->GetRecordBatch();
 
     for (const auto& [field_id, name] : remaining_field_ids_with_names_) {
-      arrow_batch = arrow_batch
-                        ->AddColumn(arrow_batch->num_columns(), name,
-                                    default_value_map_->at(field_id).MakeColumn(arrow_batch->num_rows()))
-                        .ValueOrDie();
+      auto maybe_new_batch = arrow_batch->AddColumn(
+          arrow_batch->num_columns(), name, default_value_map_->at(field_id).MakeColumn(arrow_batch->num_rows()));
+      Ensure(maybe_new_batch.ok(), std::string(__PRETTY_FUNCTION__) + ": failed to add new column");
+      arrow_batch = maybe_new_batch.MoveValueUnsafe();
     }
     return std::make_shared<ArrowBatchWithRowPosition>(arrow_batch, batch->row_position);
   }

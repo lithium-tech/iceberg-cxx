@@ -5,15 +5,10 @@
 #include "arrow/api.h"
 #include "arrow/array/util.h"
 #include "arrow/util/value_parsing.h"
+#include "iceberg/common/error.h"
 
 namespace iceberg {
 namespace {
-
-void Ensure(bool cond, const std::string& message) {
-  if (!cond) {
-    throw std::runtime_error(message);
-  }
-}
 
 int64_t ParseTime(const rapidjson::Value& document, arrow::TimeUnit::type type) {
   Ensure(document.IsString(), std::string(__PRETTY_FUNCTION__) + ": Expected String value");
@@ -28,7 +23,9 @@ std::unique_ptr<arrow::Buffer> DeserializeHexadecimal(const char* str, int lengt
   Ensure(length % 2 == 0, std::string(__PRETTY_FUNCTION__) + ": Expected even number of characters");
 
   std::string_view str_view(str, length);
-  auto buffer = arrow::AllocateBuffer(length / 2).ValueOrDie();
+  auto maybe_buffer = arrow::AllocateBuffer(length / 2);
+  Ensure(maybe_buffer.ok(), std::string(__PRETTY_FUNCTION__) + ": failed to allocate arrow::Buffer");
+  auto buffer = maybe_buffer.MoveValueUnsafe();
   uint8_t* data = buffer->mutable_data();
 
   for (int i = 0; i < length / 2; ++i) {
@@ -115,8 +112,14 @@ std::shared_ptr<arrow::Scalar> DeserializeScalar(std::shared_ptr<const types::Ty
         precision += str_scale;
         scale = 0;
       }
-      Ensure(precision <= 38, std::string(__PRETTY_FUNCTION__) + ": Decimal precision greater than 76 is unsupported");
-      auto decimal_value = arrow::Decimal128::FromString(str).ValueOrDie();
+      constexpr int kMaxPrecision = 38;
+
+      Ensure(precision <= kMaxPrecision, std::string(__PRETTY_FUNCTION__) + ": Decimal precision greater than " +
+                                             std::to_string(kMaxPrecision) + " is unsupported");
+
+      auto maybe_decimal_value = arrow::Decimal128::FromString(str);
+      Ensure(maybe_decimal_value.ok(), std::string(__PRETTY_FUNCTION__) + ": failed to convert string to decimal");
+      auto decimal_value = maybe_decimal_value.MoveValueUnsafe();
       auto type = std::make_shared<arrow::Decimal128Type>(precision, scale);
       return std::make_shared<arrow::Decimal128Scalar>(decimal_value, type);
     }
@@ -217,7 +220,9 @@ std::shared_ptr<arrow::Scalar> DeserializeScalar(std::shared_ptr<const types::Ty
 }  // namespace
 
 std::shared_ptr<arrow::Array> Literal::MakeColumn(int64_t length) const {
-  return MakeArrayFromScalar(*scalar_, length).ValueOrDie();
+  auto maybe_array = MakeArrayFromScalar(*scalar_, length);
+  Ensure(maybe_array.ok(), std::string(__PRETTY_FUNCTION__) + ": failed to create array from scalar");
+  return maybe_array.MoveValueUnsafe();
 }
 
 Literal DeserializeLiteral(std::shared_ptr<const types::Type> type, const rapidjson::Value& document) {
