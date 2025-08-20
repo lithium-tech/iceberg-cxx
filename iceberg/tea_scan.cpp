@@ -334,6 +334,7 @@ class EntryStream : public IcebergEntriesStream {
               const ManifestEntryDeserializerConfig& config)
       : manifest_file_(manifest_file) {
     Manifest manifest = GetManifest(fs, manifest_file, schema, partition_specs, use_reader_schema, config);
+    // it is impossible to construct queue from iterators before C++23
     entries_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(std::make_move_iterator(manifest.entries.begin()),
                                                                    std::make_move_iterator(manifest.entries.end())));
   }
