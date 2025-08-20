@@ -971,12 +971,14 @@ class ManifestEntryStream : public IcebergEntriesStream {
   ManifestEntryDeserializer deserializer_;
 };
 
-std::shared_ptr<IcebergEntriesStream> MakeManifestEntriesStream(std::string data,
-                                                                const std::vector<PartitionKeyField>& partition_spec,
-                                                                const ManifestEntryDeserializerConfig& config,
-                                                                bool use_reader_schema) {
+namespace make {
+std::shared_ptr<IcebergEntriesStream> ManifestEntriesStream(std::string data,
+                                                            const std::vector<PartitionKeyField>& partition_spec,
+                                                            const ManifestEntryDeserializerConfig& config,
+                                                            bool use_reader_schema) {
   return std::make_shared<ManifestEntryStream>(std::move(data), partition_spec, config, use_reader_schema);
 }
+}  // namespace make
 
 Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKeyField>& partition_spec,
                              const ManifestEntryDeserializerConfig& config, bool use_reader_schema) {

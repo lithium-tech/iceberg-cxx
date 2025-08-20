@@ -213,10 +213,12 @@ class IcebergEntriesStream {
   virtual ~IcebergEntriesStream() = default;
 };
 
-std::shared_ptr<IcebergEntriesStream> MakeManifestEntriesStream(std::string data,
-                                                                const std::vector<PartitionKeyField>& partition_spec,
-                                                                const ManifestEntryDeserializerConfig& config = {},
-                                                                bool use_reader_schema = true);
+namespace make {
+std::shared_ptr<IcebergEntriesStream> ManifestEntriesStream(std::string data,
+                                                            const std::vector<PartitionKeyField>& partition_spec,
+                                                            const ManifestEntryDeserializerConfig& config = {},
+                                                            bool use_reader_schema = true);
+}
 
 Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionKeyField>& partition_spec,
                              const ManifestEntryDeserializerConfig& config = {}, bool use_reader_schema = true);

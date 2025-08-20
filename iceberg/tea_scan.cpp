@@ -269,8 +269,8 @@ static std::shared_ptr<IcebergEntriesStream> GetManifestEntryStream(
   auto maybe_partition_spec = GetFieldsFromPartitionSpec(*partition_specs.at(manifest_file.partition_spec_id), schema);
   Ensure(maybe_partition_spec.has_value(), std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
                                                std::to_string(manifest_file.partition_spec_id));
-  return ice_tea::MakeManifestEntriesStream(std::move(entries_content), maybe_partition_spec.value(), config,
-                                            use_reader_schema);
+  return ice_tea::make::ManifestEntriesStream(std::move(entries_content), maybe_partition_spec.value(), config,
+                                              use_reader_schema);
 }
 
 static bool MatchesSpecification(const PartitionSpec& partition_spec, std::shared_ptr<const iceberg::Schema> schema,
