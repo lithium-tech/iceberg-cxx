@@ -6,6 +6,7 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 
 #include "avro/Compiler.hh"
@@ -930,6 +931,51 @@ void ValidatePartitionSpec(const std::vector<PartitionKeyField>& partition_spec,
 
     // TODO(gmusya): validate logical types
   }
+}
+
+class ManifestEntryStream : public IcebergEntriesStream {
+ public:
+  ManifestEntryStream(std::string content, const std::vector<PartitionKeyField>& partition_spec,
+                      const ManifestEntryDeserializerConfig& config, bool use_reader_schema)
+      : input_(std::move(content)),
+        data_file_reader_([&]() {
+          Ensure(!!input_, std::string(__PRETTY_FUNCTION__) + ": input is invalid");
+
+          auto istream = avro::istreamInputStream(input_);
+          if (use_reader_schema) {
+            auto schema = AvroSchemaFromNode(MakeSchemaManifestEntry(partition_spec, config));
+            return avro::DataFileReader<avro::GenericDatum>(std::move(istream), schema);
+          } else {
+            return avro::DataFileReader<avro::GenericDatum>(std::move(istream));
+          }
+        }()),
+        deserializer_(config) {
+    ValidatePartitionSpec(partition_spec, data_file_reader_.dataSchema().root());
+  }
+
+  std::optional<ManifestEntry> ReadNext() override {
+    while (true) {
+      avro::GenericDatum manifest_entry(data_file_reader_.readerSchema());
+      if (data_file_reader_.read(manifest_entry)) {
+        ManifestEntry entry = deserializer_.Deserialize(manifest_entry);
+        return entry;
+      }
+
+      return std::nullopt;
+    }
+  }
+
+ private:
+  std::stringstream input_;
+  avro::DataFileReader<avro::GenericDatum> data_file_reader_;
+  ManifestEntryDeserializer deserializer_;
+};
+
+std::shared_ptr<IcebergEntriesStream> MakeManifestEntriesStream(std::string data,
+                                                                const std::vector<PartitionKeyField>& partition_spec,
+                                                                const ManifestEntryDeserializerConfig& config,
+                                                                bool use_reader_schema) {
+  return std::make_shared<ManifestEntryStream>(std::move(data), partition_spec, config, use_reader_schema);
 }
 
 Manifest ReadManifestEntries(std::istream& input, const std::vector<PartitionKeyField>& partition_spec,

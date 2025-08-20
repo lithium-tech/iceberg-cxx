@@ -206,6 +206,18 @@ struct ManifestEntryDeserializerConfig {
   DataFileDeserializerConfig datafile_config = {};
 };
 
+class IcebergEntriesStream {
+ public:
+  virtual std::optional<ManifestEntry> ReadNext() = 0;
+
+  virtual ~IcebergEntriesStream() = default;
+};
+
+std::shared_ptr<IcebergEntriesStream> MakeManifestEntriesStream(std::string data,
+                                                                const std::vector<PartitionKeyField>& partition_spec,
+                                                                const ManifestEntryDeserializerConfig& config = {},
+                                                                bool use_reader_schema = true);
+
 Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionKeyField>& partition_spec,
                              const ManifestEntryDeserializerConfig& config = {}, bool use_reader_schema = true);
 Manifest ReadManifestEntries(const std::string& data, const std::vector<PartitionKeyField>& partition_spec,

@@ -97,13 +97,6 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
                                             uint32_t threads_num = 0, const GetScanMetadataConfig& config = {});
 
-class IcebergEntriesStream {
- public:
-  virtual std::optional<ManifestEntry> ReadNext() = 0;
-
-  virtual ~IcebergEntriesStream() = default;
-};
-
 class AllEntriesStream : public IcebergEntriesStream {
  public:
   AllEntriesStream(std::shared_ptr<arrow::fs::FileSystem> fs, std::queue<ManifestFile> manifest_files,
