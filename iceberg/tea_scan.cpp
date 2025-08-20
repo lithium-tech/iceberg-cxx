@@ -332,7 +332,7 @@ class EntryStream : public IcebergEntriesStream {
               std::shared_ptr<iceberg::Schema> schema,
               const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, bool use_reader_schema,
               const ManifestEntryDeserializerConfig& config)
-      : manifest_file(manifest_file) {
+      : manifest_file_(manifest_file) {
     Manifest manifest = GetManifest(fs, manifest_file, schema, partition_specs, use_reader_schema, config);
     entries_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(std::make_move_iterator(manifest.entries.begin()),
                                                                    std::make_move_iterator(manifest.entries.end())));
@@ -346,7 +346,7 @@ class EntryStream : public IcebergEntriesStream {
       ManifestEntry result = std::move(entries_.front());
       entries_.pop();
 
-      AddSequenceNumberOrFail(manifest_file, result);
+      AddSequenceNumberOrFail(manifest_file_, result);
 
       if (result.status == ManifestEntry::Status::kDeleted) {
         continue;
@@ -357,7 +357,7 @@ class EntryStream : public IcebergEntriesStream {
   }
 
  private:
-  ManifestFile manifest_file;
+  ManifestFile manifest_file_;
   std::queue<ManifestEntry> entries_;
 };
 
