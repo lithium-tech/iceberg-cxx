@@ -3,6 +3,7 @@
 #include <LogicalType.hh>
 #include <Node.hh>
 #include <cstdint>
+#include <istream>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -938,17 +939,7 @@ class ManifestEntryStream : public IcebergEntriesStream {
   ManifestEntryStream(std::string content, const std::vector<PartitionKeyField>& partition_spec,
                       const ManifestEntryDeserializerConfig& config, bool use_reader_schema)
       : input_(std::move(content)),
-        data_file_reader_([&]() {
-          Ensure(!!input_, std::string(__PRETTY_FUNCTION__) + ": input is invalid");
-
-          auto istream = avro::istreamInputStream(input_);
-          if (use_reader_schema) {
-            auto schema = AvroSchemaFromNode(MakeSchemaManifestEntry(partition_spec, config));
-            return avro::DataFileReader<avro::GenericDatum>(std::move(istream), schema);
-          } else {
-            return avro::DataFileReader<avro::GenericDatum>(std::move(istream));
-          }
-        }()),
+        data_file_reader_(MakeAvroReader(input_, partition_spec, config, use_reader_schema)),
         deserializer_(config) {
     ValidatePartitionSpec(partition_spec, data_file_reader_.dataSchema().root());
   }
@@ -966,6 +957,21 @@ class ManifestEntryStream : public IcebergEntriesStream {
   }
 
  private:
+  static avro::DataFileReader<avro::GenericDatum> MakeAvroReader(std::istream& input,
+                                                                 const std::vector<PartitionKeyField>& partition_spec,
+                                                                 const ManifestEntryDeserializerConfig& config,
+                                                                 bool use_reader_schema) {
+    Ensure(!!input, std::string(__PRETTY_FUNCTION__) + ": input is invalid");
+
+    auto istream = avro::istreamInputStream(input);
+    if (use_reader_schema) {
+      auto schema = AvroSchemaFromNode(MakeSchemaManifestEntry(partition_spec, config));
+      return avro::DataFileReader<avro::GenericDatum>(std::move(istream), schema);
+    } else {
+      return avro::DataFileReader<avro::GenericDatum>(std::move(istream));
+    }
+  }
+
   std::stringstream input_;
   avro::DataFileReader<avro::GenericDatum> data_file_reader_;
   ManifestEntryDeserializer deserializer_;
