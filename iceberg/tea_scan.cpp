@@ -260,6 +260,19 @@ static Manifest GetManifest(std::shared_ptr<arrow::fs::FileSystem> fs, const Man
   return ice_tea::ReadManifestEntries(entries_content, maybe_partition_spec.value(), config, use_reader_schema);
 }
 
+static std::shared_ptr<IcebergEntriesStream> GetManifestEntryStream(
+    std::shared_ptr<arrow::fs::FileSystem> fs, const ManifestFile& manifest_file,
+    std::shared_ptr<iceberg::Schema> schema, const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
+    bool use_reader_schema, const ManifestEntryDeserializerConfig& config) {
+  std::string entries_content = ValueSafe(ReadFile(fs, manifest_file.path));
+
+  auto maybe_partition_spec = GetFieldsFromPartitionSpec(*partition_specs.at(manifest_file.partition_spec_id), schema);
+  Ensure(maybe_partition_spec.has_value(), std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
+                                               std::to_string(manifest_file.partition_spec_id));
+  return ice_tea::make::ManifestEntriesStream(std::move(entries_content), maybe_partition_spec.value(), config,
+                                              use_reader_schema);
+}
+
 static bool MatchesSpecification(const PartitionSpec& partition_spec, std::shared_ptr<const iceberg::Schema> schema,
                                  const ContentFile::PartitionTuple& tuple) {
   std::optional<std::vector<PartitionKeyField>> partition_fields = GetFieldsFromPartitionSpec(partition_spec, schema);
@@ -333,20 +346,17 @@ class EntryStream : public IcebergEntriesStream {
               const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, bool use_reader_schema,
               const ManifestEntryDeserializerConfig& config)
       : manifest_file_(manifest_file) {
-    Manifest manifest = GetManifest(fs, manifest_file, schema, partition_specs, use_reader_schema, config);
-    // it is impossible to construct queue from iterators before C++23
-    entries_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(std::make_move_iterator(manifest.entries.begin()),
-                                                                   std::make_move_iterator(manifest.entries.end())));
+    all_stream_ = GetManifestEntryStream(fs, manifest_file, schema, partition_specs, use_reader_schema, config);
   }
 
   std::optional<ManifestEntry> ReadNext() override {
     while (true) {
-      if (entries_.empty()) {
+      std::optional<ManifestEntry> maybe_result = all_stream_->ReadNext();
+      if (!maybe_result) {
         return std::nullopt;
       }
-      ManifestEntry result = std::move(entries_.front());
-      entries_.pop();
 
+      ManifestEntry result = std::move(*maybe_result);
       AddSequenceNumberOrFail(manifest_file_, result);
 
       if (result.status == ManifestEntry::Status::kDeleted) {
@@ -358,8 +368,8 @@ class EntryStream : public IcebergEntriesStream {
   }
 
  private:
-  ManifestFile manifest_file_;
-  std::queue<ManifestEntry> entries_;
+  const ManifestFile manifest_file_;
+  std::shared_ptr<IcebergEntriesStream> all_stream_;
 };
 
 std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
