@@ -2,6 +2,8 @@
 
 #include <fstream>
 
+#include "arrow/api.h"
+#include "arrow/util/logging.h"
 #include "gtest/gtest.h"
 #include "iceberg/type.h"
 
@@ -96,6 +98,117 @@ void Check(const TableMetadataV2& metadata) {
   }
   EXPECT_EQ(metadata.default_sort_order_id, 0);
   // EXPECT_EQ(metadata.refs, expected_refs);
+}
+
+std::shared_ptr<arrow::Scalar> CreateInt32ListScalar(const std::vector<int32_t>& values) {
+  arrow::Int32Builder int_builder;
+  ARROW_CHECK_OK(int_builder.AppendValues(values));
+
+  std::shared_ptr<arrow::Array> values_array;
+  ARROW_CHECK_OK(int_builder.Finish(&values_array));
+
+  auto list_type = arrow::list(arrow::int32());
+  return std::make_shared<arrow::ListScalar>(values_array, list_type);
+}
+
+void CheckDefaultValues(const std::vector<types::NestedField>& columns) {
+  EXPECT_TRUE(columns[1].initial_default->GetScalar()->Equals(arrow::BooleanScalar(true)));
+  EXPECT_TRUE(columns[1].write_default->GetScalar()->Equals(arrow::BooleanScalar(true)));
+
+  EXPECT_TRUE(columns[2].initial_default->GetScalar()->Equals(arrow::Int32Scalar(17)));
+  EXPECT_TRUE(columns[2].write_default->GetScalar()->Equals(arrow::Int32Scalar(17)));
+
+  EXPECT_TRUE(columns[3].initial_default->GetScalar()->Equals(arrow::Int64Scalar(9)));
+  EXPECT_TRUE(columns[3].write_default->GetScalar()->Equals(arrow::Int64Scalar(9)));
+
+  EXPECT_TRUE(columns[4].initial_default->GetScalar()->Equals(arrow::FloatScalar(3.5)));
+  EXPECT_TRUE(columns[4].write_default->GetScalar()->Equals(arrow::FloatScalar(3.5)));
+
+  EXPECT_TRUE(columns[5].initial_default->GetScalar()->Equals(arrow::DoubleScalar(6.21)));
+  EXPECT_TRUE(columns[5].write_default->GetScalar()->Equals(arrow::DoubleScalar(6.21)));
+
+  {
+    auto decimal_value = arrow::Decimal128::FromString("3.14").ValueOrDie();
+    auto type = std::make_shared<arrow::Decimal128Type>(10, 2);
+    EXPECT_TRUE(columns[6].initial_default->GetScalar()->Equals(arrow::Decimal128Scalar(decimal_value, type)));
+    EXPECT_TRUE(columns[6].write_default->GetScalar()->Equals(arrow::Decimal128Scalar(decimal_value, type)));
+  }
+
+  EXPECT_TRUE(columns[7].initial_default->GetScalar()->Equals(arrow::Date32Scalar(1039)));
+  EXPECT_TRUE(columns[7].write_default->GetScalar()->Equals(arrow::Date32Scalar(1039)));
+
+  EXPECT_TRUE(
+      columns[8].initial_default->GetScalar()->Equals(arrow::Time64Scalar(81068123456, arrow::TimeUnit::MICRO)));
+  EXPECT_TRUE(columns[8].write_default->GetScalar()->Equals(arrow::Time64Scalar(81068123456, arrow::TimeUnit::MICRO)));
+
+  EXPECT_TRUE(columns[9].initial_default->GetScalar()->Equals(
+      arrow::TimestampScalar(1351728650051000, arrow::TimeUnit::MICRO)));
+  EXPECT_TRUE(
+      columns[9].write_default->GetScalar()->Equals(arrow::TimestampScalar(1351728650051000, arrow::TimeUnit::MICRO)));
+
+  EXPECT_TRUE(columns[10].initial_default->GetScalar()->Equals(
+      arrow::TimestampScalar(1510871468123456, arrow::TimeUnit::MICRO, "UTC")));
+  EXPECT_TRUE(columns[10].write_default->GetScalar()->Equals(
+      arrow::TimestampScalar(1510871468123456, arrow::TimeUnit::MICRO, "UTC")));
+
+  EXPECT_TRUE(columns[11].initial_default->GetScalar()->Equals(arrow::StringScalar("default")));
+  EXPECT_TRUE(columns[11].write_default->GetScalar()->Equals(arrow::StringScalar("default")));
+
+  {
+    auto buffer = arrow::Buffer::FromString("\xf7\x9c\x3e\x09\x67\x7c\x4b\xbd\xa4\x79\x3f\x34\x9c\xb7\x85\xe7");
+    auto type = std::make_shared<arrow::FixedSizeBinaryType>(16);
+    EXPECT_TRUE(columns[12].initial_default->GetScalar()->Equals(arrow::FixedSizeBinaryScalar(buffer, type)));
+    EXPECT_TRUE(columns[12].write_default->GetScalar()->Equals(arrow::FixedSizeBinaryScalar(buffer, type)));
+  }
+
+  {
+    auto buffer = arrow::Buffer::FromString("\xa4\xa4\xa4\xa4\xa4\xa4\xa4\xa4");
+    auto type = std::make_shared<arrow::FixedSizeBinaryType>(8);
+    EXPECT_TRUE(columns[13].initial_default->GetScalar()->Equals(arrow::FixedSizeBinaryScalar(buffer, type)));
+    EXPECT_TRUE(columns[13].write_default->GetScalar()->Equals(arrow::FixedSizeBinaryScalar(buffer, type)));
+  }
+
+  {
+    auto buffer = arrow::Buffer::FromString("\xb5\xb5\xb5\xb5\xb5");
+    EXPECT_TRUE(columns[14].initial_default->GetScalar()->Equals(arrow::BinaryScalar(buffer, arrow::binary())));
+    EXPECT_TRUE(columns[14].write_default->GetScalar()->Equals(arrow::BinaryScalar(buffer, arrow::binary())));
+  }
+
+  EXPECT_TRUE(columns[15].initial_default->GetScalar()->Equals(
+      arrow::TimestampScalar(1510871468123456789, arrow::TimeUnit::NANO)));
+  EXPECT_TRUE(columns[15].write_default->GetScalar()->Equals(
+      arrow::TimestampScalar(1510871468123456788, arrow::TimeUnit::NANO)));
+
+  EXPECT_TRUE(columns[16].initial_default->GetScalar()->Equals(
+      arrow::TimestampScalar(1510871468123456789, arrow::TimeUnit::NANO, "UTC")));
+  EXPECT_TRUE(columns[16].write_default->GetScalar()->Equals(
+      arrow::TimestampScalar(1510871468123456789, arrow::TimeUnit::NANO, "UTC")));
+  {
+    int precision = 7, scale = 0;
+    arrow::Decimal128 decimal_value("300000");
+    EXPECT_TRUE(columns[17].initial_default->GetScalar()->Equals(
+        arrow::Decimal128Scalar(decimal_value, arrow::decimal(precision, scale))));
+    EXPECT_TRUE(columns[17].initial_default->GetScalar()->Equals(
+        arrow::Decimal128Scalar(decimal_value, arrow::decimal(precision, scale))));
+  }
+
+  {
+    auto list_scalar = CreateInt32ListScalar({1, 2, 3});
+    EXPECT_TRUE(columns[18].initial_default->GetScalar()->Equals(*list_scalar));
+    EXPECT_TRUE(columns[18].write_default->GetScalar()->Equals(*list_scalar));
+  }
+
+  {
+    std::vector<std::shared_ptr<arrow::Scalar>> scalars = {CreateInt32ListScalar({}), CreateInt32ListScalar({1, 2})};
+    std::unique_ptr<arrow::ArrayBuilder> builder;
+    ARROW_CHECK_OK(arrow::MakeBuilder(arrow::default_memory_pool(), scalars[0]->type, &builder));
+    ARROW_CHECK_OK(builder->AppendScalars(scalars));
+    std::shared_ptr<arrow::Array> out;
+    ARROW_CHECK_OK(builder->Finish(&out));
+
+    EXPECT_TRUE(columns[19].initial_default->GetScalar()->Equals(arrow::ListScalar(out)));
+    EXPECT_TRUE(columns[19].write_default->GetScalar()->Equals(arrow::ListScalar(out)));
+  }
 }
 
 constexpr char UNEXPECTED_EXCEPTION[] = "Unexpected exception";
@@ -288,6 +401,26 @@ TEST(Metadata, WriteListOfLists) {
         })";
 
   EXPECT_NE(serialized.find(expected_substring), std::string::npos);
+}
+
+TEST(Metadata, WithInitialDefaults) {
+  std::ifstream input("warehouse/SchemaWithDefaults.json");
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(metadata);
+  CheckDefaultValues(metadata->GetCurrentSchema()->Columns());
+}
+
+TEST(Metadata, ReadWriteReadDefaults) {
+  std::ifstream input("warehouse/SchemaWithDefaults.json");
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(metadata);
+  auto written_data = ice_tea::WriteTableMetadataV2(*metadata, true);
+
+  auto metadata_new = ice_tea::ReadTableMetadataV2(written_data);
+  ASSERT_TRUE(metadata_new);
+  CheckDefaultValues(metadata_new->GetCurrentSchema()->Columns());
 }
 
 TEST(Metadata, EmptyTableUUID) {

@@ -14,6 +14,7 @@
 #include "iceberg/common/rg_metadata.h"
 #include "iceberg/streams/iceberg/data_entries_meta_stream.h"
 #include "iceberg/streams/iceberg/data_scan.h"
+#include "iceberg/streams/iceberg/default_value_applier.h"
 #include "iceberg/streams/iceberg/equality_delete_applier.h"
 #include "iceberg/streams/iceberg/filtering_stream.h"
 #include "iceberg/streams/iceberg/mapper.h"
@@ -42,7 +43,9 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
                     std::shared_ptr<const IFileReaderProvider> file_reader_provider,
                     std::shared_ptr<const IRowGroupFilter> rg_filter,
                     std::shared_ptr<const ice_filter::IRowFilter> row_filter,
-                    std::optional<SchemaNameMapper>&& schema_name_mapper, std::shared_ptr<ILogger> logger = nullptr)
+                    std::optional<SchemaNameMapper>&& schema_name_mapper,
+                    std::shared_ptr<const std::map<int, Literal>> default_value_map,
+                    std::shared_ptr<ILogger> logger = nullptr)
       : field_ids_to_retrieve_(std::move(field_ids_to_retrieve)),
         equality_deletes_(equality_deletes),
         mapper_(mapper),
@@ -50,10 +53,12 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
         rg_filter_(rg_filter),
         row_filter_(row_filter),
         schema_name_mapper_(std::move(schema_name_mapper)),
+        default_value_map_(default_value_map),
         logger_(logger) {
     Ensure(equality_deletes_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": equality_deletes is nullptr");
     Ensure(mapper_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": mapper is nullptr");
     Ensure(file_reader_provider_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": file_reader_provider is nullptr");
+    Ensure(default_value_map_ != nullptr, std::string(__PRETTY_FUNCTION__) + ": default_value_map is nullptr");
     if (row_filter_ == nullptr) {
       row_filter_ = std::make_shared<PassThroughFilter>(std::vector<int32_t>{});
     }
@@ -100,6 +105,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::shared_ptr<const IRowGroupFilter> rg_filter_;
   std::shared_ptr<const ice_filter::IRowFilter> row_filter_;
   std::optional<SchemaNameMapper> schema_name_mapper_;
+  std::shared_ptr<const std::map<int, Literal>> default_value_map_;
   std::shared_ptr<ILogger> logger_;
 };
 
