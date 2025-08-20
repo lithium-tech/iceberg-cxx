@@ -326,33 +326,63 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::
                                 table_metadata->GetCurrentSchema(), config);
 }
 
-std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
-  while (true) {
-    if (!entries_for_current_manifest_file_.empty()) {
-      auto entry = std::move(entries_for_current_manifest_file_.front());
-      entries_for_current_manifest_file_.pop();
+class EntryStream : public IcebergEntriesStream {
+ public:
+  EntryStream(std::shared_ptr<arrow::fs::FileSystem> fs, const ManifestFile& manifest_file,
+              std::shared_ptr<iceberg::Schema> schema,
+              const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, bool use_reader_schema,
+              const ManifestEntryDeserializerConfig& config)
+      : manifest_file_(manifest_file) {
+    Manifest manifest = GetManifest(fs, manifest_file, schema, partition_specs, use_reader_schema, config);
+    // it is impossible to construct queue from iterators before C++23
+    entries_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(std::make_move_iterator(manifest.entries.begin()),
+                                                                   std::make_move_iterator(manifest.entries.end())));
+  }
 
-      AddSequenceNumberOrFail(current_manifest_file, entry);
+  std::optional<ManifestEntry> ReadNext() override {
+    while (true) {
+      if (entries_.empty()) {
+        return std::nullopt;
+      }
+      ManifestEntry result = std::move(entries_.front());
+      entries_.pop();
 
-      if (entry.status == ManifestEntry::Status::kDeleted) {
+      AddSequenceNumberOrFail(manifest_file_, result);
+
+      if (result.status == ManifestEntry::Status::kDeleted) {
         continue;
       }
 
-      return entry;
+      return result;
+    }
+  }
+
+ private:
+  ManifestFile manifest_file_;
+  std::queue<ManifestEntry> entries_;
+};
+
+std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
+  while (true) {
+    if (!current_manifest_stream_) {
+      if (manifest_files_.empty()) {
+        return std::nullopt;
+      }
+
+      ManifestFile current_manifest_file = std::move(manifest_files_.front());
+      manifest_files_.pop();
+
+      current_manifest_stream_ = std::make_shared<EntryStream>(fs_, current_manifest_file, schema_, partition_specs_,
+                                                               use_avro_reader_schema_, config_);
     }
 
-    if (manifest_files_.empty()) {
-      return std::nullopt;
+    std::optional<ManifestEntry> maybe_result = current_manifest_stream_->ReadNext();
+    if (!maybe_result) {
+      current_manifest_stream_.reset();
+      continue;
     }
 
-    current_manifest_file = std::move(manifest_files_.front());
-    manifest_files_.pop();
-
-    Manifest manifest =
-        GetManifest(fs_, current_manifest_file, schema_, partition_specs_, use_avro_reader_schema_, config_);
-    // it is impossible to construct queue from iterators before C++23
-    entries_for_current_manifest_file_ = std::queue<ManifestEntry>(std::deque<ManifestEntry>(
-        std::make_move_iterator(manifest.entries.begin()), std::make_move_iterator(manifest.entries.end())));
+    return maybe_result;
   }
 }
 

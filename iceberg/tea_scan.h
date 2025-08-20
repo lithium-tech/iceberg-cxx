@@ -133,8 +133,7 @@ class AllEntriesStream : public IcebergEntriesStream {
 
   std::queue<ManifestFile> manifest_files_;
 
-  ManifestFile current_manifest_file;
-  std::queue<ManifestEntry> entries_for_current_manifest_file_;
+  std::shared_ptr<IcebergEntriesStream> current_manifest_stream_;
 
   std::shared_ptr<iceberg::Schema> schema_;
   const std::vector<std::shared_ptr<PartitionSpec>> partition_specs_;
