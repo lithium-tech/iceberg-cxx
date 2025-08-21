@@ -372,6 +372,48 @@ class EntryStream : public IcebergEntriesStream {
   std::shared_ptr<IcebergEntriesStream> all_stream_;
 };
 
+template <typename T>
+struct ThreadSafeQueue {
+ public:
+  std::optional<T> Pop() {
+    std::lock_guard guard(mutex_);
+    can_pop_cv_.wait([&]() { return is_stopped_ || !slots_.empty(); });
+    if (slots_.empty()) {
+      return std::nullopt;
+    }
+    T result = std::move(slots_.front());
+    slots_.pop();
+    can_push_cv_.notify_one();
+    return result;
+  }
+
+  void Push(T value) {
+    std::lock_guard guard(mutex_);
+    can_push_cv_.wait([&]() { return is_stopped_ || slots_.size() < max_size_; });
+    if (is_stopped_) {
+      return;
+    }
+    slots_.emplace(std::move(value));
+    can_pop_cv_.notify_one();
+  }
+
+  void Stop() {
+    std::lock_guard guard(mutex_);
+    is_stopped_ = true;
+    can_pop_cv_.notify_all();
+    can_push_cv_.notify_all();
+  }
+
+ private:
+  std::mutex mutex_;
+  bool is_stopped_;
+  std::queue<T> slots_;
+  std::condition_variable can_pop_cv_;
+  std::condition_variable can_push_cv_;
+  const uint32_t max_size_ = 0;
+};
+
+
 std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
   while (true) {
     if (!current_manifest_stream_) {
