@@ -230,39 +230,73 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
       }
 
       return filter::GenericStats(std::move(*minmax_after_transform));
-    }
+    } else if (spec_->fields[position].transform == year_transform_prefix ||
+               spec_->fields[position].transform == month_transform_prefix ||
+               spec_->fields[position].transform == day_transform_prefix ||
+               spec_->fields[position].transform == hour_transform_prefix) {
+      int32_t min_partition_value = ConvertToInt(partitions_[position].lower_bound);
+      int32_t max_partition_value = ConvertToInt(partitions_[position].upper_bound);
+      if (max_partition_value == std::numeric_limits<int32_t>::max()) {
+        // not supported
+        return std::nullopt;
+      }
+      // real partition values are in [min_partition_value; max_partition_value]
 
-    int minimum = ConvertToInt(partitions_[position].lower_bound);
-    int maximum = ConvertToInt(partitions_[position].upper_bound);
-    if (spec_->fields[position].transform == year_transform_prefix) {
-      minimum = YearsToDays(minimum);
-      maximum = YearsToDays(maximum + 1);
-    }
-    if (spec_->fields[position].transform == month_transform_prefix) {
-      minimum = MonthsToDays(minimum);
-      maximum = MonthsToDays(maximum + 1);
-    }
-    if (value_type == filter::ValueType::kDate) {
-      return filter::GenericStats(filter::GenericMinMaxStats::Make<filter::ValueType::kDate>(minimum, maximum));
-    }
-    int64_t micros_min;
-    int64_t micros_max;
-    if (spec_->fields[position].transform == hour_transform_prefix) {
-      micros_min = HoursToMicros(minimum);
-      micros_max = HoursToMicros(maximum + 1);
+      int32_t min_day;
+      int32_t max_day;
+      if (spec_->fields[position].transform == year_transform_prefix) {
+        // note that it is important to add 1 to max_partition_values, because `year = 0` means that days can be from 0
+        // to 365
+        min_day = YearsToDays(min_partition_value);
+        max_day = YearsToDays(max_partition_value + 1) - 1;
+      } else if (spec_->fields[position].transform == month_transform_prefix) {
+        min_day = MonthsToDays(min_partition_value);
+        max_day = MonthsToDays(max_partition_value + 1) - 1;
+      } else if (spec_->fields[position].transform == day_transform_prefix) {
+        min_day = min_partition_value;
+        max_day = max_partition_value;
+      } else {
+        // min_day and max_day are not set for hour transform
+        Ensure(spec_->fields[position].transform == hour_transform_prefix,
+               std::string(__PRETTY_FUNCTION__) + ": internal error, unexpected transform " +
+                   spec_->fields[position].transform);
+      }
+
+      if (value_type == filter::ValueType::kDate) {
+        Ensure(spec_->fields[position].transform == year_transform_prefix ||
+                   spec_->fields[position].transform == month_transform_prefix ||
+                   spec_->fields[position].transform == day_transform_prefix,
+               std::string(__PRETTY_FUNCTION__) + ": unexpected transform '" + spec_->fields[position].transform +
+                   "' for type 'Date'");
+        return filter::GenericStats(filter::GenericMinMaxStats::Make<filter::ValueType::kDate>(min_day, max_day));
+      }
+      Ensure(value_type == filter::ValueType::kTimestamp || value_type == filter::ValueType::kTimestamptz,
+             std::string(__PRETTY_FUNCTION__) + ": internal error, unexpected value type " +
+                 std::to_string(static_cast<int>(value_type)));
+
+      int64_t micros_min;
+      int64_t micros_max;
+      if (spec_->fields[position].transform == hour_transform_prefix) {
+        micros_min = HoursToMicros(min_partition_value);
+        micros_max = HoursToMicros(max_partition_value + 1) - 1;
+      } else {
+        int64_t min_hour = DaysToHours(min_day);
+        int64_t max_hour = DaysToHours(max_day + 1) - 1;
+        micros_min = HoursToMicros(min_hour);
+        micros_max = HoursToMicros(max_hour + 1) - 1;
+      }
+      switch (value_type) {
+        case filter::ValueType::kTimestamp:
+          return filter::GenericStats(
+              filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamp>(micros_min, micros_max));
+        case filter::ValueType::kTimestamptz:
+          return filter::GenericStats(
+              filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamptz>(micros_min, micros_max));
+        default:
+          throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unknown filter::ValueType");
+      }
     } else {
-      micros_min = HoursToMicros(DaysToHours(minimum));
-      micros_max = HoursToMicros(DaysToHours(maximum));
-    }
-    switch (value_type) {
-      case filter::ValueType::kTimestamp:
-        return filter::GenericStats(
-            filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamp>(micros_min, micros_max));
-      case filter::ValueType::kTimestamptz:
-        return filter::GenericStats(
-            filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamptz>(micros_min, micros_max));
-      default:
-        throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unknown filter::ValueType");
+      return std::nullopt;
     }
   }
 
