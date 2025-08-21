@@ -471,10 +471,10 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
 
 using SequenceNumber = int64_t;
 
-std::queue<ManifestFile> FilterManifests(std::shared_ptr<filter::StatsFilter> stats_filter,
-                                         std::shared_ptr<iceberg::Schema> schema,
-                                         const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
-                                         std::vector<ManifestFile>& manifest_metadatas) {
+std::vector<bool> FilterManifests(std::shared_ptr<filter::StatsFilter> stats_filter,
+                                  std::shared_ptr<iceberg::Schema> schema,
+                                  const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
+                                  const std::vector<ManifestFile>& manifest_metadatas) {
   std::unordered_map<int, int> spec_id_to_position;
   for (int i = 0; i < partition_specs.size(); ++i) {
     spec_id_to_position[partition_specs[i]->spec_id] = i;
@@ -491,8 +491,9 @@ std::queue<ManifestFile> FilterManifests(std::shared_ptr<filter::StatsFilter> st
     name_to_type[column.name] = column.type->TypeId();
   }
 
-  std::queue<ManifestFile> result;
-  for (auto& manifest : manifest_metadatas) {
+  std::vector<bool> can_skip(manifest_metadatas.size(), false);
+  for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
+    const auto& manifest = manifest_metadatas[i];
     auto partition_spec = [&]() {
       auto it = spec_id_to_position.find(manifest.partition_spec_id);
       Ensure(it != spec_id_to_position.end(), std::string(__PRETTY_FUNCTION__) + ": partition spec id is not found");
@@ -505,7 +506,6 @@ std::queue<ManifestFile> FilterManifests(std::shared_ptr<filter::StatsFilter> st
     }
 
     if (!only_allowed_transforms) {
-      result.push(std::move(manifest));
       continue;
     }
 
@@ -520,11 +520,9 @@ std::queue<ManifestFile> FilterManifests(std::shared_ptr<filter::StatsFilter> st
     ManifestFileStatsGetter stats_getter(name_to_type, std::move(name_to_position), manifest.partitions,
                                          partition_spec);
 
-    if (stats_filter->ApplyFilter(stats_getter) != filter::MatchedRows::kNone) {
-      result.push(std::move(manifest));
-    }
+    can_skip[i] = stats_filter->ApplyFilter(stats_getter) == filter::MatchedRows::kNone;
   }
-  return result;
+  return can_skip;
 }
 
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
@@ -534,8 +532,20 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
   std::vector<ManifestFile> manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
 
   std::queue<ManifestFile> manifest_files_queue = [&]() {
-    if (stats_filter != nullptr && schema != nullptr) {
-      return FilterManifests(stats_filter, schema, partition_specs, manifest_metadatas);
+    try {
+      if (stats_filter != nullptr && schema != nullptr) {
+        std::vector<bool> can_skip = FilterManifests(stats_filter, schema, partition_specs, manifest_metadatas);
+        std::queue<ManifestFile> result;
+        for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
+          if (!can_skip.at(i)) {
+            result.push(manifest_metadatas[i]);
+          }
+        }
+        return result;
+      }
+    } catch (...) {
+      // if we failed to apply filter than fallback to parsing metadata completely
+      // TODO(gmusya): add logging
     }
     return std::queue<ManifestFile>(std::deque<ManifestFile>(std::make_move_iterator(manifest_metadatas.begin()),
                                                              std::make_move_iterator(manifest_metadatas.end())));
