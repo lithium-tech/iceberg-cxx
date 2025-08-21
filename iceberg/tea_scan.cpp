@@ -3,6 +3,7 @@
 #include <chrono>
 #include <deque>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <queue>
 #include <sstream>
@@ -182,7 +183,7 @@ int DaysToHours(int days) {
 }
 
 int64_t HoursToMicros(int64_t hours) {
-  const int64_t micros_per_hour = 3600ll * 1000000ll;
+  const int64_t micros_per_hour = 3600ll * 1000ll * 1000ll;
   Ensure(hours <= std::numeric_limits<int64_t>::max() / micros_per_hour &&
              hours >= std::numeric_limits<int64_t>::min() / micros_per_hour,
          std::string(__PRETTY_FUNCTION__) + ": micros will overflow");
@@ -289,11 +290,23 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
         case filter::ValueType::kTimestamp:
           return filter::GenericStats(
               filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamp>(micros_min, micros_max));
-        case filter::ValueType::kTimestamptz:
-          return filter::GenericStats(
-              filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamptz>(micros_min, micros_max));
+        case filter::ValueType::kTimestamptz: {
+          // transform(timestamptz) actually means transform(castTimestamp(timestamptz))
+          // timestamptz (utc) and timestamp can differ no more than by 15 hours (utc-14 ... utc+12), so we
+          // are pessimistic here
+          const int64_t kMicrosInDay = HoursToMicros(DaysToHours(1));
+          if (micros_min < std::numeric_limits<int64_t>::min() + kMicrosInDay) {
+            return std::nullopt;
+          }
+          if (micros_max > std::numeric_limits<int64_t>::max() - kMicrosInDay) {
+            return std::nullopt;
+          }
+          return filter::GenericStats(filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamptz>(
+              micros_min - kMicrosInDay, micros_max + kMicrosInDay));
+        }
         default:
-          throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unknown filter::ValueType");
+          throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unknown filter::ValueType " +
+                                   std::to_string(static_cast<int>(value_type)));
       }
     } else {
       return std::nullopt;
