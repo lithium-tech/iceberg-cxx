@@ -8,6 +8,7 @@
 
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/result.h"
+#include "iceberg/filter/stats_filter/stats_filter.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
 #include "iceberg/schema.h"
@@ -95,6 +96,7 @@ struct GetScanMetadataConfig {
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
+                                            std::shared_ptr<filter::StatsFilter> stats_filter = nullptr,
                                             uint32_t threads_num = 0, const GetScanMetadataConfig& config = {});
 
 class AllEntriesStream : public IcebergEntriesStream {
@@ -113,10 +115,12 @@ class AllEntriesStream : public IcebergEntriesStream {
                                                 const std::string& manifest_list_path, bool use_reader_schema,
                                                 const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs = {},
                                                 std::shared_ptr<iceberg::Schema> schema = nullptr,
+                                                std::shared_ptr<filter::StatsFilter> stats_filter = nullptr,
                                                 const ManifestEntryDeserializerConfig& config = {});
 
   static std::shared_ptr<AllEntriesStream> Make(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                 std::shared_ptr<TableMetadataV2> table_metadata, bool use_reader_schema,
+                                                std::shared_ptr<filter::StatsFilter> stats_filter = nullptr,
                                                 const ManifestEntryDeserializerConfig& config = {});
 
   std::optional<ManifestEntry> ReadNext();

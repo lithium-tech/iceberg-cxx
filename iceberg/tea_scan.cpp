@@ -1,12 +1,16 @@
 #include "iceberg/tea_scan.h"
 
+#include <chrono>
 #include <deque>
+#include <exception>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <queue>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -15,13 +19,18 @@
 #include "arrow/io/interfaces.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
+#include "iceberg/common/error.h"
 #include "iceberg/common/threadpool.h"
 #include "iceberg/experimental_representations.h"
+#include "iceberg/filter/representation/value.h"
+#include "iceberg/filter/stats_filter/stats.h"
 #include "iceberg/manifest_entry.h"
+#include "iceberg/manifest_entry_stats_getter.h"
 #include "iceberg/manifest_file.h"
 #include "iceberg/result.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"
+#include "iceberg/transforms.h"
 #include "iceberg/type.h"
 
 namespace iceberg::ice_tea {
@@ -139,6 +148,209 @@ void AddSequenceNumberOrFail(const ManifestFile& manifest, ManifestEntry& entry)
   Ensure(entry.sequence_number.has_value(),
          "No sequence_number in iceberg::ManifestEntry for data file " + entry.data_file.file_path);
 }
+
+int ConvertToInt(const std::vector<uint8_t>& value) {
+  Ensure(value.size() == sizeof(int), std::string(__PRETTY_FUNCTION__) + ": byte array size doesn't match");
+  int res;
+  std::memcpy(&res, value.data(), sizeof(int));
+  return res;
+}
+
+int YearsToDays(int years) {
+  constexpr int kMaxDaysPerYear = 366;
+  Ensure(years <= std::numeric_limits<int>::max() / kMaxDaysPerYear &&
+             years >= std::numeric_limits<int>::min() / kMaxDaysPerYear,
+         std::string(__PRETTY_FUNCTION__) + ": days can overflow");
+  return std::chrono::sys_days{std::chrono::year(1970 + years) / 1 / 1}.time_since_epoch().count();
+}
+
+int MonthsToDays(int months) {
+  constexpr int kMaxDaysPerMonth = 31;
+  Ensure(months <= std::numeric_limits<int>::max() / kMaxDaysPerMonth &&
+             months >= std::numeric_limits<int>::min() / kMaxDaysPerMonth,
+         std::string(__PRETTY_FUNCTION__) + ": days can overflow");
+  Ensure(months >= 0, std::string(__PRETTY_FUNCTION__) + ": handling negative months is not supported yet");
+  return std::chrono::sys_days{std::chrono::year(1970 + months / 12) / std::chrono::month(1 + months % 12) / 1}
+      .time_since_epoch()
+      .count();
+#if 0
+    int32_t abs_months = -months;
+    int32_t years_to_sub = (11 + abs_months) / 12;
+    int32_t months_to_sub = abs_months % 12;
+    int32_t result_year = 1970 - years_to_sub;
+    int32_t result_month = months_to_sub == 0 ? 1 : (13 - months_to_sub);
+    return std::chrono::sys_days{std::chrono::year(result_year) / (result_month) / 1}.time_since_epoch().count();
+#endif
+}
+
+int DaysToHours(int days) {
+  constexpr int kHoursPerDay = 24;
+  Ensure(
+      days <= std::numeric_limits<int>::max() / kHoursPerDay && days >= std::numeric_limits<int>::min() / kHoursPerDay,
+      std::string(__PRETTY_FUNCTION__) + ": hours will overflow");
+  return days * kHoursPerDay;
+}
+
+int64_t HoursToMicros(int64_t hours) {
+  constexpr int64_t kMicrosPerHour = 3600ll * 1000ll * 1000ll;
+  Ensure(hours <= std::numeric_limits<int64_t>::max() / kMicrosPerHour &&
+             hours >= std::numeric_limits<int64_t>::min() / kMicrosPerHour,
+         std::string(__PRETTY_FUNCTION__) + ": micros will overflow");
+  return hours * kMicrosPerHour;
+}
+
+class ManifestFileStatsGetter : public filter::IStatsGetter {
+ public:
+  ManifestFileStatsGetter(const std::unordered_map<std::string, TypeID>& name_to_type,
+                          std::unordered_map<std::string, int>&& name_to_position,
+                          const std::vector<PartitionFieldSummary>& partitions, std::shared_ptr<PartitionSpec> spec)
+      : name_to_type_(name_to_type),
+        name_to_position_(std::move(name_to_position)),
+        partitions_(partitions),
+        spec_(spec) {
+    Ensure(spec != nullptr, std::string(__PRETTY_FUNCTION__) + ": spec is nullptr");
+  }
+
+  std::optional<filter::GenericStats> GetStats(const std::string& column_name,
+                                               filter::ValueType value_type) const override {
+    auto it = name_to_position_.find(column_name);
+    if (it == name_to_position_.end()) {
+      return std::nullopt;
+    }
+    const auto position = it->second;
+    Ensure(position >= 0 && position < partitions_.size(), std::string(__PRETTY_FUNCTION__) + ": invalid position");
+
+    const auto& transform = spec_->fields[position].transform;
+    if (transform == identity_transform_prefix) {
+      Ensure(name_to_type_.contains(column_name),
+             std::string(__PRETTY_FUNCTION__) + ": type for column '" + column_name + "' is not found");
+      const TypeID ice_type = name_to_type_.at(column_name);
+
+      return GetStatsFromIdentityTransform(ice_type, value_type, position);
+    } else if (transform == year_transform_prefix || transform == month_transform_prefix ||
+               transform == day_transform_prefix || transform == hour_transform_prefix) {
+      return GetStatsFromTemporalTransform(value_type, position);
+    } else {
+      return std::nullopt;
+    }
+  }
+
+ private:
+  std::optional<filter::GenericStats> GetStatsFromIdentityTransform(TypeID ice_type, filter::ValueType value_type,
+                                                                    int position) const {
+    auto maybe_conversion = TypesToStatsConverter(ice_type, value_type);
+    if (!maybe_conversion) {
+      return std::nullopt;
+    }
+
+    auto minmax_after_transform =
+        (*maybe_conversion)(partitions_[position].lower_bound, partitions_[position].upper_bound);
+
+    if (!minmax_after_transform.has_value()) {
+      return std::nullopt;
+    }
+
+    return filter::GenericStats(std::move(*minmax_after_transform));
+  }
+
+  static std::optional<std::pair<int32_t, int32_t>> GetMinMaxDayFromTemporal(int32_t min_partition_value,
+                                                                             int32_t max_partition_value,
+                                                                             const std::string& transform) {
+    if (transform == year_transform_prefix) {
+      // note that it is important to add 1 to max_partition_values, because `year = 0` means that days can be from
+      // 0 to 365
+      int32_t min_day = YearsToDays(min_partition_value);
+      int32_t max_day = YearsToDays(max_partition_value + 1) - 1;
+      return std::make_pair(min_day, max_day);
+    } else if (transform == month_transform_prefix) {
+      int32_t min_day = MonthsToDays(min_partition_value);
+      int32_t max_day = MonthsToDays(max_partition_value + 1) - 1;
+      return std::make_pair(min_day, max_day);
+    } else if (transform == day_transform_prefix) {
+      int32_t min_day = min_partition_value;
+      int32_t max_day = max_partition_value;
+      return std::make_pair(min_day, max_day);
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  static std::optional<filter::GenericStats> GetStatsFromTemporalForTimestamp(int32_t min_partition_value,
+                                                                              int32_t max_partition_value,
+                                                                              const std::string& transform,
+                                                                              bool is_timestamptz) {
+    int64_t micros_min;
+    int64_t micros_max;
+    if (transform == hour_transform_prefix) {
+      micros_min = HoursToMicros(min_partition_value);
+      micros_max = HoursToMicros(max_partition_value + 1) - 1;
+    } else {
+      std::optional<std::pair<int32_t, int32_t>> min_max_day =
+          GetMinMaxDayFromTemporal(min_partition_value, max_partition_value, transform);
+      Ensure(min_max_day.has_value(), std::string(__PRETTY_FUNCTION__) + ": internal error");
+
+      int64_t min_hour = DaysToHours(min_max_day->first);
+      int64_t max_hour = DaysToHours(min_max_day->second + 1) - 1;
+      micros_min = HoursToMicros(min_hour);
+      micros_max = HoursToMicros(max_hour + 1) - 1;
+    }
+
+    if (is_timestamptz) {
+      // transform(timestamptz) actually means transform(castTimestamp(timestamptz))
+      // timestamptz (utc) and timestamp can differ no more than by 15 hours (utc-14 ... utc+12), so we
+      // are pessimistic here
+      const int64_t kMicrosInDay = HoursToMicros(DaysToHours(1));
+      if (micros_min < std::numeric_limits<int64_t>::min() + kMicrosInDay) {
+        return std::nullopt;
+      }
+      if (micros_max > std::numeric_limits<int64_t>::max() - kMicrosInDay) {
+        return std::nullopt;
+      }
+      return filter::GenericStats(filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamptz>(
+          micros_min - kMicrosInDay, micros_max + kMicrosInDay));
+    } else {
+      return filter::GenericStats(
+          filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamp>(micros_min, micros_max));
+    }
+  }
+
+  static std::optional<filter::GenericStats> GetStatsFromTemporalForDate(int32_t min_partition_value,
+                                                                         int32_t max_partition_value,
+                                                                         const std::string& transform) {
+    std::optional<std::pair<int32_t, int32_t>> min_max_day =
+        GetMinMaxDayFromTemporal(min_partition_value, max_partition_value, transform);
+    Ensure(min_max_day.has_value(), std::string(__PRETTY_FUNCTION__) + ": internal error");
+
+    return filter::GenericStats(
+        filter::GenericMinMaxStats::Make<filter::ValueType::kDate>(min_max_day->first, min_max_day->second));
+  }
+
+  std::optional<filter::GenericStats> GetStatsFromTemporalTransform(filter::ValueType value_type, int position) const {
+    int32_t min_partition_value = ConvertToInt(partitions_[position].lower_bound);
+    int32_t max_partition_value = ConvertToInt(partitions_[position].upper_bound);
+    if (max_partition_value == std::numeric_limits<int32_t>::max()) {
+      // not supported
+      return std::nullopt;
+    }
+    // real partition values are in [min_partition_value; max_partition_value]
+
+    const std::string& transform = spec_->fields[position].transform;
+
+    if (value_type == filter::ValueType::kDate) {
+      return GetStatsFromTemporalForDate(min_partition_value, max_partition_value, transform);
+    } else if (value_type == filter::ValueType::kTimestamp || value_type == filter::ValueType::kTimestamptz) {
+      return GetStatsFromTemporalForTimestamp(min_partition_value, max_partition_value, transform,
+                                              value_type == filter::ValueType::kTimestamptz);
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  const std::unordered_map<std::string, TypeID>& name_to_type_;
+  std::unordered_map<std::string, int> name_to_position_;
+  const std::vector<PartitionFieldSummary>& partitions_;
+  std::shared_ptr<PartitionSpec> spec_;
+};
 
 }  // namespace
 
@@ -317,13 +529,86 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
 
 using SequenceNumber = int64_t;
 
+std::vector<bool> FilterManifests(std::shared_ptr<filter::StatsFilter> stats_filter,
+                                  std::shared_ptr<iceberg::Schema> schema,
+                                  const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
+                                  const std::vector<ManifestFile>& manifest_metadatas) {
+  std::unordered_map<int, int> spec_id_to_position;
+  for (int i = 0; i < partition_specs.size(); ++i) {
+    spec_id_to_position[partition_specs[i]->spec_id] = i;
+  }
+
+  std::unordered_map<int, std::string> field_id_to_name;
+  std::unordered_map<std::string, TypeID> name_to_type;
+
+  const std::unordered_set<std::string_view> allowed_transforms = {
+      Transforms::kIdentity, Transforms::kHour, Transforms::kDay, Transforms::kMonth, Transforms::kYear};
+
+  for (const auto& column : schema->Columns()) {
+    field_id_to_name[column.field_id] = column.name;
+    name_to_type[column.name] = column.type->TypeId();
+  }
+
+  std::vector<bool> can_skip(manifest_metadatas.size(), false);
+  for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
+    const auto& manifest = manifest_metadatas[i];
+    auto partition_spec = [&]() {
+      auto it = spec_id_to_position.find(manifest.partition_spec_id);
+      Ensure(it != spec_id_to_position.end(), std::string(__PRETTY_FUNCTION__) + ": partition spec id is not found");
+      return partition_specs[it->second];
+    }();
+
+    bool only_allowed_transforms = true;
+    for (const auto& field : partition_spec->fields) {
+      only_allowed_transforms &= allowed_transforms.contains(field.transform);
+    }
+
+    if (!only_allowed_transforms) {
+      continue;
+    }
+
+    std::unordered_map<std::string, int> name_to_position;
+    for (size_t i = 0; i < partition_spec->fields.size(); ++i) {
+      const auto& field = partition_spec->fields[i];
+      auto it = field_id_to_name.find(field.source_id);
+      Ensure(it != field_id_to_name.end(), std::string(__PRETTY_FUNCTION__) + ": partition source id is not found");
+      name_to_position[it->second] = i;
+    }
+
+    ManifestFileStatsGetter stats_getter(name_to_type, std::move(name_to_position), manifest.partitions,
+                                         partition_spec);
+
+    can_skip[i] = stats_filter->ApplyFilter(stats_getter) == filter::MatchedRows::kNone;
+  }
+  return can_skip;
+}
+
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
     std::shared_ptr<arrow::fs::FileSystem> fs, const std::string& manifest_list_path, bool use_reader_schema,
     const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, std::shared_ptr<iceberg::Schema> schema,
-    const ManifestEntryDeserializerConfig& config) {
-  auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
-  std::queue<ManifestFile> manifest_files_queue(std::deque<ManifestFile>(
-      std::make_move_iterator(manifest_metadatas.begin()), std::make_move_iterator(manifest_metadatas.end())));
+    std::shared_ptr<filter::StatsFilter> stats_filter, const ManifestEntryDeserializerConfig& config) {
+  std::vector<ManifestFile> manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
+
+  std::queue<ManifestFile> manifest_files_queue = [&]() {
+    try {
+      if (stats_filter != nullptr && schema != nullptr) {
+        std::vector<bool> can_skip = FilterManifests(stats_filter, schema, partition_specs, manifest_metadatas);
+        std::queue<ManifestFile> result;
+        for (size_t i = 0; i < manifest_metadatas.size(); ++i) {
+          if (!can_skip.at(i)) {
+            result.push(manifest_metadatas[i]);
+          }
+        }
+        return result;
+      }
+    } catch (std::exception& e) {
+      // if we failed to apply filter than fallback to parsing metadata completely
+      // TODO(gmusya): add logging
+    } catch (arrow::Status& e) {
+    }
+    return std::queue<ManifestFile>(std::deque<ManifestFile>(std::make_move_iterator(manifest_metadatas.begin()),
+                                                             std::make_move_iterator(manifest_metadatas.end())));
+  }();
 
   return std::make_shared<AllEntriesStream>(fs, std::move(manifest_files_queue), use_reader_schema, partition_specs,
                                             schema, config);
@@ -332,11 +617,12 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
 std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
                                                          bool use_reader_schema,
+                                                         std::shared_ptr<filter::StatsFilter> stats_filter,
                                                          const ManifestEntryDeserializerConfig& config) {
   const std::string manifest_list_path = table_metadata->GetCurrentManifestListPathOrFail();
 
   return AllEntriesStream::Make(fs, manifest_list_path, use_reader_schema, table_metadata->partition_specs,
-                                table_metadata->GetCurrentSchema(), config);
+                                table_metadata->GetCurrentSchema(), stats_filter, config);
 }
 
 class EntryStream : public IcebergEntriesStream {
@@ -404,7 +690,8 @@ arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
-                                            uint32_t threads_num, const GetScanMetadataConfig& config) {
+                                            std::shared_ptr<filter::StatsFilter> stats_filter, uint32_t threads_num,
+                                            const GetScanMetadataConfig& config) {
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
@@ -417,7 +704,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   if (threads_num == 0) {
     auto entries_stream =
         AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
-                               config.manifest_entry_deserializer_config);
+                               stats_filter, config.manifest_entry_deserializer_config);
     return GetScanMetadata(*entries_stream, *table_metadata);
   }
   return GetScanMetadataMultiThreaded(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
