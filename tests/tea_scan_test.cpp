@@ -442,6 +442,25 @@ TEST_F(PartitionPruningTest, MonthTimestamptz) {
       EXPECT_TRUE(maybe_manifest_entry.has_value());
     }
   }
+
+  {
+    auto filterLE = MakeLEFilter<filter::ValueType::kTimestamptz>(
+        "c2", 1709251200000000 - kMicrosInDay - 1);  // microsecond before 2024.02.28 00:00:00
+    auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+    {
+      auto maybe_manifest_entry = streamLE->ReadNext();
+      EXPECT_FALSE(maybe_manifest_entry.has_value());
+    }
+  }
+  {
+    auto filterLE = MakeLEFilter<filter::ValueType::kTimestamptz>(
+        "c2", 1709251200000000 - kMicrosInDay);  // microsecond before 2025.04.02 00:00:00
+    auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+    {
+      auto maybe_manifest_entry = streamLE->ReadNext();
+      EXPECT_TRUE(maybe_manifest_entry.has_value());
+    }
+  }
 }
 
 TEST_F(PartitionPruningTest, DayTimestamptz) {
