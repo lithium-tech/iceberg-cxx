@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <deque>
+#include <exception>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -587,9 +588,10 @@ std::shared_ptr<AllEntriesStream> AllEntriesStream::Make(
         }
         return result;
       }
-    } catch (...) {
+    } catch (std::exception& e) {
       // if we failed to apply filter than fallback to parsing metadata completely
       // TODO(gmusya): add logging
+    } catch (arrow::Status& e) {
     }
     return std::queue<ManifestFile>(std::deque<ManifestFile>(std::make_move_iterator(manifest_metadatas.begin()),
                                                              std::make_move_iterator(manifest_metadatas.end())));
