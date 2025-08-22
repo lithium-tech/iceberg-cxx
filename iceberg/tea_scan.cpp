@@ -166,12 +166,10 @@ int MonthsToDays(int months) {
   Ensure(months <= std::numeric_limits<int>::max() / kMaxDaysPerMonth &&
              months >= std::numeric_limits<int>::min() / kMaxDaysPerMonth,
          std::string(__PRETTY_FUNCTION__) + ": days can overflow");
-  if (months >= 0) {
-    return std::chrono::sys_days{std::chrono::year(1970 + months / 12) / std::chrono::month(1 + months % 12) / 1}
-        .time_since_epoch()
-        .count();
-  } else {
-    Ensure(false, std::string(__PRETTY_FUNCTION__) + ": handling negative months is not supported yet");
+  Ensure(months >= 0, std::string(__PRETTY_FUNCTION__) + ": handling negative months is not supported yet");
+  return std::chrono::sys_days{std::chrono::year(1970 + months / 12) / std::chrono::month(1 + months % 12) / 1}
+      .time_since_epoch()
+      .count();
 #if 0
     int32_t abs_months = -months;
     int32_t years_to_sub = (11 + abs_months) / 12;
@@ -180,7 +178,6 @@ int MonthsToDays(int months) {
     int32_t result_month = months_to_sub == 0 ? 1 : (13 - months_to_sub);
     return std::chrono::sys_days{std::chrono::year(result_year) / (result_month) / 1}.time_since_epoch().count();
 #endif
-  }
 }
 
 int DaysToHours(int days) {
