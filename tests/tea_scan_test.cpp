@@ -363,8 +363,7 @@ TEST_F(PartitionPruningTest, YearTimestamp) {
   }
 
   {
-    auto filterLE = MakeLEFilter<filter::ValueType::kTimestamp>(
-        "c2", 1704067200000000ll);  // microsecond before 2024.01.01 00:00:00
+    auto filterLE = MakeLEFilter<filter::ValueType::kTimestamp>("c2", 1704067200000000ll);  //  2024.01.01 00:00:00
     auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
     {
       auto maybe_manifest_entry = streamLE->ReadNext();
@@ -381,20 +380,42 @@ TEST_F(PartitionPruningTest, YearTimestamptz) {
       "00002-d52e2c04-065b-4d14-98bb-ec47abcd1597.metadata.json");
   auto metadata = ice_tea::ReadTableMetadataV2(input);
 
-  auto filterGE =
-      MakeGEFilter<filter::ValueType::kTimestamptz>("c2", 1767225600000000ll - kMicrosInDay);  // 2026.01.01 00:00:00
-  auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
   {
-    auto maybe_manifest_entry = streamGE->ReadNext();
-    EXPECT_FALSE(maybe_manifest_entry.has_value());
+    auto filterGE =
+        MakeGEFilter<filter::ValueType::kTimestamptz>("c2", 1767225600000000ll + kMicrosInDay);  // 2026.01.02 00:00:00
+    auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
+    {
+      auto maybe_manifest_entry = streamGE->ReadNext();
+      EXPECT_FALSE(maybe_manifest_entry.has_value());
+    }
+  }
+  {
+    auto filterGE = MakeGEFilter<filter::ValueType::kTimestamptz>(
+        "c2", 1767225600000000ll + kMicrosInDay - 1);  // microsecond before 2026.01.02 00:00:00
+    auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
+    {
+      auto maybe_manifest_entry = streamGE->ReadNext();
+      EXPECT_TRUE(maybe_manifest_entry.has_value());
+    }
   }
 
-  auto filterLE =
-      MakeLEFilter<filter::ValueType::kTimestamptz>("c2", 1704067199000000ll + kMicrosInDay);  // 2023.12.31 23:59:59
-  auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
   {
-    auto maybe_manifest_entry = streamLE->ReadNext();
-    EXPECT_FALSE(maybe_manifest_entry.has_value());
+    auto filterLE = MakeLEFilter<filter::ValueType::kTimestamptz>(
+        "c2", 1704067200000000ll - kMicrosInDay - 1);  // microsecond before 2023.12.31 00:00:00
+    auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+    {
+      auto maybe_manifest_entry = streamLE->ReadNext();
+      EXPECT_FALSE(maybe_manifest_entry.has_value());
+    }
+  }
+  {
+    auto filterLE =
+        MakeLEFilter<filter::ValueType::kTimestamptz>("c2", 1704067200000000ll - kMicrosInDay);  // 2023.12.31 00:00:00
+    auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
+    {
+      auto maybe_manifest_entry = streamLE->ReadNext();
+      EXPECT_TRUE(maybe_manifest_entry.has_value());
+    }
   }
 }
 

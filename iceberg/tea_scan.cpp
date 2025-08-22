@@ -157,10 +157,7 @@ int YearsToDays(int years) {
   Ensure(years <= std::numeric_limits<int>::max() / kMaxDaysPerYear &&
              years >= std::numeric_limits<int>::min() / kMaxDaysPerYear,
          std::string(__PRETTY_FUNCTION__) + ": days can overflow");
-  auto start = std::chrono::sys_days{std::chrono::year(1970) / 1 / 1};
-  auto end = start + std::chrono::years(years);
-  auto duration = end - start;
-  return std::chrono::duration_cast<std::chrono::days>(duration).count();
+  return std::chrono::sys_days{std::chrono::year(1970 + years) / 1 / 1}.time_since_epoch().count();
 }
 
 int MonthsToDays(int months) {
@@ -243,8 +240,8 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
       int32_t min_day;
       int32_t max_day;
       if (spec_->fields[position].transform == year_transform_prefix) {
-        // note that it is important to add 1 to max_partition_values, because `year = 0` means that days can be from 0
-        // to 365
+        // note that it is important to add 1 to max_partition_values, because `year = 0` means that days can be from
+        // 0 to 365
         min_day = YearsToDays(min_partition_value);
         max_day = YearsToDays(max_partition_value + 1) - 1;
       } else if (spec_->fields[position].transform == month_transform_prefix) {
