@@ -133,6 +133,9 @@ std::optional<FuncStatsConverter> TypesToStatsConverter(iceberg::TypeID ice_type
   using ValType = iceberg::filter::ValueType;
   using iceberg::TypeID;
 
+  using StatsConverter = std::optional<iceberg::filter::GenericMinMaxStats> (*)(const std::vector<uint8_t>& min,
+                                                                                const std::vector<uint8_t>& max);
+
 #define CONVERSION(ICE_TYPE, VAL_TYPE) \
   TypesToConverter { ICE_TYPE, VAL_TYPE, GenericStatsFromTypedStats<ICE_TYPE, VAL_TYPE> }
 

@@ -24,8 +24,6 @@ class ManifestEntryStatsGetter : public iceberg::filter::IStatsGetter {
   std::shared_ptr<const iceberg::Schema> schema_;
 };
 
-using StatsConverter = std::optional<iceberg::filter::GenericMinMaxStats> (*)(const std::vector<uint8_t>& min,
-                                                                              const std::vector<uint8_t>& max);
 using FuncStatsConverter = std::function<std::optional<iceberg::filter::GenericMinMaxStats>(
     const std::vector<uint8_t>&, const std::vector<uint8_t>&)>;
 
