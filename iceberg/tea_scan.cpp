@@ -211,13 +211,12 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
     const auto position = it->second;
     Ensure(position >= 0 && position < partitions_.size(), std::string(__PRETTY_FUNCTION__) + ": invalid position");
 
-    const auto ice_type = [&]() {
-      auto it2 = name_to_type_.find(column_name);
-      Ensure(it2 != name_to_type_.end(), std::string(__PRETTY_FUNCTION__) + ": type not found");
-      return it2->second;
-    }();
+    Ensure(name_to_type_.contains(column_name),
+           std::string(__PRETTY_FUNCTION__) + ": type for column '" + column_name + "' is not found");
+    const TypeID ice_type = name_to_type_.at(column_name);
 
-    if (spec_->fields[position].transform == identity_transform_prefix) {
+    const auto& transform = spec_->fields[position].transform;
+    if (transform == identity_transform_prefix) {
       auto maybe_conversion = TypesToStatsConverter(ice_type, value_type);
       if (!maybe_conversion) {
         return std::nullopt;
@@ -231,10 +230,8 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
       }
 
       return filter::GenericStats(std::move(*minmax_after_transform));
-    } else if (spec_->fields[position].transform == year_transform_prefix ||
-               spec_->fields[position].transform == month_transform_prefix ||
-               spec_->fields[position].transform == day_transform_prefix ||
-               spec_->fields[position].transform == hour_transform_prefix) {
+    } else if (transform == year_transform_prefix || transform == month_transform_prefix ||
+               transform == day_transform_prefix || transform == hour_transform_prefix) {
       int32_t min_partition_value = ConvertToInt(partitions_[position].lower_bound);
       int32_t max_partition_value = ConvertToInt(partitions_[position].upper_bound);
       if (max_partition_value == std::numeric_limits<int32_t>::max()) {
@@ -277,7 +274,7 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
 
       int64_t micros_min;
       int64_t micros_max;
-      if (spec_->fields[position].transform == hour_transform_prefix) {
+      if (transform == hour_transform_prefix) {
         micros_min = HoursToMicros(min_partition_value);
         micros_max = HoursToMicros(max_partition_value + 1) - 1;
       } else {
