@@ -229,7 +229,7 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
       }
 
       auto minmax_after_transform =
-          maybe_conversion(partitions_[position].lower_bound, partitions_[position].upper_bound);
+          (*maybe_conversion)(partitions_[position].lower_bound, partitions_[position].upper_bound);
 
       if (!minmax_after_transform.has_value()) {
         return std::nullopt;

@@ -26,7 +26,10 @@ class ManifestEntryStatsGetter : public iceberg::filter::IStatsGetter {
 
 using StatsConverter = std::optional<iceberg::filter::GenericMinMaxStats> (*)(const std::vector<uint8_t>& min,
                                                                               const std::vector<uint8_t>& max);
+using FuncStatsConverter = std::function<std::optional<iceberg::filter::GenericMinMaxStats>(
+    const std::vector<uint8_t>&, const std::vector<uint8_t>&)>;
 
-StatsConverter TypesToStatsConverter(iceberg::TypeID ice_type, iceberg::filter::ValueType value_type);
+std::optional<FuncStatsConverter> TypesToStatsConverter(iceberg::TypeID ice_type,
+                                                        iceberg::filter::ValueType value_type);
 
 }  // namespace iceberg

@@ -128,7 +128,8 @@ std::optional<iceberg::filter::GenericMinMaxStats> GenericStatsFromTypedStats(co
 
 }  // namespace
 
-StatsConverter TypesToStatsConverter(iceberg::TypeID ice_type, iceberg::filter::ValueType value_type) {
+std::optional<FuncStatsConverter> TypesToStatsConverter(iceberg::TypeID ice_type,
+                                                        iceberg::filter::ValueType value_type) {
   using ValType = iceberg::filter::ValueType;
   using iceberg::TypeID;
 
@@ -159,7 +160,7 @@ StatsConverter TypesToStatsConverter(iceberg::TypeID ice_type, iceberg::filter::
     }
   }
 
-  return nullptr;
+  return std::nullopt;
 }
 
 std::optional<iceberg::filter::GenericStats> ManifestEntryStatsGetter::GetStats(
@@ -195,7 +196,7 @@ std::optional<iceberg::filter::GenericStats> ManifestEntryStatsGetter::GetStats(
   if (!maybe_conversion) {
     return std::nullopt;
   }
-  auto maybe_min_max_stats = maybe_conversion(min_bytes, max_bytes);
+  auto maybe_min_max_stats = (*maybe_conversion)(min_bytes, max_bytes);
   if (maybe_min_max_stats.has_value()) {
     return iceberg::filter::GenericStats(std::move(maybe_min_max_stats.value()));
   }
