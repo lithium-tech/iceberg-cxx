@@ -21,6 +21,8 @@
 #include "iceberg/common/error.h"
 #include "iceberg/common/threadpool.h"
 #include "iceberg/experimental_representations.h"
+#include "iceberg/filter/representation/value.h"
+#include "iceberg/filter/stats_filter/stats.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_entry_stats_getter.h"
 #include "iceberg/manifest_file.h"
@@ -217,106 +219,132 @@ class ManifestFileStatsGetter : public filter::IStatsGetter {
     const auto position = it->second;
     Ensure(position >= 0 && position < partitions_.size(), std::string(__PRETTY_FUNCTION__) + ": invalid position");
 
-    Ensure(name_to_type_.contains(column_name),
-           std::string(__PRETTY_FUNCTION__) + ": type for column '" + column_name + "' is not found");
-    const TypeID ice_type = name_to_type_.at(column_name);
-
     const auto& transform = spec_->fields[position].transform;
     if (transform == identity_transform_prefix) {
-      auto maybe_conversion = TypesToStatsConverter(ice_type, value_type);
-      if (!maybe_conversion) {
-        return std::nullopt;
-      }
+      Ensure(name_to_type_.contains(column_name),
+             std::string(__PRETTY_FUNCTION__) + ": type for column '" + column_name + "' is not found");
+      const TypeID ice_type = name_to_type_.at(column_name);
 
-      auto minmax_after_transform =
-          (*maybe_conversion)(partitions_[position].lower_bound, partitions_[position].upper_bound);
-
-      if (!minmax_after_transform.has_value()) {
-        return std::nullopt;
-      }
-
-      return filter::GenericStats(std::move(*minmax_after_transform));
+      return GetStatsFromIdentityTransform(ice_type, value_type, position);
     } else if (transform == year_transform_prefix || transform == month_transform_prefix ||
                transform == day_transform_prefix || transform == hour_transform_prefix) {
-      int32_t min_partition_value = ConvertToInt(partitions_[position].lower_bound);
-      int32_t max_partition_value = ConvertToInt(partitions_[position].upper_bound);
-      if (max_partition_value == std::numeric_limits<int32_t>::max()) {
-        // not supported
-        return std::nullopt;
-      }
-      // real partition values are in [min_partition_value; max_partition_value]
-
-      int32_t min_day;
-      int32_t max_day;
-      if (spec_->fields[position].transform == year_transform_prefix) {
-        // note that it is important to add 1 to max_partition_values, because `year = 0` means that days can be from
-        // 0 to 365
-        min_day = YearsToDays(min_partition_value);
-        max_day = YearsToDays(max_partition_value + 1) - 1;
-      } else if (spec_->fields[position].transform == month_transform_prefix) {
-        min_day = MonthsToDays(min_partition_value);
-        max_day = MonthsToDays(max_partition_value + 1) - 1;
-      } else if (spec_->fields[position].transform == day_transform_prefix) {
-        min_day = min_partition_value;
-        max_day = max_partition_value;
-      } else {
-        // min_day and max_day are not set for hour transform
-        Ensure(spec_->fields[position].transform == hour_transform_prefix,
-               std::string(__PRETTY_FUNCTION__) + ": internal error, unexpected transform " +
-                   spec_->fields[position].transform);
-      }
-
-      if (value_type == filter::ValueType::kDate) {
-        Ensure(spec_->fields[position].transform == year_transform_prefix ||
-                   spec_->fields[position].transform == month_transform_prefix ||
-                   spec_->fields[position].transform == day_transform_prefix,
-               std::string(__PRETTY_FUNCTION__) + ": unexpected transform '" + spec_->fields[position].transform +
-                   "' for type 'Date'");
-        return filter::GenericStats(filter::GenericMinMaxStats::Make<filter::ValueType::kDate>(min_day, max_day));
-      }
-      Ensure(value_type == filter::ValueType::kTimestamp || value_type == filter::ValueType::kTimestamptz,
-             std::string(__PRETTY_FUNCTION__) + ": internal error, unexpected value type " +
-                 std::to_string(static_cast<int>(value_type)));
-
-      int64_t micros_min;
-      int64_t micros_max;
-      if (transform == hour_transform_prefix) {
-        micros_min = HoursToMicros(min_partition_value);
-        micros_max = HoursToMicros(max_partition_value + 1) - 1;
-      } else {
-        int64_t min_hour = DaysToHours(min_day);
-        int64_t max_hour = DaysToHours(max_day + 1) - 1;
-        micros_min = HoursToMicros(min_hour);
-        micros_max = HoursToMicros(max_hour + 1) - 1;
-      }
-      switch (value_type) {
-        case filter::ValueType::kTimestamp:
-          return filter::GenericStats(
-              filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamp>(micros_min, micros_max));
-        case filter::ValueType::kTimestamptz: {
-          // transform(timestamptz) actually means transform(castTimestamp(timestamptz))
-          // timestamptz (utc) and timestamp can differ no more than by 15 hours (utc-14 ... utc+12), so we
-          // are pessimistic here
-          const int64_t kMicrosInDay = HoursToMicros(DaysToHours(1));
-          if (micros_min < std::numeric_limits<int64_t>::min() + kMicrosInDay) {
-            return std::nullopt;
-          }
-          if (micros_max > std::numeric_limits<int64_t>::max() - kMicrosInDay) {
-            return std::nullopt;
-          }
-          return filter::GenericStats(filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamptz>(
-              micros_min - kMicrosInDay, micros_max + kMicrosInDay));
-        }
-        default:
-          throw std::runtime_error(std::string(__PRETTY_FUNCTION__) + ": unknown filter::ValueType " +
-                                   std::to_string(static_cast<int>(value_type)));
-      }
+      return GetStatsFromTemporalTransform(value_type, position);
     } else {
       return std::nullopt;
     }
   }
 
  private:
+  std::optional<filter::GenericStats> GetStatsFromIdentityTransform(TypeID ice_type, filter::ValueType value_type,
+                                                                    int position) const {
+    auto maybe_conversion = TypesToStatsConverter(ice_type, value_type);
+    if (!maybe_conversion) {
+      return std::nullopt;
+    }
+
+    auto minmax_after_transform =
+        (*maybe_conversion)(partitions_[position].lower_bound, partitions_[position].upper_bound);
+
+    if (!minmax_after_transform.has_value()) {
+      return std::nullopt;
+    }
+
+    return filter::GenericStats(std::move(*minmax_after_transform));
+  }
+
+  static std::optional<std::pair<int32_t, int32_t>> GetMinMaxDayFromTemporal(int32_t min_partition_value,
+                                                                             int32_t max_partition_value,
+                                                                             const std::string& transform) {
+    if (transform == year_transform_prefix) {
+      // note that it is important to add 1 to max_partition_values, because `year = 0` means that days can be from
+      // 0 to 365
+      int32_t min_day = YearsToDays(min_partition_value);
+      int32_t max_day = YearsToDays(max_partition_value + 1) - 1;
+      return std::make_pair(min_day, max_day);
+    } else if (transform == month_transform_prefix) {
+      int32_t min_day = MonthsToDays(min_partition_value);
+      int32_t max_day = MonthsToDays(max_partition_value + 1) - 1;
+      return std::make_pair(min_day, max_day);
+    } else if (transform == day_transform_prefix) {
+      int32_t min_day = min_partition_value;
+      int32_t max_day = max_partition_value;
+      return std::make_pair(min_day, max_day);
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  static std::optional<filter::GenericStats> GetStatsFromTemporalForTimestamp(int32_t min_partition_value,
+                                                                              int32_t max_partition_value,
+                                                                              const std::string& transform,
+                                                                              bool is_timestamptz) {
+    int64_t micros_min;
+    int64_t micros_max;
+    if (transform == hour_transform_prefix) {
+      micros_min = HoursToMicros(min_partition_value);
+      micros_max = HoursToMicros(max_partition_value + 1) - 1;
+    } else {
+      std::optional<std::pair<int32_t, int32_t>> min_max_day =
+          GetMinMaxDayFromTemporal(min_partition_value, max_partition_value, transform);
+      Ensure(min_max_day.has_value(), std::string(__PRETTY_FUNCTION__) + ": internal error");
+
+      int64_t min_hour = DaysToHours(min_max_day->first);
+      int64_t max_hour = DaysToHours(min_max_day->second + 1) - 1;
+      micros_min = HoursToMicros(min_hour);
+      micros_max = HoursToMicros(max_hour + 1) - 1;
+    }
+
+    if (is_timestamptz) {
+      // transform(timestamptz) actually means transform(castTimestamp(timestamptz))
+      // timestamptz (utc) and timestamp can differ no more than by 15 hours (utc-14 ... utc+12), so we
+      // are pessimistic here
+      const int64_t kMicrosInDay = HoursToMicros(DaysToHours(1));
+      if (micros_min < std::numeric_limits<int64_t>::min() + kMicrosInDay) {
+        return std::nullopt;
+      }
+      if (micros_max > std::numeric_limits<int64_t>::max() - kMicrosInDay) {
+        return std::nullopt;
+      }
+      return filter::GenericStats(filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamptz>(
+          micros_min - kMicrosInDay, micros_max + kMicrosInDay));
+    } else {
+      return filter::GenericStats(
+          filter::GenericMinMaxStats::Make<filter::ValueType::kTimestamp>(micros_min, micros_max));
+    }
+  }
+
+  static std::optional<filter::GenericStats> GetStatsFromTemporalForDate(int32_t min_partition_value,
+                                                                         int32_t max_partition_value,
+                                                                         const std::string& transform) {
+    std::optional<std::pair<int32_t, int32_t>> min_max_day =
+        GetMinMaxDayFromTemporal(min_partition_value, max_partition_value, transform);
+    Ensure(min_max_day.has_value(), std::string(__PRETTY_FUNCTION__) + ": internal error");
+
+    return filter::GenericStats(
+        filter::GenericMinMaxStats::Make<filter::ValueType::kDate>(min_max_day->first, min_max_day->second));
+  }
+
+  std::optional<filter::GenericStats> GetStatsFromTemporalTransform(filter::ValueType value_type, int position) const {
+    int32_t min_partition_value = ConvertToInt(partitions_[position].lower_bound);
+    int32_t max_partition_value = ConvertToInt(partitions_[position].upper_bound);
+    if (max_partition_value == std::numeric_limits<int32_t>::max()) {
+      // not supported
+      return std::nullopt;
+    }
+    // real partition values are in [min_partition_value; max_partition_value]
+
+    const std::string& transform = spec_->fields[position].transform;
+
+    if (value_type == filter::ValueType::kDate) {
+      return GetStatsFromTemporalForDate(min_partition_value, max_partition_value, transform);
+    } else if (value_type == filter::ValueType::kTimestamp || value_type == filter::ValueType::kTimestamptz) {
+      return GetStatsFromTemporalForTimestamp(min_partition_value, max_partition_value, transform,
+                                              value_type == filter::ValueType::kTimestamptz);
+    } else {
+      return std::nullopt;
+    }
+  }
+
   const std::unordered_map<std::string, TypeID>& name_to_type_;
   std::unordered_map<std::string, int> name_to_position_;
   const std::vector<PartitionFieldSummary>& partitions_;
