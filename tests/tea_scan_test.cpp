@@ -356,20 +356,24 @@ TEST_F(PartitionPruningTest, YearTimestamp) {
   }
 }
 
+constexpr uint64_t kMicrosInDay = 24ll * 60 * 60 * 1000 * 1000;
+
 TEST_F(PartitionPruningTest, YearTimestamptz) {
   std::ifstream input(
       "tables/year_timestamptz_partitioning/metadata/"
       "00002-d52e2c04-065b-4d14-98bb-ec47abcd1597.metadata.json");
   auto metadata = ice_tea::ReadTableMetadataV2(input);
 
-  auto filterGE = MakeGEFilter<filter::ValueType::kTimestamptz>("c2", 1767225601000000ll);  // 2026.01.01 00:00:01
+  auto filterGE =
+      MakeGEFilter<filter::ValueType::kTimestamptz>("c2", 1767225601000000ll - kMicrosInDay);  // 2026.01.01 00:00:01
   auto streamGE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterGE);
   {
     auto maybe_manifest_entry = streamGE->ReadNext();
     EXPECT_FALSE(maybe_manifest_entry.has_value());
   }
 
-  auto filterLE = MakeLEFilter<filter::ValueType::kTimestamptz>("c2", 1704067199000000ll);  // 2023.12.31 23:59:59
+  auto filterLE =
+      MakeLEFilter<filter::ValueType::kTimestamptz>("c2", 1704067199000000ll + kMicrosInDay);  // 2023.12.31 23:59:59
   auto streamLE = ice_tea::AllEntriesStream::Make(fs_, metadata, false, filterLE);
   {
     auto maybe_manifest_entry = streamLE->ReadNext();

@@ -175,7 +175,7 @@ int MonthsToDays(int months) {
 }
 
 int DaysToHours(int days) {
-  constexpr int kHoursPerDay = 31;
+  constexpr int kHoursPerDay = 24;
   Ensure(
       days <= std::numeric_limits<int>::max() / kHoursPerDay && days >= std::numeric_limits<int>::min() / kHoursPerDay,
       std::string(__PRETTY_FUNCTION__) + ": hours will overflow");
