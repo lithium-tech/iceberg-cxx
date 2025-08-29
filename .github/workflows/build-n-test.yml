@@ -83,3 +83,31 @@ jobs:
         ../iceberg/streams/compute/ice_compute_ut
         ../iceberg/streams/iceberg_streams_ut
         ./iceberg_local_test
+
+  build-ubuntu-clang-debug:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: install apt deps
+      run: |
+        sudo apt install -y libcurl4-openssl-dev
+    - name: fetch-deps
+      run: |
+        mkdir -p _build && cd _build
+        git clone --single-branch -b maint-15.0.2 https://github.com/apache/arrow.git
+        cd arrow && git apply ../../vendor/arrow/fix_c-ares_url.patch && cd ..
+        ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
+    - name: cmake
+      run: |
+        cd _build
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Debug ../
+    - name: make
+      run: |
+        cd _build
+        ninja
+    - name: test
+      run: |
+        cd _build/tests/
+        ../iceberg/iceberg-cpp-test
+        ../iceberg/common/fs/iceberg_common_fs_test
+        ./iceberg_local_test
