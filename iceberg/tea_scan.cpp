@@ -730,19 +730,45 @@ class ScanMetadataBuilder {
 
     for (auto& [partition_key, partition_map] : partitions) {
       ScanMetadata::Partition partition;
-      for (auto& [seqnum, layer] : partition_map) {
+
+      std::optional<std::string> min_data_path;
+      std::optional<std::string> max_data_path;
+
+      for (auto it = partition_map.rbegin(); it != partition_map.rend(); ++it) {
+        auto& [seqno, layer] = *it;
+
+        for (const auto& data_entry : layer.data_entries_) {
+          if (!min_data_path.has_value() || *min_data_path > data_entry.path) {
+            min_data_path = data_entry.path;
+          }
+          if (!max_data_path.has_value() || *max_data_path < data_entry.path) {
+            max_data_path = data_entry.path;
+          }
+        }
+
         ScanMetadata::Layer result_layer;
         result_layer.data_entries_ = std::move(layer.data_entries_);
         result_layer.equality_delete_entries_ = std::move(result_layer.equality_delete_entries_);
 
-        result_layer.positional_delete_entries_.reserve(layer.positional_delete_entries_.size());
-        for (auto& pos_delete : layer.positional_delete_entries_) {
+        for (const auto& pos_delete : layer.positional_delete_entries_) {
+          bool has_stats =
+              pos_delete.min_max_referenced_path_.has_value() && min_data_path.has_value() && max_data_path.has_value();
+          if (has_stats) {
+            const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
+            if (*min_data_path > max_referenced_path || *max_data_path < min_referenced_path) {
+              continue;
+            }
+          }
           result_layer.positional_delete_entries_.emplace_back(std::move(pos_delete.positional_delete_.path));
         }
 
         partition.emplace_back(std::move(result_layer));
       }
-      result.partitions.emplace_back(std::move(partition));
+
+      std::reverse(partition.begin(), partition.end());
+      if (min_data_path.has_value()) {
+        result.partitions.emplace_back(std::move(partition));
+      }
     }
 
     return result;
