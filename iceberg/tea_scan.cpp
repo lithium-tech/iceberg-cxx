@@ -731,7 +731,16 @@ class ScanMetadataBuilder {
     for (auto& [partition_key, partition_map] : partitions) {
       ScanMetadata::Partition partition;
       for (auto& [seqnum, layer] : partition_map) {
-        partition.emplace_back(std::move(layer));
+        ScanMetadata::Layer result_layer;
+        result_layer.data_entries_ = std::move(layer.data_entries_);
+        result_layer.equality_delete_entries_ = std::move(result_layer.equality_delete_entries_);
+
+        result_layer.positional_delete_entries_.reserve(layer.positional_delete_entries_.size());
+        for (auto& pos_delete : layer.positional_delete_entries_) {
+          result_layer.positional_delete_entries_.emplace_back(std::move(pos_delete.positional_delete_.path));
+        }
+
+        partition.emplace_back(std::move(result_layer));
       }
       result.partitions.emplace_back(std::move(partition));
     }
@@ -779,7 +788,19 @@ class ScanMetadataBuilder {
         // - There is no deletion vector that must be applied to the data file (when added, such a vector must
         // contain
         //   all deletes from existing position delete files)
-        AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path);
+        std::optional<std::pair<std::string, std::string>> min_max_referenced_path;
+        constexpr uint32_t kFilePathId = 2147483546;
+        if (entry.data_file.lower_bounds.contains(kFilePathId) && entry.data_file.upper_bounds.contains(kFilePathId)) {
+          const std::vector<uint8_t>& min_bytes = entry.data_file.lower_bounds.at(kFilePathId);
+          const std::vector<uint8_t>& max_bytes = entry.data_file.upper_bounds.at(kFilePathId);
+
+          std::string min_path(min_bytes.begin(), min_bytes.end());
+          std::string max_path(max_bytes.begin(), max_bytes.end());
+
+          min_max_referenced_path.emplace(std::move(min_path), std::move(max_path));
+        }
+        AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path,
+                           min_max_referenced_path);
         break;
       }
 
@@ -807,8 +828,10 @@ class ScanMetadataBuilder {
   }
 
   virtual void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                                  const std::string& path) {
-    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(path);
+                                  const std::string& path,
+                                  const std::optional<std::pair<std::string, std::string>>& min_max_referenced_path) {
+    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
+        path, min_max_referenced_path);
   }
 
   virtual void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
@@ -850,7 +873,26 @@ class ScanMetadataBuilder {
   const TableMetadataV2& table_metadata_;
   std::shared_ptr<const iceberg::Schema> schema_;
 
-  std::map<std::string, std::map<SequenceNumber, ScanMetadata::Layer>> partitions;
+  struct PositionalDeleteWithExtraInfo {
+    PositionalDeleteInfo positional_delete_;
+    std::optional<std::pair<std::string, std::string>> min_max_referenced_path_;
+
+    PositionalDeleteWithExtraInfo(std::string path,
+                                  std::optional<std::pair<std::string, std::string>> min_max_referenced_path)
+        : positional_delete_(std::move(path)), min_max_referenced_path_(std::move(min_max_referenced_path)) {}
+  };
+
+  struct LayerWithExtraInfo {
+    std::vector<DataEntry> data_entries_;
+    std::vector<PositionalDeleteWithExtraInfo> positional_delete_entries_;
+    std::vector<EqualityDeleteInfo> equality_delete_entries_;
+
+    bool operator==(const LayerWithExtraInfo& layer) const = default;
+
+    bool Empty() const;
+  };
+
+  std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>> partitions;
   // if there are k partitions and t global equality delete entries, k * t entries will be created
   // TODO(gmusya): improve
   std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
@@ -868,9 +910,10 @@ class ScanMetadataBuilderMT : public ScanMetadataBuilder {
   }
 
   void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                          const std::string& path) override {
+                          const std::string& path,
+                          const std::optional<std::pair<std::string, std::string>>& min_max_referenced_path) override {
     std::lock_guard<std::mutex> guard(mutex_);
-    ScanMetadataBuilder::AddPositionDeletes(serialized_partition_key, sequence_number, path);
+    ScanMetadataBuilder::AddPositionDeletes(serialized_partition_key, sequence_number, path, min_max_referenced_path);
   }
 
   void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
