@@ -767,19 +767,16 @@ class ScanMetadataBuilder {
         }
 
         if (logger_) {
-          if (dangling_positional_delete_files > 0) {
-            logger_->Log(std::to_string(dangling_positional_delete_files), "metrics:plan:dangling_positional_files");
-          }
-          if (result_layer.data_entries_.size() > 0) {
-            logger_->Log(std::to_string(result_layer.data_entries_.size()), "metrics:plan:data_files");
-          }
-          if (result_layer.positional_delete_entries_.size() > 0) {
-            logger_->Log(std::to_string(result_layer.positional_delete_entries_.size()),
-                         "metrics:plan:positional_files");
-          }
-          if (result_layer.equality_delete_entries_.size() > 0) {
-            logger_->Log(std::to_string(result_layer.equality_delete_entries_.size()), "metrics:plan:equality_files");
-          }
+          auto log_if_not_null = [logger = this->logger_](int64_t value, const std::string& name) {
+            if (value > 0) {
+              logger->Log(std::to_string(value), name);
+            }
+          };
+
+          log_if_not_null(dangling_positional_delete_files, "metrics:plan:dangling_positional_files");
+          log_if_not_null(result_layer.data_entries_.size(), "metrics:plan:data_files");
+          log_if_not_null(result_layer.positional_delete_entries_.size(), "metrics:plan:positional_files");
+          log_if_not_null(result_layer.equality_delete_entries_.size(), "metrics:plan:equality_files");
         }
 
         if (!result_layer.data_entries_.empty() || !result_layer.positional_delete_entries_.empty() ||
