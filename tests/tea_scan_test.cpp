@@ -6,6 +6,9 @@
 
 #include <exception>
 #include <fstream>
+
+#include <iceberg/common/logger.h>
+
 #include <stdexcept>
 #include <string>
 
@@ -188,6 +191,49 @@ TEST(GetScanMetadata, WithMultipleMatchingPartitionSpecs) {
                 "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet are found");
     }
   }
+}
+
+class Logger : public ILogger {
+ public:
+  void Log(const Message& message, const MessageType& message_type) override {
+    logs_.emplace_back(message, message_type);
+  }
+
+  const std::vector<std::pair<Message, MessageType>> GetLogs() { return logs_; }
+
+ private:
+  std::vector<std::pair<Message, MessageType>> logs_;
+};
+
+TEST(GetScanMetadata, DanglingPositionalDeletes) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  auto logger = std::make_shared<Logger>();
+  auto maybe_scan_metadata = ice_tea::GetScanMetadata(
+      fs,
+      "s3://warehouse/dangling_deletes/metadata/"
+      "00011-31179cfb-920d-47df-af37-7362d4028557.metadata.json",
+      [&](iceberg::Schema& schema) { return false; }, nullptr, 0, {}, logger);
+  ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK());
+
+  auto scan_metadata = maybe_scan_metadata.MoveValueUnsafe();
+  ASSERT_EQ(scan_metadata.partitions.size(), 1);
+
+  ASSERT_EQ(scan_metadata.partitions[0].size(), 1);
+
+  const auto& layer = scan_metadata.partitions[0][0];
+
+  ASSERT_EQ(layer.data_entries_.size(), 1);
+  ASSERT_EQ(layer.positional_delete_entries_.size(), 0);
+  ASSERT_EQ(layer.equality_delete_entries_.size(), 0);
+
+  auto logs = logger->GetLogs();
+  std::sort(logs.begin(), logs.end());
+
+  std::vector<std::pair<std::string, std::string>> expected_logs{{"1", "metrics:plan:data_files"},
+                                                                 {"2", "metrics:plan:dangling_positional_files"}};
+  ASSERT_EQ(logs, expected_logs);
 }
 
 TEST(GetScanMetadata, EqualityDataEntries) {

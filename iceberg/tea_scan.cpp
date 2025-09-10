@@ -767,13 +767,25 @@ class ScanMetadataBuilder {
         }
 
         if (logger_) {
-          logger_->Log(std::to_string(dangling_positional_delete_files), "metrics:plan:dangling_positional_files");
-          logger_->Log(std::to_string(result_layer.data_entries_.size()), "metrics:plan:data_files");
-          logger_->Log(std::to_string(result_layer.positional_delete_entries_.size()), "metrics:plan:positional_files");
-          logger_->Log(std::to_string(result_layer.equality_delete_entries_.size()), "metrics:plan:equality_files");
+          if (dangling_positional_delete_files > 0) {
+            logger_->Log(std::to_string(dangling_positional_delete_files), "metrics:plan:dangling_positional_files");
+          }
+          if (result_layer.data_entries_.size() > 0) {
+            logger_->Log(std::to_string(result_layer.data_entries_.size()), "metrics:plan:data_files");
+          }
+          if (result_layer.positional_delete_entries_.size() > 0) {
+            logger_->Log(std::to_string(result_layer.positional_delete_entries_.size()),
+                         "metrics:plan:positional_files");
+          }
+          if (result_layer.equality_delete_entries_.size() > 0) {
+            logger_->Log(std::to_string(result_layer.equality_delete_entries_.size()), "metrics:plan:equality_files");
+          }
         }
 
-        partition.emplace_back(std::move(result_layer));
+        if (!result_layer.data_entries_.empty() || !result_layer.positional_delete_entries_.empty() ||
+            !result_layer.equality_delete_entries_.empty()) {
+          partition.emplace_back(std::move(result_layer));
+        }
       }
 
       std::reverse(partition.begin(), partition.end());
