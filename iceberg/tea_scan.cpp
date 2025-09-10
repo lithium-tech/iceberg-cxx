@@ -20,6 +20,7 @@
 #include "arrow/result.h"
 #include "arrow/status.h"
 #include "iceberg/common/error.h"
+#include "iceberg/common/logger.h"
 #include "iceberg/common/threadpool.h"
 #include "iceberg/experimental_representations.h"
 #include "iceberg/filter/representation/value.h"
@@ -685,13 +686,14 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
 arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
                                                          bool use_reader_schema, uint32_t threads_num,
-                                                         const ManifestEntryDeserializerConfig& config);
+                                                         const ManifestEntryDeserializerConfig& config,
+                                                         std::shared_ptr<ILogger> logger);
 
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
                                             std::shared_ptr<filter::StatsFilter> stats_filter, uint32_t threads_num,
-                                            const GetScanMetadataConfig& config) {
+                                            const GetScanMetadataConfig& config, std::shared_ptr<ILogger> logger) {
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
@@ -705,35 +707,91 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
     auto entries_stream =
         AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
                                stats_filter, config.manifest_entry_deserializer_config);
-    return GetScanMetadata(*entries_stream, *table_metadata);
+    return GetScanMetadata(*entries_stream, *table_metadata, logger);
   }
   return GetScanMetadataMultiThreaded(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
-                                      threads_num, config.manifest_entry_deserializer_config);
+                                      threads_num, config.manifest_entry_deserializer_config, logger);
 }
 
 class ScanMetadataBuilder {
  public:
-  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata)
-      : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()) {}
+  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()), logger_(std::move(logger)) {}
 
   ScanMetadata GetResult() {
     ScanMetadata result;
     result.schema = table_metadata_.GetCurrentSchema();
 
-    for (auto& [partition_key, partition_map] : partitions) {
+    for (auto& [partition_key, layers] : partitions) {
       for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
-        auto& deletes_at_current_layer = partition_map[seqnum].equality_delete_entries_;
+        auto& deletes_at_current_layer = layers[seqnum].equality_delete_entries_;
         deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
                                         equality_delete_entries.end());
       }
     }
 
-    for (auto& [partition_key, partition_map] : partitions) {
+    for (auto& [partition_key, layers] : partitions) {
       ScanMetadata::Partition partition;
-      for (auto& [seqnum, layer] : partition_map) {
-        partition.emplace_back(std::move(layer));
+
+      std::optional<std::string> min_data_path;
+      std::optional<std::string> max_data_path;
+
+      // to remove dangling positional delete file, we need to make sure that there are no data files in the range
+      // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers greater
+      // than or equal to X. To find all dangling deletes in one pass, we start from max layer
+      for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
+        auto& [seqno, layer] = *it;
+
+        for (const auto& data_entry : layer.data_entries_) {
+          if (!min_data_path.has_value() || *min_data_path > data_entry.path) {
+            min_data_path = data_entry.path;
+          }
+          if (!max_data_path.has_value() || *max_data_path < data_entry.path) {
+            max_data_path = data_entry.path;
+          }
+        }
+
+        ScanMetadata::Layer result_layer;
+        result_layer.data_entries_ = std::move(layer.data_entries_);
+        result_layer.equality_delete_entries_ = std::move(result_layer.equality_delete_entries_);
+
+        int64_t dangling_positional_delete_files = 0;
+        for (const auto& pos_delete : layer.positional_delete_entries_) {
+          bool has_stats =
+              pos_delete.min_max_referenced_path_.has_value() && min_data_path.has_value() && max_data_path.has_value();
+          if (has_stats) {
+            const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
+            if (*min_data_path > max_referenced_path || *max_data_path < min_referenced_path) {
+              ++dangling_positional_delete_files;
+              continue;
+            }
+          }
+          result_layer.positional_delete_entries_.emplace_back(std::move(pos_delete.positional_delete_.path));
+        }
+
+        if (logger_) {
+          auto log_if_not_null = [logger = this->logger_](int64_t value, const std::string& name) {
+            if (value > 0) {
+              logger->Log(std::to_string(value), name);
+            }
+          };
+
+          log_if_not_null(dangling_positional_delete_files, "metrics:plan:dangling_positional_files");
+          log_if_not_null(result_layer.data_entries_.size(), "metrics:plan:data_files");
+          log_if_not_null(result_layer.positional_delete_entries_.size(), "metrics:plan:positional_files");
+          log_if_not_null(result_layer.equality_delete_entries_.size(), "metrics:plan:equality_files");
+        }
+
+        if (!result_layer.data_entries_.empty() || !result_layer.positional_delete_entries_.empty() ||
+            !result_layer.equality_delete_entries_.empty()) {
+          partition.emplace_back(std::move(result_layer));
+        }
       }
-      result.partitions.emplace_back(std::move(partition));
+
+      std::reverse(partition.begin(), partition.end());
+      if (min_data_path.has_value()) {
+        result.partitions.emplace_back(std::move(partition));
+      }
     }
 
     return result;
@@ -779,7 +837,19 @@ class ScanMetadataBuilder {
         // - There is no deletion vector that must be applied to the data file (when added, such a vector must
         // contain
         //   all deletes from existing position delete files)
-        AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path);
+        std::optional<std::pair<std::string, std::string>> min_max_referenced_path;
+        constexpr uint32_t kFilePathId = 2147483546;
+        if (entry.data_file.lower_bounds.contains(kFilePathId) && entry.data_file.upper_bounds.contains(kFilePathId)) {
+          const std::vector<uint8_t>& min_bytes = entry.data_file.lower_bounds.at(kFilePathId);
+          const std::vector<uint8_t>& max_bytes = entry.data_file.upper_bounds.at(kFilePathId);
+
+          std::string min_path(min_bytes.begin(), min_bytes.end());
+          std::string max_path(max_bytes.begin(), max_bytes.end());
+
+          min_max_referenced_path.emplace(std::move(min_path), std::move(max_path));
+        }
+        AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path,
+                           min_max_referenced_path);
         break;
       }
 
@@ -807,8 +877,10 @@ class ScanMetadataBuilder {
   }
 
   virtual void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                                  const std::string& path) {
-    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(path);
+                                  const std::string& path,
+                                  const std::optional<std::pair<std::string, std::string>>& min_max_referenced_path) {
+    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
+        path, min_max_referenced_path);
   }
 
   virtual void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
@@ -850,15 +922,36 @@ class ScanMetadataBuilder {
   const TableMetadataV2& table_metadata_;
   std::shared_ptr<const iceberg::Schema> schema_;
 
-  std::map<std::string, std::map<SequenceNumber, ScanMetadata::Layer>> partitions;
+  struct PositionalDeleteWithExtraInfo {
+    PositionalDeleteInfo positional_delete_;
+    std::optional<std::pair<std::string, std::string>> min_max_referenced_path_;
+
+    PositionalDeleteWithExtraInfo(std::string path,
+                                  std::optional<std::pair<std::string, std::string>> min_max_referenced_path)
+        : positional_delete_(std::move(path)), min_max_referenced_path_(std::move(min_max_referenced_path)) {}
+  };
+
+  struct LayerWithExtraInfo {
+    std::vector<DataEntry> data_entries_;
+    std::vector<PositionalDeleteWithExtraInfo> positional_delete_entries_;
+    std::vector<EqualityDeleteInfo> equality_delete_entries_;
+
+    bool operator==(const LayerWithExtraInfo& layer) const = default;
+
+    bool Empty() const;
+  };
+
+  std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>> partitions;
   // if there are k partitions and t global equality delete entries, k * t entries will be created
   // TODO(gmusya): improve
   std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
+  std::shared_ptr<ILogger> logger_;
 };
 
 class ScanMetadataBuilderMT : public ScanMetadataBuilder {
  public:
-  explicit ScanMetadataBuilderMT(const TableMetadataV2& table_metadata) : ScanMetadataBuilder(table_metadata) {}
+  explicit ScanMetadataBuilderMT(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : ScanMetadataBuilder(table_metadata, logger) {}
 
  private:
   void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number, const std::string& path,
@@ -868,9 +961,10 @@ class ScanMetadataBuilderMT : public ScanMetadataBuilder {
   }
 
   void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                          const std::string& path) override {
+                          const std::string& path,
+                          const std::optional<std::pair<std::string, std::string>>& min_max_referenced_path) override {
     std::lock_guard<std::mutex> guard(mutex_);
-    ScanMetadataBuilder::AddPositionDeletes(serialized_partition_key, sequence_number, path);
+    ScanMetadataBuilder::AddPositionDeletes(serialized_partition_key, sequence_number, path, min_max_referenced_path);
   }
 
   void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
@@ -892,8 +986,8 @@ class ScanMetadataBuilderMT : public ScanMetadataBuilder {
 
 class ReferencedDataFileAwareScanPlanner {
  public:
-  ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
-      : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata)) {}
+  ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata, std::move(logger))) {}
 
   arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
     if (entry.status == iceberg::ManifestEntry::Status::kDeleted) {
@@ -1050,8 +1144,8 @@ class ReferencedDataFileAwareScanPlanner {
 
 class ReferencedDataFileAwareScanPlannerMT : public ReferencedDataFileAwareScanPlanner {
  public:
-  explicit ReferencedDataFileAwareScanPlannerMT(const TableMetadataV2& table_metadata)
-      : ReferencedDataFileAwareScanPlanner(std::make_shared<ScanMetadataBuilderMT>(table_metadata)) {}
+  explicit ReferencedDataFileAwareScanPlannerMT(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : ReferencedDataFileAwareScanPlanner(std::make_shared<ScanMetadataBuilderMT>(table_metadata, logger)) {}
 
  private:
   void SetHasEqualityDelete() override {
@@ -1074,9 +1168,9 @@ class ReferencedDataFileAwareScanPlannerMT : public ReferencedDataFileAwareScanP
   std::mutex mutex_;
 };
 
-arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
-                                            const TableMetadataV2& table_metadata) {
-  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata);
+arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
+                                            std::shared_ptr<ILogger> logger) {
+  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata, logger);
 
   while (true) {
     std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();
@@ -1142,11 +1236,12 @@ class ManifestFileTask {
 arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
                                                          bool use_reader_schema, uint32_t threads_num,
-                                                         const ManifestEntryDeserializerConfig& config) {
+                                                         const ManifestEntryDeserializerConfig& config,
+                                                         std::shared_ptr<ILogger> logger) {
   const std::string manifest_list_path = table_metadata->GetCurrentManifestListPathOrFail();
   auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
 
-  auto scan_metadata_builder = std::make_shared<ReferencedDataFileAwareScanPlannerMT>(*table_metadata);
+  auto scan_metadata_builder = std::make_shared<ReferencedDataFileAwareScanPlannerMT>(*table_metadata, logger);
 
   auto pool = std::make_shared<ThreadPool>(threads_num);
   std::vector<std::future<std::vector<std::future<arrow::Status>>>> futures;
