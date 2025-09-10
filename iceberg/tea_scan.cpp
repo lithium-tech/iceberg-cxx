@@ -722,21 +722,24 @@ class ScanMetadataBuilder {
     ScanMetadata result;
     result.schema = table_metadata_.GetCurrentSchema();
 
-    for (auto& [partition_key, partition_map] : partitions) {
+    for (auto& [partition_key, layers] : partitions) {
       for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
-        auto& deletes_at_current_layer = partition_map[seqnum].equality_delete_entries_;
+        auto& deletes_at_current_layer = layers[seqnum].equality_delete_entries_;
         deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
                                         equality_delete_entries.end());
       }
     }
 
-    for (auto& [partition_key, partition_map] : partitions) {
+    for (auto& [partition_key, layers] : partitions) {
       ScanMetadata::Partition partition;
 
       std::optional<std::string> min_data_path;
       std::optional<std::string> max_data_path;
 
-      for (auto it = partition_map.rbegin(); it != partition_map.rend(); ++it) {
+      // to remove dangling positional delete file, we need to make sure that there are no data files in the range
+      // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers greater
+      // than or equal to X. To find all dangling deletes in one pass, we start from max layer
+      for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
         auto& [seqno, layer] = *it;
 
         for (const auto& data_entry : layer.data_entries_) {
