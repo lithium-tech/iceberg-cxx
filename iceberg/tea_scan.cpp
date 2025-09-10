@@ -20,6 +20,7 @@
 #include "arrow/result.h"
 #include "arrow/status.h"
 #include "iceberg/common/error.h"
+#include "iceberg/common/logger.h"
 #include "iceberg/common/threadpool.h"
 #include "iceberg/experimental_representations.h"
 #include "iceberg/filter/representation/value.h"
@@ -685,13 +686,14 @@ std::optional<ManifestEntry> AllEntriesStream::ReadNext() {
 arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
                                                          bool use_reader_schema, uint32_t threads_num,
-                                                         const ManifestEntryDeserializerConfig& config);
+                                                         const ManifestEntryDeserializerConfig& config,
+                                                         std::shared_ptr<ILogger> logger);
 
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
                                             std::shared_ptr<filter::StatsFilter> stats_filter, uint32_t threads_num,
-                                            const GetScanMetadataConfig& config) {
+                                            const GetScanMetadataConfig& config, std::shared_ptr<ILogger> logger) {
   auto data = ValueSafe(ReadFile(fs, metadata_location));
   std::shared_ptr<TableMetadataV2> table_metadata = ReadTableMetadataV2(data);
   if (!table_metadata) {
@@ -705,16 +707,16 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
     auto entries_stream =
         AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
                                stats_filter, config.manifest_entry_deserializer_config);
-    return GetScanMetadata(*entries_stream, *table_metadata);
+    return GetScanMetadata(*entries_stream, *table_metadata, logger);
   }
   return GetScanMetadataMultiThreaded(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
-                                      threads_num, config.manifest_entry_deserializer_config);
+                                      threads_num, config.manifest_entry_deserializer_config, logger);
 }
 
 class ScanMetadataBuilder {
  public:
-  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata)
-      : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()) {}
+  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()), logger_(std::move(logger)) {}
 
   ScanMetadata GetResult() {
     ScanMetadata result;
@@ -750,16 +752,25 @@ class ScanMetadataBuilder {
         result_layer.data_entries_ = std::move(layer.data_entries_);
         result_layer.equality_delete_entries_ = std::move(result_layer.equality_delete_entries_);
 
+        int64_t dangling_positional_delete_files = 0;
         for (const auto& pos_delete : layer.positional_delete_entries_) {
           bool has_stats =
               pos_delete.min_max_referenced_path_.has_value() && min_data_path.has_value() && max_data_path.has_value();
           if (has_stats) {
             const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
             if (*min_data_path > max_referenced_path || *max_data_path < min_referenced_path) {
+              ++dangling_positional_delete_files;
               continue;
             }
           }
           result_layer.positional_delete_entries_.emplace_back(std::move(pos_delete.positional_delete_.path));
+        }
+
+        if (logger_) {
+          logger_->Log(std::to_string(dangling_positional_delete_files), "metrics:plan:dangling_positional_files");
+          logger_->Log(std::to_string(result_layer.data_entries_.size()), "metrics:plan:data_files");
+          logger_->Log(std::to_string(result_layer.positional_delete_entries_.size()), "metrics:plan:positional_files");
+          logger_->Log(std::to_string(result_layer.equality_delete_entries_.size()), "metrics:plan:equality_files");
         }
 
         partition.emplace_back(std::move(result_layer));
@@ -922,11 +933,13 @@ class ScanMetadataBuilder {
   // if there are k partitions and t global equality delete entries, k * t entries will be created
   // TODO(gmusya): improve
   std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
+  std::shared_ptr<ILogger> logger_;
 };
 
 class ScanMetadataBuilderMT : public ScanMetadataBuilder {
  public:
-  explicit ScanMetadataBuilderMT(const TableMetadataV2& table_metadata) : ScanMetadataBuilder(table_metadata) {}
+  explicit ScanMetadataBuilderMT(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : ScanMetadataBuilder(table_metadata, logger) {}
 
  private:
   void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number, const std::string& path,
@@ -961,8 +974,8 @@ class ScanMetadataBuilderMT : public ScanMetadataBuilder {
 
 class ReferencedDataFileAwareScanPlanner {
  public:
-  ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata)
-      : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata)) {}
+  ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata, std::move(logger))) {}
 
   arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
     if (entry.status == iceberg::ManifestEntry::Status::kDeleted) {
@@ -1119,8 +1132,8 @@ class ReferencedDataFileAwareScanPlanner {
 
 class ReferencedDataFileAwareScanPlannerMT : public ReferencedDataFileAwareScanPlanner {
  public:
-  explicit ReferencedDataFileAwareScanPlannerMT(const TableMetadataV2& table_metadata)
-      : ReferencedDataFileAwareScanPlanner(std::make_shared<ScanMetadataBuilderMT>(table_metadata)) {}
+  explicit ReferencedDataFileAwareScanPlannerMT(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : ReferencedDataFileAwareScanPlanner(std::make_shared<ScanMetadataBuilderMT>(table_metadata, logger)) {}
 
  private:
   void SetHasEqualityDelete() override {
@@ -1143,9 +1156,9 @@ class ReferencedDataFileAwareScanPlannerMT : public ReferencedDataFileAwareScanP
   std::mutex mutex_;
 };
 
-arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
-                                            const TableMetadataV2& table_metadata) {
-  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata);
+arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
+                                            std::shared_ptr<ILogger> logger) {
+  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata, logger);
 
   while (true) {
     std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();
@@ -1211,11 +1224,12 @@ class ManifestFileTask {
 arrow::Result<ScanMetadata> GetScanMetadataMultiThreaded(std::shared_ptr<arrow::fs::FileSystem> fs,
                                                          std::shared_ptr<TableMetadataV2> table_metadata,
                                                          bool use_reader_schema, uint32_t threads_num,
-                                                         const ManifestEntryDeserializerConfig& config) {
+                                                         const ManifestEntryDeserializerConfig& config,
+                                                         std::shared_ptr<ILogger> logger) {
   const std::string manifest_list_path = table_metadata->GetCurrentManifestListPathOrFail();
   auto manifest_metadatas = GetManifestFiles(fs, manifest_list_path);
 
-  auto scan_metadata_builder = std::make_shared<ReferencedDataFileAwareScanPlannerMT>(*table_metadata);
+  auto scan_metadata_builder = std::make_shared<ReferencedDataFileAwareScanPlannerMT>(*table_metadata, logger);
 
   auto pool = std::make_shared<ThreadPool>(threads_num);
   std::vector<std::future<std::vector<std::future<arrow::Status>>>> futures;

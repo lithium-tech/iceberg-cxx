@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    auto maybe_scan_metadata = iceberg::ice_tea::GetScanMetadata(*entries_stream, *table_metadata);
+    auto maybe_scan_metadata = iceberg::ice_tea::GetScanMetadata(*entries_stream, *table_metadata, nullptr);
     if (!maybe_scan_metadata.ok()) {
       std::cerr << maybe_scan_metadata.status().ToString() << std::endl;
       return 1;

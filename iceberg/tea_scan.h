@@ -8,6 +8,7 @@
 
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/result.h"
+#include "iceberg/common/logger.h"
 #include "iceberg/filter/stats_filter/stats_filter.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_file.h"
@@ -95,9 +96,9 @@ struct GetScanMetadataConfig {
 // threads_num = 0 is usual GetScanMetadata mode, others are multithreaded
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
-                                            std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
+                                            std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema, 
                                             std::shared_ptr<filter::StatsFilter> stats_filter = nullptr,
-                                            uint32_t threads_num = 0, const GetScanMetadataConfig& config = {});
+                                            uint32_t threads_num = 0, const GetScanMetadataConfig& config = {}, std::shared_ptr<ILogger> logger = nullptr);
 
 class AllEntriesStream : public IcebergEntriesStream {
  public:
@@ -138,7 +139,7 @@ class AllEntriesStream : public IcebergEntriesStream {
   bool use_avro_reader_schema_ = false;
 };
 
-arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream,
-                                            const TableMetadataV2& table_metadata);
+arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
+                                            std::shared_ptr<ILogger> logger);
 
 }  // namespace iceberg::ice_tea
