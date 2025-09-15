@@ -47,7 +47,7 @@ jobs:
         ./iceberg_local_test
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
     - uses: actions/checkout@v4
     - name: install brew deps
@@ -67,7 +67,7 @@ jobs:
     - name: cmake
       run: |
         cd _build
-        cmake -GNinja -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DICECXX_USE_REST=ON -DICECXX_STATISTICS=ON -DICECXX_USE_SMHASHER=OFF ../
+        cmake -GNinja -DICECXX_USE_REST=ON -DICECXX_STATISTICS=ON -DICECXX_USE_SMHASHER=OFF ../
     - name: make
       run: |
         cd _build
