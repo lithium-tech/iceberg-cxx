@@ -758,7 +758,8 @@ class ScanMetadataBuilder {
 
         ScanMetadata::Layer result_layer;
         result_layer.data_entries_ = std::move(layer.data_entries_);
-        result_layer.equality_delete_entries_ = std::move(result_layer.equality_delete_entries_);
+        result_layer.equality_delete_entries_ = std::move(layer.equality_delete_entries_);
+        // TODO(gmusya): add tests with equality deletes
 
         int64_t dangling_positional_delete_files = 0;
         for (const auto& pos_delete : layer.positional_delete_entries_) {
