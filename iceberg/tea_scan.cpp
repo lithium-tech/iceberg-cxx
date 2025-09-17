@@ -3,6 +3,7 @@
 #include <chrono>
 #include <deque>
 #include <exception>
+#include <iostream>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -763,8 +764,12 @@ class ScanMetadataBuilder {
 
         int64_t dangling_positional_delete_files = 0;
         for (const auto& pos_delete : layer.positional_delete_entries_) {
-          bool has_stats =
-              pos_delete.min_max_referenced_path_.has_value() && min_data_path.has_value() && max_data_path.has_value();
+          bool has_data = min_data_path.has_value() && max_data_path.has_value();
+          if (!has_data) {
+            ++dangling_positional_delete_files;
+            continue;
+          }
+          bool has_stats = pos_delete.min_max_referenced_path_.has_value();
           if (has_stats) {
             const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
             if (*min_data_path > max_referenced_path || *max_data_path < min_referenced_path) {
