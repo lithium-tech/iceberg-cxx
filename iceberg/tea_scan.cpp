@@ -742,9 +742,9 @@ class ScanMetadataBuilder {
       std::optional<std::string> max_data_path;
 
       // to remove dangling positional delete file, we need to make sure that there are no data files in the range
-      // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers greater
+      // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers less
       // than or equal to X. To find all dangling deletes in one pass, we start from max layer
-      for (auto it = layers.rbegin(); it != layers.rend(); ++it) {
+      for (auto it = layers.begin(); it != layers.end(); ++it) {
         auto& [seqno, layer] = *it;
 
         for (const auto& data_entry : layer.data_entries_) {
@@ -794,7 +794,6 @@ class ScanMetadataBuilder {
         }
       }
 
-      std::reverse(partition.begin(), partition.end());
       if (min_data_path.has_value()) {
         result.partitions.emplace_back(std::move(partition));
       }
