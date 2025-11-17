@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -738,8 +739,13 @@ class ScanMetadataBuilder {
     for (auto& [partition_key, layers] : partitions) {
       ScanMetadata::Partition partition;
 
-      std::optional<std::string> min_data_path;
-      std::optional<std::string> max_data_path;
+      bool is_empty = std::all_of(layers.begin(), layers.end(),
+                                  [](const auto& layer) { return layer.second.data_entries_.empty(); });
+      if (is_empty) {
+        continue;
+      }
+
+      std::set<std::string> data_paths;
 
       // to remove dangling positional delete file, we need to make sure that there are no data files in the range
       // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers less
@@ -748,12 +754,7 @@ class ScanMetadataBuilder {
         auto& [seqno, layer] = *it;
 
         for (const auto& data_entry : layer.data_entries_) {
-          if (!min_data_path.has_value() || *min_data_path > data_entry.path) {
-            min_data_path = data_entry.path;
-          }
-          if (!max_data_path.has_value() || *max_data_path < data_entry.path) {
-            max_data_path = data_entry.path;
-          }
+          data_paths.insert(data_entry.path);
         }
 
         ScanMetadata::Layer result_layer;
@@ -763,15 +764,12 @@ class ScanMetadataBuilder {
 
         int64_t dangling_positional_delete_files = 0;
         for (const auto& pos_delete : layer.positional_delete_entries_) {
-          bool has_data = min_data_path.has_value() && max_data_path.has_value();
-          if (!has_data) {
-            ++dangling_positional_delete_files;
-            continue;
-          }
           bool has_stats = pos_delete.min_max_referenced_path_.has_value();
           if (has_stats) {
             const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
-            if (*min_data_path > max_referenced_path || *max_data_path < min_referenced_path) {
+            auto iter1 = data_paths.lower_bound(min_referenced_path);  // first matching
+            auto iter2 = data_paths.upper_bound(max_referenced_path);  // first non-matching
+            if (iter1 == iter2) {
               ++dangling_positional_delete_files;
               continue;
             }
@@ -798,9 +796,7 @@ class ScanMetadataBuilder {
         }
       }
 
-      if (min_data_path.has_value()) {
-        result.partitions.emplace_back(std::move(partition));
-      }
+      result.partitions.emplace_back(std::move(partition));
     }
 
     return result;
