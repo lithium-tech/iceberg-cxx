@@ -795,6 +795,8 @@ class ScanMetadataBuilder {
           partition.emplace_back(std::move(result_layer));
         }
       }
+
+      result.partitions.emplace_back(std::move(partition));
     }
 
     return result;
