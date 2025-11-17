@@ -739,6 +739,12 @@ class ScanMetadataBuilder {
     for (auto& [partition_key, layers] : partitions) {
       ScanMetadata::Partition partition;
 
+      bool is_empty = std::all_of(layers.begin(), layers.end(),
+                                  [](const auto& layer) { return layer.second.data_entries_.empty(); });
+      if (is_empty) {
+        continue;
+      }
+
       std::set<std::string> data_paths;
 
       // to remove dangling positional delete file, we need to make sure that there are no data files in the range
@@ -788,10 +794,6 @@ class ScanMetadataBuilder {
             !result_layer.equality_delete_entries_.empty()) {
           partition.emplace_back(std::move(result_layer));
         }
-      }
-
-      if (!data_paths.empty()) {
-        result.partitions.emplace_back(std::move(partition));
       }
     }
 
