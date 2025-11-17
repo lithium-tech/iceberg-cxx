@@ -790,7 +790,7 @@ class ScanMetadataBuilder {
         }
       }
 
-      if (min_data_path.has_value()) {
+      if (!data_paths.empty()) {
         result.partitions.emplace_back(std::move(partition));
       }
     }
