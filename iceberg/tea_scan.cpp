@@ -1,5 +1,6 @@
 #include "iceberg/tea_scan.h"
 
+#include <algorithm>
 #include <chrono>
 #include <deque>
 #include <exception>
@@ -736,68 +737,7 @@ class ScanMetadataBuilder {
       }
     }
 
-    for (auto& [partition_key, layers] : partitions) {
-      ScanMetadata::Partition partition;
-
-      bool is_empty = std::all_of(layers.begin(), layers.end(),
-                                  [](const auto& layer) { return layer.second.data_entries_.empty(); });
-      if (is_empty) {
-        continue;
-      }
-
-      std::set<std::string> data_paths;
-
-      // to remove dangling positional delete file, we need to make sure that there are no data files in the range
-      // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers less
-      // than or equal to X. To find all dangling deletes in one pass, we start from max layer
-      for (auto it = layers.begin(); it != layers.end(); ++it) {
-        auto& [seqno, layer] = *it;
-
-        for (const auto& data_entry : layer.data_entries_) {
-          data_paths.insert(data_entry.path);
-        }
-
-        ScanMetadata::Layer result_layer;
-        result_layer.data_entries_ = std::move(layer.data_entries_);
-        result_layer.equality_delete_entries_ = std::move(layer.equality_delete_entries_);
-        // TODO(gmusya): add tests with equality deletes
-
-        int64_t dangling_positional_delete_files = 0;
-        for (const auto& pos_delete : layer.positional_delete_entries_) {
-          bool has_stats = pos_delete.min_max_referenced_path_.has_value();
-          if (has_stats) {
-            const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
-            auto iter1 = data_paths.lower_bound(min_referenced_path);  // first matching
-            auto iter2 = data_paths.upper_bound(max_referenced_path);  // first non-matching
-            if (iter1 == iter2) {
-              ++dangling_positional_delete_files;
-              continue;
-            }
-          }
-          result_layer.positional_delete_entries_.emplace_back(std::move(pos_delete.positional_delete_.path));
-        }
-
-        if (logger_) {
-          auto log_if_not_null = [logger = this->logger_](int64_t value, const std::string& name) {
-            if (value > 0) {
-              logger->Log(std::to_string(value), name);
-            }
-          };
-
-          log_if_not_null(dangling_positional_delete_files, "metrics:plan:dangling_positional_files");
-          log_if_not_null(result_layer.data_entries_.size(), "metrics:plan:data_files");
-          log_if_not_null(result_layer.positional_delete_entries_.size(), "metrics:plan:positional_files");
-          log_if_not_null(result_layer.equality_delete_entries_.size(), "metrics:plan:equality_files");
-        }
-
-        if (!result_layer.data_entries_.empty() || !result_layer.positional_delete_entries_.empty() ||
-            !result_layer.equality_delete_entries_.empty()) {
-          partition.emplace_back(std::move(result_layer));
-        }
-      }
-
-      result.partitions.emplace_back(std::move(partition));
-    }
+    result.partitions = GetPartitions(std::move(partitions), logger_);
 
     return result;
   }
@@ -945,6 +885,98 @@ class ScanMetadataBuilder {
 
     bool Empty() const;
   };
+
+  static std::vector<std::vector<LayerWithExtraInfo>> MapToVec(
+      std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& scan_metadata) {
+    std::vector<std::vector<LayerWithExtraInfo>> result;
+
+    for (auto& [_, partition] : scan_metadata) {
+      std::vector<LayerWithExtraInfo> new_partition;
+      for (auto& [_, layer] : partition) {
+        new_partition.emplace_back(std::move(layer));
+      }
+      result.emplace_back(std::move(new_partition));
+    }
+
+    return result;
+  }
+
+  static std::vector<ScanMetadata::Partition> RemoveDanglingDeletes(
+      std::vector<std::vector<LayerWithExtraInfo>>&& partitions, std::shared_ptr<ILogger> logger) {
+    std::vector<ScanMetadata::Partition> result;
+
+    for (auto& layers : partitions) {
+      ScanMetadata::Partition partition;
+
+      bool is_empty =
+          std::all_of(layers.begin(), layers.end(), [](const auto& layer) { return layer.data_entries_.empty(); });
+      if (is_empty) {
+        continue;
+      }
+
+      std::set<std::string> data_paths;
+
+      // to remove dangling positional delete file, we need to make sure that there are no data files in the range
+      // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers less
+      // than or equal to X. To find all dangling deletes in one pass, we start from max layer
+      for (auto it = layers.begin(); it != layers.end(); ++it) {
+        auto& layer = *it;
+
+        for (const auto& data_entry : layer.data_entries_) {
+          data_paths.insert(data_entry.path);
+        }
+
+        ScanMetadata::Layer result_layer;
+        result_layer.data_entries_ = std::move(layer.data_entries_);
+        result_layer.equality_delete_entries_ = std::move(layer.equality_delete_entries_);
+        // TODO(gmusya): add tests with equality deletes
+
+        int64_t dangling_positional_delete_files = 0;
+        for (const auto& pos_delete : layer.positional_delete_entries_) {
+          bool has_stats = pos_delete.min_max_referenced_path_.has_value();
+          if (has_stats) {
+            const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
+            auto iter1 = data_paths.lower_bound(min_referenced_path);  // first matching
+            auto iter2 = data_paths.upper_bound(max_referenced_path);  // first non-matching
+            if (iter1 == iter2) {
+              ++dangling_positional_delete_files;
+              continue;
+            }
+          }
+          result_layer.positional_delete_entries_.emplace_back(std::move(pos_delete.positional_delete_.path));
+        }
+
+        if (logger) {
+          auto log_if_not_null = [logger](int64_t value, const std::string& name) {
+            if (value > 0) {
+              logger->Log(std::to_string(value), name);
+            }
+          };
+
+          log_if_not_null(dangling_positional_delete_files, "metrics:plan:dangling_positional_files");
+          log_if_not_null(result_layer.data_entries_.size(), "metrics:plan:data_files");
+          log_if_not_null(result_layer.positional_delete_entries_.size(), "metrics:plan:positional_files");
+          log_if_not_null(result_layer.equality_delete_entries_.size(), "metrics:plan:equality_files");
+        }
+
+        if (!result_layer.data_entries_.empty() || !result_layer.positional_delete_entries_.empty() ||
+            !result_layer.equality_delete_entries_.empty()) {
+          partition.emplace_back(std::move(result_layer));
+        }
+      }
+
+      result.emplace_back(std::move(partition));
+    }
+
+    return result;
+  }
+
+  static std::vector<ScanMetadata::Partition> GetPartitions(
+      std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>> partitions, std::shared_ptr<ILogger> logger) {
+    std::vector<std::vector<LayerWithExtraInfo>> meta_as_vec = MapToVec(std::move(partitions));
+
+    return RemoveDanglingDeletes(std::move(meta_as_vec), logger);
+  }
 
   std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>> partitions;
   // if there are k partitions and t global equality delete entries, k * t entries will be created
