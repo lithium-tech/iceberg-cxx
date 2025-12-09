@@ -1,6 +1,5 @@
 #include "iceberg/tea_scan.h"
 
-#include <algorithm>
 #include <chrono>
 #include <deque>
 #include <exception>
