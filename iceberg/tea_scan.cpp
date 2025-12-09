@@ -971,7 +971,8 @@ class ScanMetadataBuilder {
   }
 
   static std::vector<ScanMetadata::Partition> GetPartitions(
-      std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>> partitions, std::shared_ptr<ILogger> logger) {
+      std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& partitions,
+      std::shared_ptr<ILogger> logger) {
     std::vector<std::vector<LayerWithExtraInfo>> meta_as_vec = MapToVec(std::move(partitions));
 
     return RemoveDanglingDeletes(std::move(meta_as_vec), logger);
