@@ -109,7 +109,7 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
       {"s3://warehouse/hour_timestamptz_partitioning/metadata/00002-aa3a65d9-0e43-452c-a96f-2ec0194f0104.metadata.json",
        3, 3, 0},
       {"s3://warehouse/v_20240913/iceberg/metadata/00001-dcd3b13f-b249-4256-9156-0f653f7da773.metadata.json", 2, 3, 0},
-      {"s3://warehouse/prod/db/refdeletes3/metadata/00002-8dbf0bf0-882a-4822-ae9c-ec1c0f34ef6d.metadata.json", 1, 6,
+      {"s3://warehouse/prod/db/refdeletes3/metadata/00002-8dbf0bf0-882a-4822-ae9c-ec1c0f34ef6d.metadata.json", 6, 6,
        6}};
 
   for (const auto& test_info : path_to_expected_partitions_count) {
@@ -268,8 +268,10 @@ TEST(GetScanMetadata, DanglingPositionalDeletes) {
     auto logs = logger->GetLogs();
     std::sort(logs.begin(), logs.end());
 
-    std::vector<std::pair<std::string, std::string>> expected_logs{{"1", "metrics:plan:data_files"},
-                                                                   {"2", "metrics:plan:dangling_positional_files"}};
+    std::vector<std::pair<std::string, std::string>> expected_logs{{"1", "metrics:plan:dangling_positional_files"},
+                                                                   {"1", "metrics:plan:dangling_positional_files"},
+                                                                   {"1", "metrics:plan:data_files"}};
+
     ASSERT_EQ(logs, expected_logs);
   }
 }

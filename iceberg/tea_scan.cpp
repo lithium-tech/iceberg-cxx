@@ -908,7 +908,8 @@ class ScanMetadataBuilder {
     for (const auto& partition : partitions) {
       enum class EventType : uint8_t {
         kStartPositionalDelete = 0,
-        kEndPositionalDelete = 1,
+        kDataFile = 1,
+        kEndPositionalDelete = 2,
       };
 
       struct Event {
@@ -927,6 +928,9 @@ class ScanMetadataBuilder {
           events.emplace_back(
               Event{.type = EventType::kEndPositionalDelete, .path = del.min_max_referenced_path_->second});
         }
+        for (const auto& data : layer.data_entries_) {
+          events.emplace_back(Event{.type = EventType::kDataFile, .path = data.path});
+        }
       }
 
       std::sort(events.begin(), events.end(), [&](const Event& lhs, const Event& rhs) {
@@ -939,12 +943,18 @@ class ScanMetadataBuilder {
         if (balance == 0) {
           group_lower_bounds.emplace_back(event.path);
         }
-        if (event.type == EventType::kStartPositionalDelete) {
-          ++balance;
-        } else {
-          iceberg::Ensure(balance > 0,
-                          std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
-          --balance;
+        switch (event.type) {
+          case EventType::kStartPositionalDelete:
+            ++balance;
+            break;
+          case EventType::kDataFile:
+            // do nothing
+            break;
+          case EventType::kEndPositionalDelete:
+            iceberg::Ensure(balance > 0, std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) +
+                                             "): internal error");
+            --balance;
+            break;
         }
       }
 
@@ -1037,6 +1047,14 @@ class ScanMetadataBuilder {
       bool is_empty =
           std::all_of(layers.begin(), layers.end(), [](const auto& layer) { return layer.data_entries_.empty(); });
       if (is_empty) {
+        if (logger) {
+          int64_t dangling_positional_delete_files = 0;
+          for (auto& elem : layers) {
+            dangling_positional_delete_files += elem.positional_delete_entries_.size();
+          }
+
+          logger->Log(std::to_string(dangling_positional_delete_files), "metrics:plan:dangling_positional_files");
+        }
         continue;
       }
 
@@ -1102,11 +1120,9 @@ class ScanMetadataBuilder {
       std::shared_ptr<ILogger> logger) {
     std::vector<std::vector<LayerWithExtraInfo>> meta_as_vec = MapToVec(std::move(partitions));
 
-#if 0
     if (CanOptimize(meta_as_vec)) {
       meta_as_vec = Optimize(meta_as_vec);
     }
-#endif
 
     return RemoveDanglingDeletes(std::move(meta_as_vec), logger);
   }
