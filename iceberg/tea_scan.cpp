@@ -901,6 +901,18 @@ class ScanMetadataBuilder {
     return result;
   }
 
+  // Optimizer that uses a scanline algorithm to split positional delete files and data files
+  // into non-intersecting groups (buckets).
+  //
+  // This optimization reduces memory usage: instead of loading all delete files at once
+  // (e.g., 1 group with 100 data files and 100 deletes), we can process smaller independent
+  // groups sequentially (e.g., 100 groups with 1 data file and 1 delete each).
+  // Additionally, if only a subset of data files needs to be read, we can skip loading
+  // positional delete files from buckets that are not accessed.
+  //
+  // Key idea: Positional deletes define ranges [min_referenced_path, max_referenced_path].
+  // Data files are points on the path axis. The algorithm finds regions where no delete
+  // ranges are "active", using these boundaries to create independent buckets.
   class PositonalDeleteOptimizer {
    public:
     static bool CanOptimize(const std::vector<std::vector<LayerWithExtraInfo>>& partitions) {
@@ -943,6 +955,9 @@ class ScanMetadataBuilder {
     }
 
    private:
+    // Events for the scanline algorithm.
+    // Event ordering (start < data file < end) is critical: when paths are equal,
+    // we must start delete ranges before processing data files, and end ranges after.
     enum class EventType : uint8_t {
       kStartPositionalDelete = 0,
       kDataFile = 1,
@@ -954,6 +969,9 @@ class ScanMetadataBuilder {
       std::string path;
     };
 
+    // Convert partition data into scanline events.
+    // Each delete range [min, max] generates two events (start and end).
+    // Each data file generates one point event.
     static std::vector<Event> GetEventsInPartition(const std::vector<LayerWithExtraInfo>& partition) {
       std::vector<Event> events;
       for (const auto& layer : partition) {
@@ -974,25 +992,56 @@ class ScanMetadataBuilder {
       return events;
     }
 
+    // Sort events by path, then by type (to ensure correct event ordering at equal paths).
     static void SortEvents(std::vector<Event>& events) {
       std::sort(events.begin(), events.end(), [&](const Event& lhs, const Event& rhs) {
         return std::tie(lhs.path, lhs.type) < std::tie(rhs.path, rhs.type);
       });
     }
 
+    static std::vector<std::string> FindBucketLowerBounds(const std::vector<LayerWithExtraInfo>& partition) {
+      std::vector<Event> events = GetEventsInPartition(partition);
+      SortEvents(events);
+
+      return FindBucketLowerBounds(events);
+    }
+
+    // Core scanline algorithm: find bucket boundaries where no delete ranges overlap.
+    //
+    // Uses a "balance" counter tracking active delete ranges (like bracket matching):
+    // - kStartPositionalDelete: increment balance (opening bracket)
+    // - kEndPositionalDelete: decrement balance (closing bracket)
+    // - kDataFile: no change to balance
+    //
+    // When balance == 0, no delete ranges are active, so we can start a new bucket.
+    // This creates non-intersecting groups: files in different buckets have no common deletes.
+    //
+    // Example:
+    //   Input:
+    //     Delete ranges: Del([A-C]), Del([E-G])
+    //     Data files: Data(B), Data(D), Data(F)
+    //   After sorting events:
+    //     Start[A], B, End[C], D, Start[E], F, End[G]
+    //   Bucket boundaries:
+    //     A, D, E
+    //   Result (computed by RedistributeDataIntoBuckets):
+    //     Bucket[A]: [Data(B), Del([A-C])]
+    //     Bucket[D]: [Data(D)]
+    //     Bucket[E]: [Data(F), Del([E-G])]
     static std::vector<std::string> FindBucketLowerBounds(const std::vector<Event>& events) {
       uint64_t balance = 0;
       std::vector<std::string> bucket_lower_bounds;
+
       for (const auto& event : events) {
         if (balance == 0) {
           bucket_lower_bounds.emplace_back(event.path);
         }
+
         switch (event.type) {
           case EventType::kStartPositionalDelete:
             ++balance;
             break;
           case EventType::kDataFile:
-            // do nothing
             break;
           case EventType::kEndPositionalDelete:
             iceberg::Ensure(balance > 0, std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) +
@@ -1031,7 +1080,8 @@ class ScanMetadataBuilder {
       bucket.back().positional_delete_entries_.emplace_back(std::move(del));
     }
 
-    static std::vector<std::vector<LayerWithExtraInfo>> SplitDataIntoBuckets(
+    // Distribute data and delete files into buckets based on computed boundaries.
+    static std::vector<std::vector<LayerWithExtraInfo>> RedistributeDataIntoBuckets(
         const std::vector<std::string>& bucket_lower_bounds, const std::vector<LayerWithExtraInfo>& partition) {
       const size_t groups = bucket_lower_bounds.size();
       std::vector<std::vector<LayerWithExtraInfo>> new_partitions(groups);
@@ -1041,6 +1091,7 @@ class ScanMetadataBuilder {
           size_t group = CalculateBucketByPath(bucket_lower_bounds, data.path);
           AppendDataFileToBucket(new_partitions[group], data);
         }
+
         for (const auto& del : layer.positional_delete_entries_) {
           const auto& [min, max] = del.min_max_referenced_path_.value();
           size_t bucket_1 = CalculateBucketByPath(bucket_lower_bounds, min);
@@ -1058,12 +1109,9 @@ class ScanMetadataBuilder {
 
     static std::vector<std::vector<LayerWithExtraInfo>> OptimizePartition(
         const std::vector<LayerWithExtraInfo>& partition) {
-      std::vector<Event> events = GetEventsInPartition(partition);
-      SortEvents(events);
+      std::vector<std::string> bucket_lower_bounds = FindBucketLowerBounds(partition);
 
-      std::vector<std::string> bucket_lower_bounds = FindBucketLowerBounds(events);
-
-      return SplitDataIntoBuckets(bucket_lower_bounds, partition);
+      return RedistributeDataIntoBuckets(bucket_lower_bounds, partition);
     }
   };
 
