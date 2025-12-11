@@ -136,6 +136,36 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
   }
 }
 
+TEST(GetScanMetadata, DeletesGranularity) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  const std::string meta_path =
+      "s3://warehouse/granular_deletes/metadata/00005-0275caad-4030-4bd9-938e-16cf762abcfb.metadata.json";
+  constexpr int32_t kExpectedPartitions = 2;
+  constexpr int32_t kExpectedFilesInPartition = 1;
+  constexpr int32_t kExpectedDeletesInPartition = 1;
+
+  for (const bool use_avro_reader_schema : {false, true}) {
+    auto maybe_scan_metadata = ice_tea::GetScanMetadata(
+        fs, meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, 0);
+    ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK());
+    EXPECT_EQ(maybe_scan_metadata->partitions.size(), kExpectedPartitions);
+    for (auto& p : maybe_scan_metadata->partitions) {
+      size_t data_entries = 0;
+      size_t del_entries = 0;
+
+      for (auto& l : p) {
+        data_entries += l.data_entries_.size();
+        del_entries += l.positional_delete_entries_.size();
+      }
+
+      EXPECT_EQ(data_entries, kExpectedFilesInPartition);
+      EXPECT_EQ(del_entries, kExpectedDeletesInPartition);
+    }
+  }
+}
+
 TEST(GetScanMetadata, WithNoMatchingPartitionSpec) {
   std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
   fs = std::make_shared<ReplacingFilesystem>(fs);

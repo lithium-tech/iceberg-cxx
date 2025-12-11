@@ -1,5 +1,6 @@
 #include "iceberg/tea_scan.h"
 
+#include <algorithm>
 #include <chrono>
 #include <deque>
 #include <exception>
@@ -900,6 +901,132 @@ class ScanMetadataBuilder {
     return result;
   }
 
+  static std::vector<std::vector<LayerWithExtraInfo>> Optimize(
+      const std::vector<std::vector<LayerWithExtraInfo>>& partitions) {
+    std::vector<std::vector<LayerWithExtraInfo>> result;
+
+    for (const auto& partition : partitions) {
+      enum class EventType : uint8_t {
+        kStartPositionalDelete = 0,
+        kEndPositionalDelete = 1,
+      };
+
+      struct Event {
+        EventType type;
+        std::string path;
+      };
+
+      std::vector<Event> events;
+      for (const auto& layer : partition) {
+        for (const auto& del : layer.positional_delete_entries_) {
+          iceberg::Ensure(del.min_max_referenced_path_.has_value(),
+                          std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+
+          events.emplace_back(
+              Event{.type = EventType::kStartPositionalDelete, .path = del.min_max_referenced_path_->first});
+          events.emplace_back(
+              Event{.type = EventType::kEndPositionalDelete, .path = del.min_max_referenced_path_->second});
+        }
+      }
+
+      std::sort(events.begin(), events.end(), [&](const Event& lhs, const Event& rhs) {
+        return std::tie(lhs.path, lhs.type) < std::tie(rhs.path, rhs.type);
+      });
+
+      uint64_t balance = 0;
+      std::vector<std::string> group_lower_bounds;
+      for (const auto& event : events) {
+        if (balance == 0) {
+          group_lower_bounds.emplace_back(event.path);
+        }
+        if (event.type == EventType::kStartPositionalDelete) {
+          ++balance;
+        } else {
+          iceberg::Ensure(balance > 0,
+                          std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+          --balance;
+        }
+      }
+
+      iceberg::Ensure(balance == 0,
+                      std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+
+      const size_t groups = group_lower_bounds.size();
+      std::vector<std::vector<LayerWithExtraInfo>> new_partitions(groups);
+
+      auto calculate_group = [&](const std::string& path) -> size_t {
+        auto it = std::upper_bound(group_lower_bounds.begin(), group_lower_bounds.end(), path);
+        iceberg::Ensure(it != group_lower_bounds.begin(),
+                        std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+        --it;
+
+        return it - group_lower_bounds.begin();
+      };
+
+      auto append_data_to_group = [&](std::vector<LayerWithExtraInfo>& group, DataEntry data) {
+        if (group.empty() || !group.back().positional_delete_entries_.empty()) {
+          group.emplace_back();
+        }
+        group.back().data_entries_.emplace_back(std::move(data));
+      };
+
+      auto append_positional_delete_to_group = [&](std::vector<LayerWithExtraInfo>& group,
+                                                   PositionalDeleteWithExtraInfo del) {
+        if (group.empty()) {
+          group.emplace_back();
+        }
+        group.back().positional_delete_entries_.emplace_back(std::move(del));
+      };
+
+      for (const auto& layer : partition) {
+        for (const auto& data : layer.data_entries_) {
+          size_t group = calculate_group(data.path);
+          append_data_to_group(new_partitions[group], data);
+        }
+        for (const auto& del : layer.positional_delete_entries_) {
+          const auto& [min, max] = del.min_max_referenced_path_.value();
+          size_t group_1 = calculate_group(min);
+          size_t group_2 = calculate_group(max);
+
+          iceberg::Ensure(group_1 == group_2,
+                          std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+
+          append_positional_delete_to_group(new_partitions[group_1], del);
+        }
+      }
+
+      for (auto& group : new_partitions) {
+        result.emplace_back(std::move(group));
+      }
+    }
+
+    return result;
+  }
+
+  static bool CanOptimize(const std::vector<std::vector<LayerWithExtraInfo>>& partitions) {
+    bool has_positional_delete = false;
+    bool has_positional_delete_without_stats = false;
+    bool has_equality_delete = false;
+    for (const auto& layers : partitions) {
+      for (const auto& layer : layers) {
+        if (!layer.equality_delete_entries_.empty()) {
+          has_equality_delete = true;
+        }
+        if (!layer.positional_delete_entries_.empty()) {
+          has_positional_delete = true;
+
+          for (const auto& entry : layer.positional_delete_entries_) {
+            if (!entry.min_max_referenced_path_.has_value()) {
+              has_positional_delete_without_stats = true;
+            }
+          }
+        }
+      }
+    }
+
+    return has_positional_delete && !has_positional_delete_without_stats && !has_equality_delete;
+  }
+
   static std::vector<ScanMetadata::Partition> RemoveDanglingDeletes(
       std::vector<std::vector<LayerWithExtraInfo>>&& partitions, std::shared_ptr<ILogger> logger) {
     std::vector<ScanMetadata::Partition> result;
@@ -974,6 +1101,12 @@ class ScanMetadataBuilder {
       std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& partitions,
       std::shared_ptr<ILogger> logger) {
     std::vector<std::vector<LayerWithExtraInfo>> meta_as_vec = MapToVec(std::move(partitions));
+
+#if 0
+    if (CanOptimize(meta_as_vec)) {
+      meta_as_vec = Optimize(meta_as_vec);
+    }
+#endif
 
     return RemoveDanglingDeletes(std::move(meta_as_vec), logger);
   }
