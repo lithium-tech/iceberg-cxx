@@ -109,7 +109,7 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
       {"s3://warehouse/hour_timestamptz_partitioning/metadata/00002-aa3a65d9-0e43-452c-a96f-2ec0194f0104.metadata.json",
        3, 3, 0},
       {"s3://warehouse/v_20240913/iceberg/metadata/00001-dcd3b13f-b249-4256-9156-0f653f7da773.metadata.json", 2, 3, 0},
-      {"s3://warehouse/prod/db/refdeletes3/metadata/00002-8dbf0bf0-882a-4822-ae9c-ec1c0f34ef6d.metadata.json", 1, 6,
+      {"s3://warehouse/prod/db/refdeletes3/metadata/00002-8dbf0bf0-882a-4822-ae9c-ec1c0f34ef6d.metadata.json", 6, 6,
        6}};
 
   for (const auto& test_info : path_to_expected_partitions_count) {
@@ -132,6 +132,36 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
         EXPECT_EQ(data_entries, test_info.data_entries) << test_info.meta_path;
         EXPECT_EQ(del_entries, test_info.delete_entries) << test_info.meta_path;
       }
+    }
+  }
+}
+
+TEST(GetScanMetadata, DeletesGranularity) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  const std::string meta_path =
+      "s3://warehouse/granular_deletes/metadata/00005-0275caad-4030-4bd9-938e-16cf762abcfb.metadata.json";
+  constexpr int32_t kExpectedPartitions = 2;
+  constexpr int32_t kExpectedFilesInPartition = 1;
+  constexpr int32_t kExpectedDeletesInPartition = 1;
+
+  for (const bool use_avro_reader_schema : {false, true}) {
+    auto maybe_scan_metadata = ice_tea::GetScanMetadata(
+        fs, meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, 0);
+    ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK());
+    EXPECT_EQ(maybe_scan_metadata->partitions.size(), kExpectedPartitions);
+    for (auto& p : maybe_scan_metadata->partitions) {
+      size_t data_entries = 0;
+      size_t del_entries = 0;
+
+      for (auto& l : p) {
+        data_entries += l.data_entries_.size();
+        del_entries += l.positional_delete_entries_.size();
+      }
+
+      EXPECT_EQ(data_entries, kExpectedFilesInPartition);
+      EXPECT_EQ(del_entries, kExpectedDeletesInPartition);
     }
   }
 }
@@ -238,8 +268,10 @@ TEST(GetScanMetadata, DanglingPositionalDeletes) {
     auto logs = logger->GetLogs();
     std::sort(logs.begin(), logs.end());
 
-    std::vector<std::pair<std::string, std::string>> expected_logs{{"1", "metrics:plan:data_files"},
-                                                                   {"2", "metrics:plan:dangling_positional_files"}};
+    std::vector<std::pair<std::string, std::string>> expected_logs{{"1", "metrics:plan:dangling_positional_files"},
+                                                                   {"1", "metrics:plan:dangling_positional_files"},
+                                                                   {"1", "metrics:plan:data_files"}};
+
     ASSERT_EQ(logs, expected_logs);
   }
 }
