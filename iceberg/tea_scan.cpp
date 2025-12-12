@@ -1071,7 +1071,7 @@ class ScanMetadataBuilder {
     static void AppendDataFileToBucket(std::vector<LayerWithExtraInfo>& bucket, DataEntry data) {
       // Delete files in layer X are applied to data files in layers <= X
       // Already processed delete files must NOT be applied to the new data file
-      // If the last layer contains deleted files, a new layer must be created for the current file
+      // If the last layer contains delete files, a new layer must be created for the current file
       if (bucket.empty() || !bucket.back().positional_delete_entries_.empty()) {
         bucket.emplace_back();
       }
