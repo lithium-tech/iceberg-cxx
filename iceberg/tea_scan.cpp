@@ -955,8 +955,8 @@ class ScanMetadataBuilder {
 
     class Event {
      public:
-      EventType type;
-      std::string path;
+      const EventType& event_type() const { return type_; };
+      const std::string& path() const { return path_; };
 
       static std::pair<Event, Event> CreateFromDelete(const PositionalDeleteWithExtraInfo& del) {
         iceberg::Ensure(del.min_max_referenced_path_.has_value(),
@@ -971,7 +971,10 @@ class ScanMetadataBuilder {
       static Event CreateFromData(const DataEntry& data) { return Event(EventType::kDataFile, data.path); }
 
      private:
-      Event(EventType t, std::string p) : type(t), path(std::move(p)) {}
+      Event(EventType t, std::string p) : type_(t), path_(std::move(p)) {}
+
+      EventType type_;
+      std::string path_;
     };
 
     // Convert partition data into scanline events.
@@ -996,7 +999,7 @@ class ScanMetadataBuilder {
     // Sort events by path, then by type (to ensure correct event ordering at equal paths).
     static void SortEvents(std::vector<Event>& events) {
       std::sort(events.begin(), events.end(), [&](const Event& lhs, const Event& rhs) {
-        return std::tie(lhs.path, lhs.type) < std::tie(rhs.path, rhs.type);
+        return std::tie(lhs.path(), lhs.event_type()) < std::tie(rhs.path(), rhs.event_type());
       });
     }
 
@@ -1035,10 +1038,10 @@ class ScanMetadataBuilder {
 
       for (const auto& event : events) {
         if (balance == 0) {
-          bucket_lower_bounds.emplace_back(event.path);
+          bucket_lower_bounds.emplace_back(event.path());
         }
 
-        switch (event.type) {
+        switch (event.event_type()) {
           case EventType::kStartPositionalDelete:
             ++balance;
             break;
