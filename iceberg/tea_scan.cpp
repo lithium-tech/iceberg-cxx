@@ -944,36 +944,41 @@ class ScanMetadataBuilder {
     }
 
    private:
-    // Events for the scanline algorithm.
-    // Event ordering (start < data file < end) is critical: when paths are equal,
-    // we must start delete ranges before processing data files, and end ranges after.
-    enum class EventType : uint8_t {
-      kStartPositionalDelete = 0,
-      kDataFile = 1,
-      kEndPositionalDelete = 2,
-    };
-
     class Event {
      public:
-      const EventType& event_type() const { return type_; };
+      // Events for the scanline algorithm.
+      // Event ordering (start < data file < end) is critical: when paths are equal,
+      // we must start delete ranges before processing data files, and end ranges after.
+      enum class Type : uint8_t {
+        kStartPositionalDelete = 0,
+        kDataFile = 1,
+        kEndPositionalDelete = 2,
+      };
+
+      const Type& type() const { return type_; };
       const std::string& path() const { return path_; };
 
       static std::pair<Event, Event> CreateFromDelete(const PositionalDeleteWithExtraInfo& del) {
         iceberg::Ensure(del.min_max_referenced_path_.has_value(),
                         std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
 
-        Event start(EventType::kStartPositionalDelete, del.min_max_referenced_path_->first);
-        Event end(EventType::kEndPositionalDelete, del.min_max_referenced_path_->second);
+        Event start(Type::kStartPositionalDelete, del.min_max_referenced_path_->first);
+        Event end(Type::kEndPositionalDelete, del.min_max_referenced_path_->second);
 
         return std::make_pair(std::move(start), std::move(end));
       }
 
-      static Event CreateFromData(const DataEntry& data) { return Event(EventType::kDataFile, data.path); }
+      static Event CreateFromData(const DataEntry& data) { return Event(Type::kDataFile, data.path); }
+
+      // compare by path, then by type (to ensure correct event ordering at equal paths).
+      bool operator<(const Event& other) const {
+        return std::tie(path(), type()) < std::tie(other.path(), other.type());
+      }
 
      private:
-      Event(EventType t, std::string p) : type_(t), path_(std::move(p)) {}
+      Event(Type t, std::string p) : type_(t), path_(std::move(p)) {}
 
-      EventType type_;
+      Type type_;
       std::string path_;
     };
 
@@ -996,16 +1001,9 @@ class ScanMetadataBuilder {
       return events;
     }
 
-    // Sort events by path, then by type (to ensure correct event ordering at equal paths).
-    static void SortEvents(std::vector<Event>& events) {
-      std::sort(events.begin(), events.end(), [&](const Event& lhs, const Event& rhs) {
-        return std::tie(lhs.path(), lhs.event_type()) < std::tie(rhs.path(), rhs.event_type());
-      });
-    }
-
     static std::vector<std::string> FindBucketLowerBounds(const std::vector<LayerWithExtraInfo>& partition) {
       std::vector<Event> events = GetEventsInPartition(partition);
-      SortEvents(events);
+      std::sort(events.begin(), events.end());
 
       return FindBucketLowerBounds(events);
     }
@@ -1041,13 +1039,13 @@ class ScanMetadataBuilder {
           bucket_lower_bounds.emplace_back(event.path());
         }
 
-        switch (event.event_type()) {
-          case EventType::kStartPositionalDelete:
+        switch (event.type()) {
+          case Event::Type::kStartPositionalDelete:
             ++balance;
             break;
-          case EventType::kDataFile:
+          case Event::Type::kDataFile:
             break;
-          case EventType::kEndPositionalDelete:
+          case Event::Type::kEndPositionalDelete:
             iceberg::Ensure(balance > 0, std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) +
                                              "): internal error");
             --balance;
