@@ -916,38 +916,27 @@ class ScanMetadataBuilder {
   class PositonalDeleteOptimizer {
    public:
     static bool CanOptimize(const std::vector<std::vector<LayerWithExtraInfo>>& partitions) {
-      bool has_positional_delete = false;
-      bool has_positional_delete_without_stats = false;
-      bool has_equality_delete = false;
-      for (const auto& layers : partitions) {
-        for (const auto& layer : layers) {
-          if (!layer.equality_delete_entries_.empty()) {
-            has_equality_delete = true;
-          }
-          if (!layer.positional_delete_entries_.empty()) {
-            has_positional_delete = true;
-
-            for (const auto& entry : layer.positional_delete_entries_) {
-              if (!entry.min_max_referenced_path_.has_value()) {
-                has_positional_delete_without_stats = true;
-              }
-            }
-          }
+      for (const auto& partition : partitions) {
+        if (CanOptimizePartition(partition)) {
+          return true;
         }
       }
 
-      return has_positional_delete && !has_positional_delete_without_stats && !has_equality_delete;
+      return false;
     }
 
     static std::vector<std::vector<LayerWithExtraInfo>> Optimize(
-        const std::vector<std::vector<LayerWithExtraInfo>>& partitions) {
+        std::vector<std::vector<LayerWithExtraInfo>>&& partitions) {
       std::vector<std::vector<LayerWithExtraInfo>> result;
 
-      for (const auto& partition : partitions) {
-        std::vector<std::vector<LayerWithExtraInfo>> new_partitions = OptimizePartition(partition);
-
-        for (auto& group : new_partitions) {
-          result.emplace_back(std::move(group));
+      for (auto& partition : partitions) {
+        if (CanOptimizePartition(partition)) {
+          std::vector<std::vector<LayerWithExtraInfo>> new_partitions = OptimizePartition(std::move(partition));
+          for (auto& group : new_partitions) {
+            result.emplace_back(std::move(group));
+          }
+        } else {
+          result.emplace_back(std::move(partition));
         }
       }
 
@@ -1082,14 +1071,14 @@ class ScanMetadataBuilder {
 
     // Distribute data and delete files into buckets based on computed boundaries.
     static std::vector<std::vector<LayerWithExtraInfo>> RedistributeDataIntoBuckets(
-        const std::vector<std::string>& bucket_lower_bounds, const std::vector<LayerWithExtraInfo>& partition) {
+        const std::vector<std::string>& bucket_lower_bounds, std::vector<LayerWithExtraInfo>&& partition) {
       const size_t groups = bucket_lower_bounds.size();
       std::vector<std::vector<LayerWithExtraInfo>> new_partitions(groups);
 
-      for (const auto& layer : partition) {
-        for (const auto& data : layer.data_entries_) {
+      for (auto& layer : partition) {
+        for (auto& data : layer.data_entries_) {
           size_t group = CalculateBucketByPath(bucket_lower_bounds, data.path);
-          AppendDataFileToBucket(new_partitions[group], data);
+          AppendDataFileToBucket(new_partitions[group], std::move(data));
         }
 
         for (const auto& del : layer.positional_delete_entries_) {
@@ -1100,18 +1089,40 @@ class ScanMetadataBuilder {
           iceberg::Ensure(bucket_1 == bucket_2,
                           std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
 
-          AppendDeleteFileToBucket(new_partitions[bucket_1], del);
+          AppendDeleteFileToBucket(new_partitions[bucket_1], std::move(del));
         }
       }
 
       return new_partitions;
     }
 
-    static std::vector<std::vector<LayerWithExtraInfo>> OptimizePartition(
-        const std::vector<LayerWithExtraInfo>& partition) {
+    static bool CanOptimizePartition(const std::vector<LayerWithExtraInfo>& partitions) {
+      bool has_positional_delete = false;
+      bool has_positional_delete_without_stats = false;
+      bool has_equality_delete = false;
+
+      for (const auto& layer : partitions) {
+        if (!layer.equality_delete_entries_.empty()) {
+          has_equality_delete = true;
+        }
+        if (!layer.positional_delete_entries_.empty()) {
+          has_positional_delete = true;
+
+          for (const auto& entry : layer.positional_delete_entries_) {
+            if (!entry.min_max_referenced_path_.has_value()) {
+              has_positional_delete_without_stats = true;
+            }
+          }
+        }
+      }
+
+      return has_positional_delete && !has_positional_delete_without_stats && !has_equality_delete;
+    }
+
+    static std::vector<std::vector<LayerWithExtraInfo>> OptimizePartition(std::vector<LayerWithExtraInfo>&& partition) {
       std::vector<std::string> bucket_lower_bounds = FindBucketLowerBounds(partition);
 
-      return RedistributeDataIntoBuckets(bucket_lower_bounds, partition);
+      return RedistributeDataIntoBuckets(bucket_lower_bounds, std::move(partition));
     }
   };
 
@@ -1199,7 +1210,7 @@ class ScanMetadataBuilder {
     std::vector<std::vector<LayerWithExtraInfo>> meta_as_vec = MapToVec(std::move(partitions));
 
     if (PositonalDeleteOptimizer::CanOptimize(meta_as_vec)) {
-      meta_as_vec = PositonalDeleteOptimizer::Optimize(meta_as_vec);
+      meta_as_vec = PositonalDeleteOptimizer::Optimize(std::move(meta_as_vec));
     }
 
     return RemoveDanglingDeletes(std::move(meta_as_vec), logger);
