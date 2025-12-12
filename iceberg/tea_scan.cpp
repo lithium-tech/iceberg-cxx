@@ -953,9 +953,25 @@ class ScanMetadataBuilder {
       kEndPositionalDelete = 2,
     };
 
-    struct Event {
+    class Event {
+     public:
       EventType type;
       std::string path;
+
+      static std::pair<Event, Event> CreateFromDelete(const PositionalDeleteWithExtraInfo& del) {
+        iceberg::Ensure(del.min_max_referenced_path_.has_value(),
+                        std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+
+        Event start(EventType::kStartPositionalDelete, del.min_max_referenced_path_->first);
+        Event end(EventType::kEndPositionalDelete, del.min_max_referenced_path_->second);
+
+        return std::make_pair(std::move(start), std::move(end));
+      }
+
+      static Event CreateFromData(const DataEntry& data) { return Event(EventType::kDataFile, data.path); }
+
+     private:
+      Event(EventType t, std::string p) : type(t), path(std::move(p)) {}
     };
 
     // Convert partition data into scanline events.
@@ -965,16 +981,12 @@ class ScanMetadataBuilder {
       std::vector<Event> events;
       for (const auto& layer : partition) {
         for (const auto& del : layer.positional_delete_entries_) {
-          iceberg::Ensure(del.min_max_referenced_path_.has_value(),
-                          std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
-
-          events.emplace_back(
-              Event{.type = EventType::kStartPositionalDelete, .path = del.min_max_referenced_path_->first});
-          events.emplace_back(
-              Event{.type = EventType::kEndPositionalDelete, .path = del.min_max_referenced_path_->second});
+          auto [start, end] = Event::CreateFromDelete(del);
+          events.emplace_back(std::move(start));
+          events.emplace_back(std::move(end));
         }
         for (const auto& data : layer.data_entries_) {
-          events.emplace_back(Event{.type = EventType::kDataFile, .path = data.path});
+          events.emplace_back(Event::CreateFromData(data));
         }
       }
 
