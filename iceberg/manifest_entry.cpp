@@ -937,11 +937,14 @@ void ValidatePartitionSpec(const std::vector<PartitionKeyField>& partition_spec,
 class ManifestEntryStream : public IcebergEntriesStream {
  public:
   ManifestEntryStream(std::string content, const std::vector<PartitionKeyField>& partition_spec,
-                      const ManifestEntryDeserializerConfig& config, bool use_reader_schema)
+                      const ManifestEntryDeserializerConfig& config, bool use_reader_schema,
+                      bool validate_partition_spec)
       : input_(std::move(content)),
         data_file_reader_(MakeAvroReader(input_, partition_spec, config, use_reader_schema)),
         deserializer_(config) {
-    ValidatePartitionSpec(partition_spec, data_file_reader_.dataSchema().root());
+    if (validate_partition_spec || config.datafile_config.extract_partition_tuple) {
+      ValidatePartitionSpec(partition_spec, data_file_reader_.dataSchema().root());
+    }
   }
 
   std::optional<ManifestEntry> ReadNext() override {
@@ -981,8 +984,9 @@ namespace make {
 std::shared_ptr<IcebergEntriesStream> ManifestEntriesStream(std::string data,
                                                             const std::vector<PartitionKeyField>& partition_spec,
                                                             const ManifestEntryDeserializerConfig& config,
-                                                            bool use_reader_schema) {
-  return std::make_shared<ManifestEntryStream>(std::move(data), partition_spec, config, use_reader_schema);
+                                                            bool use_reader_schema, bool validate_partition_spec) {
+  return std::make_shared<ManifestEntryStream>(std::move(data), partition_spec, config, use_reader_schema,
+                                               validate_partition_spec);
 }
 }  // namespace make
 
