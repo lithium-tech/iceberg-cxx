@@ -853,6 +853,9 @@ TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_,
       default_sort_order_id(default_sort_order_id_),
       refs(std::move(refs_)),
       statistics(std::move(statistics_)) {
+  if (current_snapshot_id == -1) {
+    current_snapshot_id = std::nullopt;
+  }
   DefaultChecker default_checker;
   default_checker.Check(*this);
 }
@@ -877,20 +880,8 @@ std::string TableMetadataV2::GetCurrentManifestListPathOrFail() const {
 }
 
 std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
-  Ensure(current_snapshot_id.has_value() && !snapshots.empty(), std::string(__FUNCTION__) + ": no current snapshot");
-
-  std::optional<int64_t> schema_id;
-  for (const auto& snapshot : snapshots) {
-    if (snapshot->snapshot_id == current_snapshot_id.value()) {
-      Ensure(snapshot->schema_id.has_value(), std::string(__FUNCTION__) + ": no schema id");
-
-      schema_id = snapshot->schema_id.value();
-    }
-  }
-  Ensure(schema_id.has_value(), std::string(__FUNCTION__) + ": no current snapshot");
-
   for (const auto& schema : schemas) {
-    if (schema->SchemaId() == schema_id.value()) {
+    if (schema->SchemaId() == current_schema_id) {
       return schema;
     }
   }
