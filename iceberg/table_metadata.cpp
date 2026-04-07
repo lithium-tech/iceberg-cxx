@@ -853,6 +853,11 @@ TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_,
       default_sort_order_id(default_sort_order_id_),
       refs(std::move(refs_)),
       statistics(std::move(statistics_)) {
+  // https://iceberg.apache.org/spec/#assignment-of-snapshot-ids-and-current-snapshot-id
+  // Java writes -1 for "no current snapshot" with V1 and V2 tables and considers this equivalent to omitted or null.
+  // This has never been formalized in the spec, but for compatibility, other implementations can accept -1 as null.
+  // Java will no longer write -1 and will use null for "no current snapshot" for all tables with a version greater than
+  // or equal to V3
   if (current_snapshot_id == -1) {
     current_snapshot_id = std::nullopt;
   }
