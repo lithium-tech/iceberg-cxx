@@ -985,7 +985,8 @@ std::shared_ptr<IcebergEntriesStream> ManifestEntriesStream(std::string data,
                                                             const std::vector<PartitionKeyField>& partition_spec,
                                                             const ManifestEntryDeserializerConfig& config,
                                                             bool use_reader_schema, bool validate_partition_spec) {
-  return std::make_shared<ManifestEntryStream>(std::move(data), partition_spec, config, use_reader_schema, validate_partition_spec);
+  return std::make_shared<ManifestEntryStream>(std::move(data), partition_spec, config, use_reader_schema,
+                                               validate_partition_spec);
 }
 }  // namespace make
 
