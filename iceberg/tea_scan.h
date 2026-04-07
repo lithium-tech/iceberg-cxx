@@ -93,6 +93,11 @@ struct GetScanMetadataConfig {
   ManifestEntryDeserializerConfig manifest_entry_deserializer_config;
 };
 
+std::vector<bool> FilterManifests(std::shared_ptr<filter::StatsFilter> stats_filter,
+                                  std::shared_ptr<iceberg::Schema> schema,
+                                  const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
+                                  const std::vector<ManifestFile>& manifest_metadatas);
+
 // threads_num = 0 is usual GetScanMetadata mode, others are multithreaded
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
