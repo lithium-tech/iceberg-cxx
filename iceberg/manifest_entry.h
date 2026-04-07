@@ -217,7 +217,7 @@ namespace make {
 std::shared_ptr<IcebergEntriesStream> ManifestEntriesStream(std::string data,
                                                             const std::vector<PartitionKeyField>& partition_spec,
                                                             const ManifestEntryDeserializerConfig& config = {},
-                                                            bool use_reader_schema = true);
+                                                            bool use_reader_schema = true, bool validate_partition_spec = true);
 }
 
 Manifest ReadManifestEntries(std::istream& istream, const std::vector<PartitionKeyField>& partition_spec,
