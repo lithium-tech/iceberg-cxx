@@ -765,4 +765,53 @@ TEST(Metadata, Statistics) {
   EXPECT_EQ(statistics.key_metadata.has_value(), false);
 }
 
+TEST(Metadata, EmptyTable) {
+  std::ifstream input("warehouse/empty/empty/metadata/00000-80089c7c-cfe3-4279-a864-ef65495ba43b.metadata.json");
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(metadata);
+
+  EXPECT_EQ(metadata->table_uuid, "83d399af-a71f-4a31-8625-a39c7e97953e");
+  EXPECT_EQ(metadata->location, "s3://warehouse/empty/empty");
+  EXPECT_EQ(metadata->last_sequence_number, 0);
+  EXPECT_EQ(metadata->last_column_id, 2);
+
+  EXPECT_FALSE(metadata->current_snapshot_id.has_value());
+
+  EXPECT_TRUE(metadata->snapshots.empty());
+
+  EXPECT_EQ(metadata->current_schema_id, 0);
+  ASSERT_EQ(metadata->schemas.size(), 1);
+
+  auto schema = metadata->GetCurrentSchema();
+  ASSERT_TRUE(schema);
+  EXPECT_EQ(schema->SchemaId(), 0);
+
+  const auto& columns = schema->Columns();
+  ASSERT_EQ(columns.size(), 2);
+
+  EXPECT_EQ(columns[0].field_id, 1);
+  EXPECT_EQ(columns[0].name, "a");
+  EXPECT_FALSE(columns[0].is_required);
+  ASSERT_TRUE(columns[0].type->IsPrimitiveType());
+  EXPECT_EQ(columns[0].type->TypeId(), iceberg::TypeID::kLong);
+
+  EXPECT_EQ(columns[1].field_id, 2);
+  EXPECT_EQ(columns[1].name, "b");
+  EXPECT_FALSE(columns[1].is_required);
+  ASSERT_TRUE(columns[1].type->IsPrimitiveType());
+  EXPECT_EQ(columns[1].type->TypeId(), iceberg::TypeID::kLong);
+
+  ASSERT_EQ(metadata->partition_specs.size(), 1);
+  EXPECT_EQ(metadata->partition_specs[0]->spec_id, 0);
+  EXPECT_TRUE(metadata->partition_specs[0]->fields.empty());
+
+  ASSERT_EQ(metadata->sort_orders.size(), 1);
+  EXPECT_EQ(metadata->sort_orders[0]->order_id, 0);
+  EXPECT_TRUE(metadata->sort_orders[0]->fields.empty());
+  EXPECT_EQ(metadata->default_sort_order_id, 0);
+
+  EXPECT_EQ(metadata->properties.at("write.format.default"), "PARQUET");
+}
+
 }  // namespace iceberg
