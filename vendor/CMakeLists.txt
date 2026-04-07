@@ -35,7 +35,7 @@ FetchContent_Declare(
 FetchContent_Declare(
   thrift
   GIT_REPOSITORY ${GITHUB}/apache/thrift.git
-  GIT_TAG df626d768a87fe07fef215b4dde831185e6929d7 # v0.19.0
+  GIT_TAG 5656208a202ca0be4d4dc44125b5ca0485f91bf0 # v0.19.0
   PATCH_COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/thrift/CMakeLists.txt ./
 )
 
