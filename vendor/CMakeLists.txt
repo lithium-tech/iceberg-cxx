@@ -119,14 +119,6 @@ FetchContent_Declare(
   PATCH_COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/cpr/CMakeLists.txt ./
 )
 
-FetchContent_Declare(
-  curl
-  GIT_REPOSITORY ${GITHUB}/curl/curl.git
-  GIT_TAG eebb1c1c15d24b8cf103499f7d96d9eb6994f837 # curl-8_12_1
-  PATCH_COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/curl/CMakeLists.txt ./
-    && cp ${CMAKE_CURRENT_SOURCE_DIR}/curl/curl_config.h ./
-)
-
 if (DEFINED ENV{ARROW_DEPS})
   set(ARROW_DEPS_DIR "$ENV{ARROW_DEPS}")
 else ()
@@ -294,7 +286,6 @@ if(ICECXX_USE_REST)
   FetchContent_MakeAvailable(c-ares)
 
   FetchContent_MakeAvailable(cpr)
-  FetchContent_MakeAvailable(curl)
 endif()
 
 if(ICECXX_USE_SMHASHER)
