@@ -86,4 +86,8 @@ SET(Sources
 
 add_library(cpr ${Sources} ${Headers})
 target_include_directories(cpr PUBLIC ${HEADER_DIR})
-target_link_libraries(cpr PUBLIC _curl)
+
+if(NOT TARGET CURL::libcurl)
+        find_package(CURL REQUIRED)
+endif()
+target_link_libraries(cpr PUBLIC CURL::libcurl)
