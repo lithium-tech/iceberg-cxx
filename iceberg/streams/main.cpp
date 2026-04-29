@@ -169,6 +169,19 @@ int main(int argc, char** argv) {
     }
 
     auto scan_metadata = maybe_scan_metadata.ValueUnsafe();
+
+    iceberg::PositionalDeletes pos_del_info;
+    iceberg::EqualityDeletes eq_del_info;
+
+    for (size_t partition_id = 0; partition_id < scan_metadata.partitions.size(); ++partition_id) {
+      const auto& partition = scan_metadata.partitions.at(partition_id);
+      for (size_t layer_id = 0; layer_id < partition.size(); ++layer_id) {
+        const auto& layer = partition[layer_id];
+        pos_del_info.delete_entries[partition_id][layer_id] = std::move(layer.positional_delete_entries_);
+        eq_del_info.partlayer_to_deletes[partition_id][layer_id] = std::move(layer.equality_delete_entries_);
+      }
+    }
+
     auto meta_stream = std::make_shared<MetaStream>(std::move(scan_metadata));
 
     iceberg::S3FileSystemGetter::Config cfg;
@@ -188,18 +201,6 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<iceberg::IFileSystemProvider> fs_provider =
         std::make_shared<iceberg::FileSystemProvider>(schema_to_getter);
-
-    iceberg::PositionalDeletes pos_del_info;
-    iceberg::EqualityDeletes eq_del_info;
-
-    for (size_t partition_id = 0; partition_id < scan_metadata.partitions.size(); ++partition_id) {
-      const auto& partition = scan_metadata.partitions.at(partition_id);
-      for (size_t layer_id = 0; layer_id < partition.size(); ++layer_id) {
-        const auto& layer = partition[layer_id];
-        pos_del_info.delete_entries[partition_id][layer_id] = std::move(layer.positional_delete_entries_);
-        eq_del_info.partlayer_to_deletes[partition_id][layer_id] = std::move(layer.equality_delete_entries_);
-      }
-    }
 
     // TODO(gmusya): make customizable
     iceberg::EqualityDeleteHandler::Config eq_del_config;
