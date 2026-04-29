@@ -108,7 +108,7 @@ TEST(ReferencedDataFile, GetScanMetadata) {
     ManifestFile manifest_file;
     manifest_file.added_files_count = 1;
     manifest_file.added_rows_count = 1;
-    manifest_file.partition_spec_id = 0;
+    manifest_file.partition_spec_id = 1;
     manifest_file.path = "file://" + (dir.path() / "manifest.avro").string();
 
     std::string data = ice_tea::WriteManifestList({manifest_file});
