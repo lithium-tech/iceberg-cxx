@@ -114,6 +114,8 @@ struct ContentFile {
   std::vector<int32_t> equality_ids;
   std::optional<int32_t> sort_order_id;
   std::optional<std::string> referenced_data_file;
+  std::optional<int64_t> content_offset;
+  std::optional<int64_t> content_size_in_bytes;
 };
 
 struct DataFile : public ContentFile {
@@ -195,6 +197,8 @@ struct DataFileDeserializerConfig {
   bool extract_equality_ids = true;
   bool extract_sort_order_id = true;
   bool extract_referenced_data_file = true;
+  bool extract_content_offset = true;
+  bool extract_content_size_in_bytes = true;
 };
 
 struct ManifestEntryDeserializerConfig {
