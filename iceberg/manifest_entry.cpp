@@ -350,6 +350,10 @@ class DataFileDeserializer {
     ExtractIf<std::optional<int32_t>>(record, "sort_order_id", data_file.sort_order_id, config_.extract_sort_order_id);
     ExtractIf<std::optional<std::string>>(record, "referenced_data_file", data_file.referenced_data_file,
                                           config_.extract_referenced_data_file);
+    ExtractIf<std::optional<int64_t>>(record, "content_offset", data_file.content_offset,
+                                      config_.extract_content_offset);
+    ExtractIf<std::optional<int64_t>>(record, "content_size_in_bytes", data_file.content_size_in_bytes,
+                                      config_.extract_content_size_in_bytes);
     ExtractIf<std::map<int32_t, int64_t>>(record, "column_sizes", data_file.column_sizes, config_.extract_column_sizes);
     ExtractIf<std::map<int32_t, int64_t>>(record, "value_counts", data_file.value_counts, config_.extract_value_counts);
     ExtractIf<std::vector<int64_t>>(record, "split_offsets", data_file.split_offsets, config_.extract_split_offsets);
@@ -559,6 +563,9 @@ NodePtr MakeSchemaDataFile(const std::vector<PartitionKeyField>& partition_spec,
                                        std::make_shared<iceavro::ArrayNode>(std::make_shared<iceavro::IntNode>())));
   result->AddField("referenced_data_file",
                    std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::StringNode>()));
+  result->AddField("content_offset", std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::LongNode>()));
+  result->AddField("content_size_in_bytes",
+                   std::make_shared<iceavro::OptionalNode>(std::make_shared<iceavro::LongNode>()));
   if (cfg.datafile_config.extract_column_sizes) {
     auto column_sizes_entry = std::make_shared<iceavro::RecordNode>("k117_v118");
     column_sizes_entry->AddField("key", std::make_shared<iceavro::IntNode>());
@@ -873,6 +880,8 @@ void SerializeDataFile(const std::vector<PartitionKeyField>& partition_spec, con
   SerializeString(data_file.file_path, GetMember(record, "file_path"));
   SerializeInt(static_cast<int>(data_file.content), GetMember(record, "content"));
   SerializeOptionalString(data_file.referenced_data_file, GetMember(record, "referenced_data_file"));
+  SerializeOptionalLong(data_file.content_offset, GetMember(record, "content_offset"));
+  SerializeOptionalLong(data_file.content_size_in_bytes, GetMember(record, "content_size_in_bytes"));
   SerializeOptionalInt(data_file.sort_order_id, GetMember(record, "sort_order_id"));
   SerializeOptionalMapIntLong(data_file.column_sizes, GetMember(record, "column_sizes"));
   SerializeOptionalMapIntLong(data_file.value_counts, GetMember(record, "value_counts"));
