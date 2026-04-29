@@ -86,6 +86,7 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
 
   PositionalDeletes pos_del_info;
   EqualityDeletes eq_del_info;
+  
 
   for (size_t partition_id = 0; partition_id < scan_metadata.partitions.size(); ++partition_id) {
     const auto& partition = scan_metadata.partitions.at(partition_id);
