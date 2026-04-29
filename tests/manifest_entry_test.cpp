@@ -679,4 +679,34 @@ TEST(ManifestEntryTest, HourTimestamptzPartitioning) {
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }
 
+TEST(ManifestEntry, ReadDeletionVector) {
+  std::string manifest_path =
+      "tables/deletion_vector/deletion_vector_sample/metadata/a2b5890a-4c9d-427f-9434-b7100abddc2f-m0.avro";
+  std::ifstream input(manifest_path, std::ios::binary);
+  ASSERT_TRUE(input) << "Failed to open " << manifest_path;
+
+  auto manifest = ice_tea::ReadManifestEntries(input, {});
+  ASSERT_EQ(manifest.entries.size(), 1);
+
+  const auto& entry = manifest.entries[0];
+  const auto& data_file = entry.data_file;
+
+  EXPECT_EQ(data_file.content, ContentFile::FileContent::kPositionDeletes);
+  EXPECT_EQ(data_file.file_format, "PUFFIN");
+  EXPECT_EQ(data_file.file_path,
+            "warehouse/deletion_vector/deletion_vector_sample/data/"
+            "00000-2-766d0c1d-4652-4a59-9721-58fb02898559-00001-deletes.puffin");
+
+  ASSERT_TRUE(data_file.referenced_data_file.has_value());
+  EXPECT_EQ(*data_file.referenced_data_file,
+            "warehouse/deletion_vector/deletion_vector_sample/data/"
+            "00000-0-93fc73ad-0331-4e55-bf0b-dfb27906f0bd-0-00001.parquet");
+
+  ASSERT_TRUE(data_file.content_offset.has_value());
+  EXPECT_EQ(*data_file.content_offset, 4);
+
+  ASSERT_TRUE(data_file.content_size_in_bytes.has_value());
+  EXPECT_EQ(*data_file.content_size_in_bytes, 50);
+}
+
 }  // namespace iceberg
