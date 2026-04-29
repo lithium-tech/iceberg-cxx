@@ -4,3 +4,4 @@ compile_commands.json
 /.vscode/
 /out/
 /_build/
+/_deps/
