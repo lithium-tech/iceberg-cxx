@@ -467,8 +467,8 @@ static const PartitionSpec& GetPartitionSpecById(const std::vector<std::shared_p
                                                  int32_t partition_spec_id) {
   auto it = std::find_if(partition_specs.begin(), partition_specs.end(),
                          [&](const auto& partition_spec) { return partition_spec->spec_id == partition_spec_id; });
-  Ensure(it != partition_specs.end(), std::string(__PRETTY_FUNCTION__) + ": partition spec id is not found: " +
-                                      std::to_string(partition_spec_id));
+  Ensure(it != partition_specs.end(),
+         std::string(__PRETTY_FUNCTION__) + ": partition spec id is not found: " + std::to_string(partition_spec_id));
   return **it;
 }
 
