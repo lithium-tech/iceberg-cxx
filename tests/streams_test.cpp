@@ -86,6 +86,7 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
 
   PositionalDeletes pos_del_info;
   EqualityDeletes eq_del_info;
+  DeletionVectors dv_info;
 
   for (size_t partition_id = 0; partition_id < scan_metadata.partitions.size(); ++partition_id) {
     const auto& partition = scan_metadata.partitions.at(partition_id);
@@ -93,6 +94,7 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
       const auto& layer = partition[layer_id];
       pos_del_info.delete_entries[partition_id][layer_id] = std::move(layer.positional_delete_entries_);
       eq_del_info.partlayer_to_deletes[partition_id][layer_id] = std::move(layer.equality_delete_entries_);
+      dv_info.dv_entries[partition_id][layer_id] = std::move(layer.deletion_vector_entries_);
     }
   }
 
@@ -111,8 +113,8 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
   }();
 
   return IcebergScanBuilder::MakeIcebergStream(
-      meta_stream, pos_del_info, std::make_shared<EqualityDeletes>(std::move(eq_del_info)), std::move(eq_del_config),
-      nullptr, nullptr, *metadata->GetCurrentSchema(), field_ids_to_retrieve,
+      meta_stream, pos_del_info, std::move(dv_info), std::make_shared<EqualityDeletes>(std::move(eq_del_info)),
+      std::move(eq_del_config), nullptr, nullptr, *metadata->GetCurrentSchema(), field_ids_to_retrieve,
       std::make_shared<FileReaderProvider>(fs_provider), schema_name_mapping);
 }
 
