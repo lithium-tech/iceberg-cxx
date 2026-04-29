@@ -678,6 +678,7 @@ TEST(ManifestEntryTest, HourTimestamptzPartitioning) {
   info = manifest.entries[0].data_file.partition_tuple;
   ComparePartitionTuples(expected_partition_info, info, std::to_string(__LINE__));
 }
+
 TEST(ManifestEntry, ReadDeletionVector) {
   std::string manifest_path =
       "tables/deletion_vector/deletion_vector_sample/metadata/a2b5890a-4c9d-427f-9434-b7100abddc2f-m0.avro";
