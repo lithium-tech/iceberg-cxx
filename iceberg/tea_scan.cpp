@@ -463,13 +463,23 @@ static std::optional<std::vector<PartitionKeyField>> GetFieldsFromPartitionSpec(
   return partition_fields;
 }
 
+static const PartitionSpec& GetPartitionSpecById(const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
+                                                 int32_t partition_spec_id) {
+  auto it = std::find_if(partition_specs.begin(), partition_specs.end(),
+                         [&](const auto& partition_spec) { return partition_spec->spec_id == partition_spec_id; });
+  Ensure(it != partition_specs.end(), std::string(__PRETTY_FUNCTION__) + ": partition spec id is not found: " +
+                                      std::to_string(partition_spec_id));
+  return **it;
+}
+
 static Manifest GetManifest(std::shared_ptr<arrow::fs::FileSystem> fs, const ManifestFile& manifest_file,
                             std::shared_ptr<iceberg::Schema> schema,
                             const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs, bool use_reader_schema,
                             const ManifestEntryDeserializerConfig& config) {
   const std::string entries_content = ValueSafe(ReadFile(fs, manifest_file.path));
 
-  auto maybe_partition_spec = GetFieldsFromPartitionSpec(*partition_specs.at(manifest_file.partition_spec_id), schema);
+  auto maybe_partition_spec =
+      GetFieldsFromPartitionSpec(GetPartitionSpecById(partition_specs, manifest_file.partition_spec_id), schema);
   Ensure(maybe_partition_spec.has_value(), std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
                                                std::to_string(manifest_file.partition_spec_id));
   return ice_tea::ReadManifestEntries(entries_content, maybe_partition_spec.value(), config, use_reader_schema);
@@ -480,7 +490,8 @@ static std::shared_ptr<IcebergEntriesStream> GetManifestEntryStream(
     std::shared_ptr<iceberg::Schema> schema, const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
     bool use_reader_schema, const ManifestEntryDeserializerConfig& config) {
   std::string entries_content = ValueSafe(ReadFile(fs, manifest_file.path));
-  auto maybe_partition_spec = GetFieldsFromPartitionSpec(*partition_specs.at(manifest_file.partition_spec_id), schema);
+  auto maybe_partition_spec =
+      GetFieldsFromPartitionSpec(GetPartitionSpecById(partition_specs, manifest_file.partition_spec_id), schema);
   Ensure(maybe_partition_spec.has_value(), std::string(__PRETTY_FUNCTION__) + ": failed to parse partition_spec_id " +
                                                std::to_string(manifest_file.partition_spec_id));
 
