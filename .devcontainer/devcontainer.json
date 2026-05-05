@@ -1,0 +1,40 @@
+{
+  "name": "Iceberg C++ Development Environment",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.formatOnSave": true,
+        "cmake.configureOnOpen": true,
+        "cmake.generator": "Ninja",
+        "cmake.buildDirectory": "${workspaceFolder}/_build",
+        "C_Cpp.default.cppStandard": "c++20",
+        "C_Cpp.default.intelliSenseMode": "linux-gcc-x64"
+      },
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "ms-ceintl.vscode-language-pack-ru",
+        "eamodio.gitlens",
+        "xaver.clang-format"
+      ]
+    }
+  },
+  "mounts": [
+    "source=iceberg-cxx-build,target=${containerWorkspaceFolder}/_build,type=volume"
+  ],
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:1": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "upgradePackages": true,
+      "username": "vscode"
+    }
+  }
+}
