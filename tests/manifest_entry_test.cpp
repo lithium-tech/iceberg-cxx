@@ -680,8 +680,7 @@ TEST(ManifestEntryTest, HourTimestamptzPartitioning) {
 }
 
 TEST(ManifestEntry, ReadDeletionVector) {
-  std::string manifest_path =
-      "tables/deletion_vector/deletion_vector_sample/metadata/a2b5890a-4c9d-427f-9434-b7100abddc2f-m0.avro";
+  std::string manifest_path = "tables/deletion_vectors/metadata/c670791d-ace7-4600-a57f-305823486daa-m0.avro";
   std::ifstream input(manifest_path, std::ios::binary);
   ASSERT_TRUE(input) << "Failed to open " << manifest_path;
 
@@ -694,19 +693,19 @@ TEST(ManifestEntry, ReadDeletionVector) {
   EXPECT_EQ(data_file.content, ContentFile::FileContent::kPositionDeletes);
   EXPECT_EQ(data_file.file_format, "PUFFIN");
   EXPECT_EQ(data_file.file_path,
-            "warehouse/deletion_vector/deletion_vector_sample/data/"
-            "00000-2-766d0c1d-4652-4a59-9721-58fb02898559-00001-deletes.puffin");
+            "s3a://warehouse/deletion_vectors/data/"
+            "dv-20260504_111446_00010_8gkte-9a41c74f-3cae-4b67-a4e3-ec4437d1c988.puffin");
 
   ASSERT_TRUE(data_file.referenced_data_file.has_value());
-  EXPECT_EQ(*data_file.referenced_data_file,
-            "warehouse/deletion_vector/deletion_vector_sample/data/"
-            "00000-0-93fc73ad-0331-4e55-bf0b-dfb27906f0bd-0-00001.parquet");
+  EXPECT_EQ(
+      *data_file.referenced_data_file,
+      "s3a://warehouse/deletion_vectors/data/20260504_111440_00009_8gkte-580c7fe8-68ec-4a8b-8bce-a37f4af02113.parquet");
 
   ASSERT_TRUE(data_file.content_offset.has_value());
   EXPECT_EQ(*data_file.content_offset, 4);
 
   ASSERT_TRUE(data_file.content_size_in_bytes.has_value());
-  EXPECT_EQ(*data_file.content_size_in_bytes, 50);
+  EXPECT_EQ(*data_file.content_size_in_bytes, 46);
 }
 
 }  // namespace iceberg

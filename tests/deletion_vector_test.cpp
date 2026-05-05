@@ -88,8 +88,8 @@ TEST(DeletionVector, AddManyVector) {
 
 TEST(DeletionVector, Read) {
   std::ifstream input(
-      "tables/deletion_vector/deletion_vector_sample/data/"
-      "00000-2-766d0c1d-4652-4a59-9721-58fb02898559-00001-deletes.puffin");
+      "tables/deletion_vectors/data/"
+      "dv-20260504_111446_00010_8gkte-9a41c74f-3cae-4b67-a4e3-ec4437d1c988.puffin");
   std::stringstream ss;
   ss << input.rdbuf();
   std::string data = ss.str();
@@ -102,12 +102,9 @@ TEST(DeletionVector, Read) {
   auto blob = puffin_file->GetBlob(0);
 
   auto deletion_vector = DeletionVector(blob_metadata, blob);
-  EXPECT_EQ(deletion_vector.Cardinality(0, std::numeric_limits<uint64_t>::max()), 5);
+  EXPECT_EQ(deletion_vector.Cardinality(0, std::numeric_limits<uint64_t>::max()), 3);
 
-  std::vector<uint64_t> res(5);
-  for (int i = 0; i < 5; ++i) {
-    res[i] = 2 * i + 1;
-  }
+  std::vector<uint64_t> res = {0, 3, 6};
   EXPECT_EQ(deletion_vector.GetElems(0, std::numeric_limits<uint64_t>::max()), res);
 }
 
