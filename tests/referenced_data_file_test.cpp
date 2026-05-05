@@ -277,7 +277,7 @@ TEST(ReferencedDataFile, GetScanMetadataUnannotatedDeleteOptimizationDisabled) {
   auto s = ice_tea::GetScanMetadata(fs, snapshot_path, [](iceberg::Schema& schema) { return true; });
 
   ASSERT_EQ(s.status(), arrow::Status::OK());
-  ASSERT_EQ(s->partitions.size(), 1);  // Самый важный кусочек
+  ASSERT_EQ(s->partitions.size(), 1);  // Most important check
   ASSERT_EQ(s->partitions[0].size(), 1);
   ASSERT_EQ(s->partitions[0][0].data_entries_.size(), 2);
   ASSERT_EQ(s->partitions[0][0].positional_delete_entries_.size(), 3);

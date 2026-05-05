@@ -1307,7 +1307,7 @@ class ReferencedDataFileAwareScanPlanner {
         if (entry.data_file.referenced_data_file.has_value()) {
           ARROW_RETURN_NOT_OK(HandlePositionDelete(entry));
         } else {
-          SetAllPosDeletesNotAnnotatedWithReferencedDataFile();
+          SetHasUnannotatedPosDelete();
         }
         break;
     }
@@ -1367,9 +1367,7 @@ class ReferencedDataFileAwareScanPlanner {
   ReferencedDataFileAwareScanPlanner(std::shared_ptr<ScanMetadataBuilder> builder) : builder_(builder) {}
 
   virtual void SetHasEqualityDelete() { has_equality_delete = true; }
-  virtual void SetAllPosDeletesNotAnnotatedWithReferencedDataFile() {
-    all_pos_deletes_annotated_with_referenced_data_file = false;
-  }
+  virtual void SetHasUnannotatedPosDelete() { all_pos_deletes_annotated_with_referenced_data_file = false; }
 
   virtual arrow::Status HandlePositionDelete(const ManifestEntry& entry) {
     has_referenced_data_file = true;
@@ -1457,9 +1455,9 @@ class ReferencedDataFileAwareScanPlannerMT : public ReferencedDataFileAwareScanP
     ReferencedDataFileAwareScanPlanner::SetHasEqualityDelete();
   }
 
-  void SetAllPosDeletesNotAnnotatedWithReferencedDataFile() override {
+  void SetHasUnannotatedPosDelete() override {
     std::lock_guard<std::mutex> guard(mutex_);
-    ReferencedDataFileAwareScanPlanner::SetAllPosDeletesNotAnnotatedWithReferencedDataFile();
+    ReferencedDataFileAwareScanPlanner::SetHasUnannotatedPosDelete();
   }
 
   arrow::Status HandlePositionDelete(const ManifestEntry& entry) override {
