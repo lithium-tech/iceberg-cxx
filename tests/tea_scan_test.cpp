@@ -278,6 +278,41 @@ TEST(GetScanMetadata, DanglingPositionalDeletes) {
   }
 }
 
+TEST(GetScanMetadata, DeletionVectorScanMetadata) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  const std::string meta_path = "s3://warehouse/deletion_vectors/metadata/00004-ae0294d0-1de5-4fab-97f1-cd80e0078fa4.metadata.json";
+
+  auto logger = std::make_shared<Logger>();
+
+  auto maybe_scan_metadata =
+      ice_tea::GetScanMetadata(fs, meta_path, [&](iceberg::Schema&) { return false; }, nullptr, 0, {}, logger);
+
+  ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK());
+  auto scan_metadata = maybe_scan_metadata.MoveValueUnsafe();
+
+  ASSERT_EQ(scan_metadata.partitions.size(), 2);
+  size_t data_files_count = 0;
+  size_t dvs_count = 0;
+
+  for (const auto& partition : scan_metadata.partitions) {
+    for (const auto& layer : partition) {
+      data_files_count += layer.data_entries_.size();
+      dvs_count += layer.deletion_vector_entries_.size();
+      if (!layer.deletion_vector_entries_.empty()) {
+        for (const auto& dv : layer.deletion_vector_entries_) {
+          EXPECT_FALSE(dv.referenced_data_file.empty());
+          EXPECT_GT(dv.length, 0);
+        }
+      }
+    }
+  }
+
+  EXPECT_EQ(data_files_count, 2) << "Expected exactly 2 data files in the table";
+  EXPECT_EQ(dvs_count, 2) << "Expected exactly 2 Deletion Vectors in the table";
+}
+
 TEST(GetScanMetadata, EqualityDataEntries) {
   ice_tea::DataEntry data_entry1(
       "a", {ice_tea::DataEntry::Segment(3, 5), ice_tea::DataEntry::Segment(10, 3), ice_tea::DataEntry::Segment(13, 2)});

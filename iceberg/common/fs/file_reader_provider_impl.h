@@ -14,7 +14,7 @@ class FileReaderProvider : public IFileReaderProvider {
  public:
   explicit FileReaderProvider(std::shared_ptr<IFileSystemProvider> fs_provider) : fs_provider_(fs_provider) {}
 
-  arrow::Result<std::shared_ptr<parquet::arrow::FileReader>> Open(const std::string& url) const override {
+  arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenRaw(const std::string& url) const override {
     ARROW_ASSIGN_OR_RAISE(auto fs, fs_provider_->GetFileSystem(url));
 
     if (url.find("://") == std::string::npos) {
@@ -22,7 +22,11 @@ class FileReaderProvider : public IFileReaderProvider {
     }
 
     std::string path = url.substr(url.find("://") + 3);
-    ARROW_ASSIGN_OR_RAISE(auto input_file, fs->OpenInputFile(path));
+    return fs->OpenInputFile(path);
+  }
+
+  arrow::Result<std::shared_ptr<parquet::arrow::FileReader>> Open(const std::string& url) const override {
+    ARROW_ASSIGN_OR_RAISE(auto input_file, OpenRaw(url));
 
     parquet::arrow::FileReaderBuilder reader_builder;
     ARROW_RETURN_NOT_OK(reader_builder.Open(input_file));

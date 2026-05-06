@@ -153,4 +153,16 @@ std::vector<uint64_t> DeletionVector::GetElems(uint64_t l, uint64_t r) const {
   }
   return res;
 }
+
+std::vector<int32_t> DeletionVector::GetRelativeElems(uint64_t l, uint64_t r) const {
+  auto it = bitmap_.begin();
+  it.move(l);
+  std::vector<int32_t> res;
+  res.reserve(Cardinality(l, r));
+  while (it != bitmap_.end() && *it <= r) {
+    res.push_back(static_cast<int32_t>(*it - l));
+    ++it;
+  }
+  return res;
+}
 }  // namespace iceberg

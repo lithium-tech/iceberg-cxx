@@ -56,6 +56,33 @@ TEST(DeletionVector, GetElemsCheckEdgeCases) {
   EXPECT_EQ(deletion_vector.GetElems(2, 6), std::vector<uint64_t>());
 }
 
+TEST(DeletionVector, GetRelativeElemsCheck) {
+  roaring::Roaring64Map roaring_map;
+  roaring_map.add((uint64_t)1);
+  roaring_map.add((uint64_t)7);
+  roaring_map.add((uint64_t)9);
+
+  DeletionVector deletion_vector(MakeBlobMetadata(roaring_map), roaring_map);
+
+  EXPECT_EQ(deletion_vector.GetRelativeElems(0, std::numeric_limits<uint64_t>::max()), std::vector<int32_t>({1, 7, 9}));
+  EXPECT_EQ(deletion_vector.GetRelativeElems(4, 10), std::vector<int32_t>({3, 5})); // 7-4=3, 9-4=5
+  EXPECT_EQ(deletion_vector.GetRelativeElems(3, 5), std::vector<int32_t>());
+}
+
+TEST(DeletionVector, GetRelativeElemsCheckEdgeCases) {
+  roaring::Roaring64Map roaring_map;
+  roaring_map.add((uint64_t)1);
+  roaring_map.add((uint64_t)7);
+  roaring_map.add((uint64_t)9);
+
+  DeletionVector deletion_vector(MakeBlobMetadata(roaring_map), roaring_map);
+
+  EXPECT_EQ(deletion_vector.GetRelativeElems(1, 7), std::vector<int32_t>({0, 6})); // 1-1=0, 7-1=6
+  EXPECT_EQ(deletion_vector.GetRelativeElems(2, 7), std::vector<int32_t>({5})); // 7-2=5
+  EXPECT_EQ(deletion_vector.GetRelativeElems(1, 6), std::vector<int32_t>({0})); // 1-1=0
+  EXPECT_EQ(deletion_vector.GetRelativeElems(2, 6), std::vector<int32_t>());
+}
+
 TEST(DeletionVector, DeletionVectorFromBlob) {
   roaring::Roaring64Map roaring_map;
   roaring_map.add((uint64_t)1);

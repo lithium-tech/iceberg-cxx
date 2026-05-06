@@ -12,11 +12,15 @@ namespace iceberg {
 
 class LocalFileReaderProvider : public IFileReaderProvider {
  public:
-  arrow::Result<std::shared_ptr<parquet::arrow::FileReader>> Open(const std::string& url) const override {
+  arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> OpenRaw(const std::string& url) const override {
     auto fs = std::make_shared<arrow::fs::LocalFileSystem>();
-
+    
     std::string path = url.starts_with("file://") ? url.substr(7) : url;
-    ARROW_ASSIGN_OR_RAISE(auto input_file, fs->OpenInputFile(path));
+    return fs->OpenInputFile(path);
+  }
+
+  arrow::Result<std::shared_ptr<parquet::arrow::FileReader>> Open(const std::string& url) const override {
+    ARROW_ASSIGN_OR_RAISE(auto input_file, OpenRaw(url));
 
     parquet::arrow::FileReaderBuilder reader_builder;
     ARROW_RETURN_NOT_OK(reader_builder.Open(input_file));

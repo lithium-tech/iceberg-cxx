@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "arrow/io/interfaces.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
 #include "iceberg/common/error.h"
@@ -20,6 +21,10 @@ static_assert(kPuffinMagicBytes.size() == 4);
 // PuffinFile: <Magic> <Blob>* <Footer>
 class PuffinFile {
  public:
+  class Footer;
+
+  static arrow::Result<Footer> ReadFooter(std::shared_ptr<arrow::io::RandomAccessFile> file);
+
   static arrow::Result<PuffinFile> Make(std::string data) {
     if (data.size() < 4) {
       return arrow::Status::ExecutionError("PuffinFile is incorrect: file is too small (", data.size(), ")");

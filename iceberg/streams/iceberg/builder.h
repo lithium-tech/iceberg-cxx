@@ -18,6 +18,7 @@
 #include "iceberg/streams/iceberg/iceberg_batch.h"
 #include "iceberg/streams/iceberg/mapper.h"
 #include "iceberg/streams/iceberg/positional_delete_applier.h"
+#include "iceberg/streams/iceberg/deletion_vector_applier.h"
 #include "iceberg/streams/iceberg/projection_stream.h"
 #include "iceberg/streams/iceberg/row_group_filter.h"
 
@@ -27,7 +28,8 @@ class IcebergScanBuilder {
  public:
   static IcebergStreamPtr MakeIcebergStream(
       AnnotatedDataPathStreamPtr meta_stream, PositionalDeletes positional_deletes,
-      std::shared_ptr<EqualityDeletes> equality_deletes, std::optional<EqualityDeleteHandler::Config> cfg,
+      DeletionVectors deletion_vectors, std::shared_ptr<EqualityDeletes> equality_deletes,
+      std::optional<EqualityDeleteHandler::Config> cfg,
       std::shared_ptr<const IRowGroupFilter> rg_filter, std::shared_ptr<const ice_filter::IRowFilter> row_filter,
       const iceberg::Schema& schema, std::vector<int> field_ids_to_retrieve,
       std::shared_ptr<const IFileReaderProvider> file_reader_provider,
@@ -60,6 +62,11 @@ class IcebergScanBuilder {
     if (!positional_deletes.delete_entries.empty()) {
       stream = std::make_shared<PositionalDeleteApplier>(stream, std::move(positional_deletes), file_reader_provider,
                                                          logger);
+    }
+
+    if (!deletion_vectors.dv_entries.empty()) {
+      stream = std::make_shared<DeletionVectorApplier>(stream, std::move(deletion_vectors), file_reader_provider,
+                                                       logger);
     }
 
     stream = MakeFinalProjection(*mapper, stream, field_ids_to_retrieve);
