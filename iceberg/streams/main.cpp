@@ -172,6 +172,7 @@ int main(int argc, char** argv) {
 
     iceberg::PositionalDeletes pos_del_info;
     iceberg::EqualityDeletes eq_del_info;
+    iceberg::DeletionVectors dv_info;
 
     for (size_t partition_id = 0; partition_id < scan_metadata.partitions.size(); ++partition_id) {
       const auto& partition = scan_metadata.partitions.at(partition_id);
@@ -179,6 +180,7 @@ int main(int argc, char** argv) {
         const auto& layer = partition[layer_id];
         pos_del_info.delete_entries[partition_id][layer_id] = std::move(layer.positional_delete_entries_);
         eq_del_info.partlayer_to_deletes[partition_id][layer_id] = std::move(layer.equality_delete_entries_);
+        dv_info.dv_entries[partition_id][layer_id] = std::move(layer.deletion_vector_entries_);
       }
     }
 
@@ -218,7 +220,7 @@ int main(int argc, char** argv) {
     }();
 
     auto data_stream = iceberg::IcebergScanBuilder::MakeIcebergStream(
-        meta_stream, pos_del_info, std::make_shared<iceberg::EqualityDeletes>(std::move(eq_del_info)),
+        meta_stream, pos_del_info, dv_info, std::make_shared<iceberg::EqualityDeletes>(std::move(eq_del_info)),
         std::move(eq_del_config), nullptr, nullptr, *table_metadata->GetCurrentSchema(), {1},
         std::make_shared<iceberg::FileReaderProvider>(fs_provider), std::move(schema_name_mapping));
 

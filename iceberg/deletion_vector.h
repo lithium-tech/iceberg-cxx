@@ -7,6 +7,8 @@
 
 namespace iceberg {
 
+constexpr std::string_view kDelitionVectorFormat = "PUFFIN";
+
 namespace properties_names {
 constexpr std::string_view kCardinality = "cardinality";
 constexpr std::string_view kReferencedDataFile = "referenced-data-file";
@@ -45,6 +47,8 @@ class DeletionVector {
   uint64_t Cardinality(uint64_t l = 0, uint64_t r = UINT64_MAX) const;
   // returns vector of rows to be deleted from [l; r]
   std::vector<uint64_t> GetElems(uint64_t l, uint64_t r) const;
+  // returns vector of relative row indices (row - l) to be deleted from [l; r]
+  std::vector<int32_t> GetRelativeElems(uint64_t l, uint64_t r) const;
 
   static constexpr std::string_view kMagicSequence = "\xd1\xd3\x39\x64";
   static_assert(kMagicSequence.size() == 4);

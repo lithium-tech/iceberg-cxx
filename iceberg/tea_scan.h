@@ -68,11 +68,21 @@ struct EqualityDeleteInfo {
   bool operator==(const EqualityDeleteInfo& other) const = default;
 };
 
+struct DeletionVectorInfo {
+  std::string path;
+  int64_t offset;
+  int64_t length;
+  std::string referenced_data_file;
+
+  bool operator==(const DeletionVectorInfo&) const = default;
+};
+
 struct ScanMetadata {
   struct Layer {
     std::vector<DataEntry> data_entries_;
     std::vector<PositionalDeleteInfo> positional_delete_entries_;
     std::vector<EqualityDeleteInfo> equality_delete_entries_;
+    std::vector<DeletionVectorInfo> deletion_vector_entries_;
 
     bool operator==(const Layer& layer) const = default;
 
