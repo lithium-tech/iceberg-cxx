@@ -220,7 +220,7 @@ int main(int argc, char** argv) {
     auto data_stream = iceberg::IcebergScanBuilder::MakeIcebergStream(
         meta_stream, pos_del_info, std::make_shared<iceberg::EqualityDeletes>(std::move(eq_del_info)),
         std::move(eq_del_config), nullptr, nullptr, *table_metadata->GetCurrentSchema(), {1},
-        std::make_shared<iceberg::FileReaderProvider>(fs_provider), std::move(schema_name_mapping));
+        iceberg::MakeFileReaderProvider(fs_provider), std::move(schema_name_mapping));
 
     while (true) {
       auto batch = data_stream->ReadNext();

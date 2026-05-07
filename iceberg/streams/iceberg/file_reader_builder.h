@@ -68,7 +68,7 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
 
  private:
   std::shared_ptr<parquet::arrow::FileReader> MakeArrowReader(const std::string& path) {
-    auto input_file = iceberg::ValueSafe(file_reader_provider_->Open(path));
+    auto input_file = iceberg::ValueSafe(file_reader_provider_->OpenParquet(path));
     return input_file;
   }
 
