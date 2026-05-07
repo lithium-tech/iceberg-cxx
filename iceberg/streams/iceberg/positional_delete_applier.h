@@ -81,7 +81,7 @@ class PositionalDeleteApplier : public IcebergStream {
       }
 
       auto open_file_lambda = [file_reader_provider = this->file_reader_provider_](const std::string& path) {
-        auto result = iceberg::ValueSafe(file_reader_provider->Open(path));
+        auto result = iceberg::ValueSafe(file_reader_provider->OpenParquet(path));
 
         return result;
       };

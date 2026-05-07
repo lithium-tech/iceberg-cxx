@@ -71,7 +71,7 @@ class EqualityDeleteApplierTest : public ::testing::Test {
     auto positional_delete_applier =
         std::make_shared<EqualityDeleteApplier>(input_stream, std::make_shared<EqualityDeletes>(std::move(info)), cfg,
                                                 std::make_shared<FieldIdMapper>(std::move(field_id_to_name)),
-                                                std::make_shared<FileReaderProvider>(fs_provider), counting_logger_);
+                                                MakeFileReaderProvider(fs_provider), counting_logger_);
 
     std::vector<std::shared_ptr<IcebergBatch>> result_batches;
     while (true) {
