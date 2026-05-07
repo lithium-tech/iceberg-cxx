@@ -5,8 +5,7 @@ Apache Iceberg C++ library
 You do not need Java to use [Apache Iceberg™](https://iceberg.apache.org/).
 
 It's an alternative for [iceberg-cpp](https://github.com/apache/iceberg-cpp).
-The library is a part of our extention for Greenplum that allows it to read Iceberg data from S3 compatible storage using HMS and Nessie catalogs.
-The extention is not opensourced yet. But we're thinking about it.
+The library is used by [Tea](https://github.com/lithium-tech/tea), an open-source extension for Greenplum that allows it to read Iceberg data from S3 compatible storage using HMS and Nessie catalogs.
 
 ## Supported features
 
