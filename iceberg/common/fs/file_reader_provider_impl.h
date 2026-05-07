@@ -10,6 +10,7 @@
 #include "arrow/status.h"
 #include "iceberg/common/fs/file_reader_provider.h"
 #include "iceberg/common/fs/filesystem_provider.h"
+#include "iceberg/deletion_vector.h"
 #include "iceberg/puffin.h"
 #include "iceberg/tea_scan.h"
 #include "parquet/arrow/reader.h"
