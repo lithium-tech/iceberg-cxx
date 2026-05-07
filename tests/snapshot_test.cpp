@@ -6,6 +6,7 @@
 
 #include "gtest/gtest.h"
 #include "iceberg/table_metadata.h"
+#include "iceberg/test_utils/scoped_temp_dir.h"
 #include "iceberg/uuid.h"
 #include "tools/common.h"
 #include "tools/metadata_tree.h"
@@ -112,22 +113,21 @@ TEST(UUIDGenerator, Test) {
 
 TEST(SnapshotTest, Test) {
   auto metadata_tree = tools::MetadataTree("metadata/00006-8caf3988-3dcc-4ca2-a472-0d96a273eaeb.metadata.json");
+  ScopedTempDir dir;
+  const auto output_metadata = dir.path() / "metadata";
+  std::filesystem::create_directory(output_metadata);
 
   auto snapshot_maker = tools::SnapshotMaker(std::make_shared<arrow::fs::LocalFileSystem>(),
                                              metadata_tree.GetMetadataFile().table_metadata, 0);
   std::shared_ptr<iceberg::TableMetadataV2> table_metadata = DefaultTableMetadata();
-  table_metadata->location = "some_location_that_seems_unexpected.json";
+  table_metadata->location = (output_metadata / "metadata.json").string();
   snapshot_maker.table_metadata = table_metadata;
 
-  std::filesystem::create_directory("snapshots");
-  std::filesystem::create_directory("data");
-  std::filesystem::create_directory("metadata");
-
   snapshot_maker.MakeMetadataFiles(
-      "snapshots", "data", "metadata", "data", {},
+      output_metadata, "data", "metadata", "data", {},
       std::vector<std::string>{"data/00000-6-d4e36f4d-a2c0-467d-90e7-0ef1a54e2724-0-00001.parquet"}, {}, 0);
 
-  EXPECT_TRUE(HasFileWithPrefix("snapshots", "snap"));
+  EXPECT_TRUE(HasFileWithPrefix(output_metadata, "snap"));
 }
 
 }  // namespace iceberg
