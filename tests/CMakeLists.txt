@@ -23,7 +23,7 @@ if (ICECXX_USE_REST)
 endif()
 
 add_executable(iceberg_local_test ${iceberg_local_test_files})
-target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp iceberg-tools iceberg_streams iceberg_common_fs ${CMAKE_DL_LIBS})
+target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp iceberg-tools iceberg_streams iceberg_common_fs iceberg_test_utils ${CMAKE_DL_LIBS})
 if (ICECXX_USE_REST)
     target_link_libraries(iceberg_local_test PUBLIC cpr)
 endif()
@@ -43,11 +43,6 @@ ADD_CUSTOM_TARGET(test_data_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/data" "${CMAKE_CURRENT_BINARY_DIR}/data"
 )
 add_dependencies(iceberg_local_test test_data_symlink)
-
-ADD_CUSTOM_TARGET(test_snapshots_symlink ALL
-    COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/snapshots" "${CMAKE_CURRENT_BINARY_DIR}/snapshots"
-)
-add_dependencies(iceberg_local_test test_snapshots_symlink)
 
 ADD_CUSTOM_TARGET(test_warehouse_symlink ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${CMAKE_CURRENT_SOURCE_DIR}/warehouse" "${CMAKE_CURRENT_BINARY_DIR}/warehouse"
