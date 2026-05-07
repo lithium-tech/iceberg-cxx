@@ -22,8 +22,8 @@ TEST(RowGroupReader, Trivial) {
   auto column2 = MakeInt32Column("f2", 2, col2_data);
   ASSERT_OK(WriteToFile({{column1, column2}, std::vector<size_t>{1, 1, 1}}, data_path));
 
-  auto provider = std::make_shared<LocalFileReaderProvider>();
-  ASSIGN_OR_FAIL(auto input, provider->Open(data_path));
+  auto provider = MakeLocalFileReaderProvider();
+  ASSIGN_OR_FAIL(auto input, provider->OpenParquet(data_path));
 
   auto stream = std::make_shared<RowGroupReader>(input, 1, std::vector<int>{1});
   auto batch = stream->ReadNext();
@@ -47,8 +47,8 @@ TEST(RowGroupReader, WithRowNumber) {
   auto column2 = MakeInt32Column("f2", 2, col2_data);
   ASSERT_OK(WriteToFile({{column1, column2}, std::vector<size_t>{1, 1, 1}}, data_path));
 
-  auto provider = std::make_shared<LocalFileReaderProvider>();
-  ASSIGN_OR_FAIL(auto input, provider->Open(data_path));
+  auto provider = MakeLocalFileReaderProvider();
+  ASSIGN_OR_FAIL(auto input, provider->OpenParquet(data_path));
 
   auto stream = std::make_shared<RowGroupReaderWithRowNumber>(input, 1, std::vector<int>{1});
   auto batch = stream->ReadNext();

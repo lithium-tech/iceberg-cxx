@@ -81,7 +81,7 @@ class EqualityDeleteApplier : public IcebergStream {
     bool can_reuse_state = current_state_.has_value() && (*current_state_ == batch->GetPartition());
     if (!can_reuse_state) {
       auto open_file_lambda = [file_reader_provider = this->file_reader_provider_](const std::string& path) {
-        return file_reader_provider->Open(path);
+        return file_reader_provider->OpenParquet(path);
       };
 
       equality_delete_handler_.emplace(open_file_lambda, eq_del_config_, logger_);
