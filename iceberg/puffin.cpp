@@ -244,9 +244,37 @@ std::string CreateFooter(const PuffinFile::Footer::DeserializedFooter& footer) {
 }
 
 }  // namespace serializer
+
+// Parses the 12-byte trailer: [footer_payload_size(4)] [flags(4)] [magic(4)]
+// Returns footer_payload_size on success.
+arrow::Result<int32_t> ParseTrailerView(std::string_view trailer) {
+  if (trailer.size() < 12) {
+    return arrow::Status::ExecutionError("Failed to read Puffin trailer");
+  }
+  if (trailer.substr(8, 4) != kPuffinMagicBytes) {
+    return arrow::Status::ExecutionError("PuffinFile is incorrect: magic bytes after footer are incorrect (found ",
+                                         trailer.substr(8, 4), ")");
+  }
+  uint32_t flags = 0;
+  std::memcpy(&flags, trailer.data() + 4, 4);
+  if (flags & 1) {
+    return arrow::Status::ExecutionError("Compressed puffin files are not supported yet");
+  }
+  int32_t footer_payload_size = 0;
+  std::memcpy(&footer_payload_size, trailer.data(), 4);
+  return footer_payload_size;
+}
+
+// Verifies the leading magic and extracts payload from [magic(4)][payload(N)].
+arrow::Result<std::string> ExtractPayload(std::string_view payload_with_magic) {
+  if (payload_with_magic.size() < 4 || payload_with_magic.substr(0, 4) != kPuffinMagicBytes) {
+    return arrow::Status::ExecutionError("PuffinFile is incorrect: magic bytes before footer are incorrect");
+  }
+  return std::string(payload_with_magic.substr(4));
+}
+
 }  // namespace
 
-// TODO(MeT3ger): Simplify repeated code
 arrow::Result<PuffinFile::Footer> PuffinFile::ReadFooter(std::shared_ptr<arrow::io::RandomAccessFile> file) {
   ARROW_ASSIGN_OR_RAISE(auto file_size, file->GetSize());
   if (file_size < 16) {
@@ -254,26 +282,9 @@ arrow::Result<PuffinFile::Footer> PuffinFile::ReadFooter(std::shared_ptr<arrow::
   }
 
   ARROW_ASSIGN_OR_RAISE(auto trailer_buffer, file->ReadAt(file_size - 12, 12));
-  std::string_view trailer_view(reinterpret_cast<const char*>(trailer_buffer->data()), trailer_buffer->size());
-  if (trailer_view.size() < 12) {
-    return arrow::Status::ExecutionError("Failed to read Puffin trailer");
-  }
-
-  std::string_view magic_bytes_end = trailer_view.substr(8, 4);
-  if (magic_bytes_end != kPuffinMagicBytes) {
-    return arrow::Status::ExecutionError("PuffinFile is incorrect: magic bytes after footer are incorrect (found ",
-                                         magic_bytes_end, ")");
-  }
-
-  uint32_t flags = 0;
-  std::memcpy(&flags, trailer_view.data() + 4, 4);
-  bool is_payload_compressed = flags & 1;
-  if (is_payload_compressed) {
-    return arrow::Status::ExecutionError("Compressed puffin files are not supported yet");
-  }
-
-  int32_t footer_payload_size = 0;
-  std::memcpy(&footer_payload_size, trailer_view.data(), 4);
+  ARROW_ASSIGN_OR_RAISE(auto footer_payload_size,
+                        ParseTrailerView(std::string_view(reinterpret_cast<const char*>(trailer_buffer->data()),
+                                                          trailer_buffer->size())));
 
   if (file_size < 16 + footer_payload_size) {
     return arrow::Status::ExecutionError("PuffinFile is incorrect: file is too small");
@@ -281,14 +292,10 @@ arrow::Result<PuffinFile::Footer> PuffinFile::ReadFooter(std::shared_ptr<arrow::
 
   ARROW_ASSIGN_OR_RAISE(auto payload_buffer,
                         file->ReadAt(file_size - 16 - footer_payload_size, 4 + footer_payload_size));
-  std::string_view payload_view(reinterpret_cast<const char*>(payload_buffer->data()), payload_buffer->size());
+  ARROW_ASSIGN_OR_RAISE(
+      auto footer_payload,
+      ExtractPayload(std::string_view(reinterpret_cast<const char*>(payload_buffer->data()), payload_buffer->size())));
 
-  std::string_view magic_bytes_begin = payload_view.substr(0, 4);
-  if (magic_bytes_begin != kPuffinMagicBytes) {
-    return arrow::Status::ExecutionError("PuffinFile is incorrect: magic bytes before footer are incorrect");
-  }
-
-  std::string footer_payload(payload_view.substr(4));
   return PuffinFile::Footer(std::move(footer_payload));
 }
 
@@ -297,35 +304,18 @@ arrow::Result<PuffinFile::Footer> PuffinFile::MakeFooter(const std::string& data
     return arrow::Status::ExecutionError("PuffinFile is incorrect: file is too small (", data.size(), ")");
   }
   std::string_view data_view = data;
-  std::string_view magic_bytes_end = data_view.substr(data_view.size() - 4, 4);
-  if (magic_bytes_end != kPuffinMagicBytes) {
-    return arrow::Status::ExecutionError("PuffinFile is incorrect: magic bytes after footer are incorrect (expected ",
-                                         kPuffinMagicBytes, ", found ", magic_bytes_end, ")");
-  }
-  std::string_view flags_bytes = data_view.substr(data_view.size() - 8, 4);
-  std::string_view footer_payload_size_bytes = data_view.substr(data_view.size() - 12, 4);
-  int32_t footer_payload_size = 0;
-  std::memcpy(&footer_payload_size, footer_payload_size_bytes.data(), 4);
 
-  uint32_t flags = 0;
-  std::memcpy(&flags, flags_bytes.data(), 4);
+  ARROW_ASSIGN_OR_RAISE(auto footer_payload_size, ParseTrailerView(data_view.substr(data_view.size() - 12)));
 
-  bool is_payload_compressed = flags & 1;
-  if (is_payload_compressed) {
-    return arrow::Status::ExecutionError("Compressed puffin files are not supported yet");
-  }
-
-  if (data.size() < 16 + footer_payload_size) {
+  if (data.size() < 16 + static_cast<size_t>(footer_payload_size)) {
     return arrow::Status::ExecutionError("PuffinFile is incorrect: file is too small (", data.size(),
                                          ", but footer payload size is ", footer_payload_size, ")");
   }
-  std::string_view magic_bytes_begin = data_view.substr(data_view.size() - (16 + footer_payload_size), 4);
-  if (magic_bytes_begin != kPuffinMagicBytes) {
-    return arrow::Status::ExecutionError("PuffinFile is incorrect: magic bytes before footer are incorrect (expected ",
-                                         kPuffinMagicBytes, ", found ", magic_bytes_end, ")");
-  }
 
-  std::string footer_payload = data.substr(data.size() - (12 + footer_payload_size), footer_payload_size);
+  ARROW_ASSIGN_OR_RAISE(
+      auto footer_payload,
+      ExtractPayload(data_view.substr(data_view.size() - (16 + footer_payload_size), 4 + footer_payload_size)));
+
   return PuffinFile::Footer(std::move(footer_payload));
 }
 
