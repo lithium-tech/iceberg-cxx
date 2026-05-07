@@ -6,7 +6,7 @@
 #include <span>
 
 namespace iceberg {
-  
+
 constexpr std::string_view kDelitionVectorFormat = "PUFFIN";
 
 namespace properties_names {
