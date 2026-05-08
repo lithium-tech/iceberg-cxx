@@ -546,8 +546,6 @@ static bool MatchesSpecification(const PartitionSpec& partition_spec, std::share
   return true;
 }
 
-using SequenceNumber = int64_t;
-
 std::vector<bool> FilterManifests(std::shared_ptr<filter::StatsFilter> stats_filter,
                                   std::shared_ptr<iceberg::Schema> schema,
                                   const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
@@ -731,524 +729,482 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
                                       threads_num, config.manifest_entry_deserializer_config, logger);
 }
 
-class ScanMetadataBuilder {
+ScanMetadata ScanMetadataBuilder::GetResult() {
+  ScanMetadata result;
+  result.schema = table_metadata_.GetCurrentSchema();
+
+  for (auto& [partition_key, layers] : partitions) {
+    for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
+      auto& deletes_at_current_layer = layers[seqnum].equality_delete_entries_;
+      deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
+                                      equality_delete_entries.end());
+    }
+  }
+
+  result.partitions = GetPartitions(std::move(partitions), logger_);
+
+  return result;
+}
+
+arrow::Status ScanMetadataBuilder::AddEntry(const iceberg::ManifestEntry& entry) {
+  if (entry.status == ManifestEntry::Status::kDeleted) {
+    return arrow::Status::OK();
+  }
+
+  ARROW_RETURN_NOT_OK(CheckPartitionTupleIsCorrect(entry));
+  std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
+
+  StoreEntry(std::move(serialized_partition_key), entry);
+
+  return arrow::Status::OK();
+}
+
+void ScanMetadataBuilder::StoreEntry(std::string serialized_partition_key, const iceberg::ManifestEntry& entry) {
+  SequenceNumber sequence_number = entry.sequence_number.value();
+
+  switch (entry.data_file.content) {
+    case ContentFile::FileContent::kData: {
+      std::vector<DataEntry::Segment> segments;
+      const auto& split_offsets = entry.data_file.split_offsets;
+      if (split_offsets.empty()) {
+        segments.emplace_back(4, 0);
+      } else {
+        for (size_t i = 0; i + 1 < split_offsets.size(); ++i) {
+          segments.emplace_back(split_offsets[i], split_offsets[i + 1] - split_offsets[i]);
+        }
+        segments.emplace_back(split_offsets.back(), 0);
+      }
+      AddDataFile(serialized_partition_key, sequence_number, entry.data_file.file_path, std::move(segments));
+      break;
+    }
+    case ContentFile::FileContent::kPositionDeletes: {
+      // A position delete file must be applied to a data file when all of the following are true:
+      // - The data file's file_path is equal to the delete file's referenced_data_file if it is non-null
+      // - The data file's data sequence number is less than or equal to the delete file's data sequence number
+      // - The data file's partition (both spec and partition values) is equal [4] to the delete file's partition
+      // - There is no deletion vector that must be applied to the data file (when added, such a vector must
+      // contain
+      //   all deletes from existing position delete files)
+      std::optional<std::pair<std::string, std::string>> min_max_referenced_path;
+      constexpr uint32_t kFilePathId = 2147483546;
+      if (entry.data_file.lower_bounds.contains(kFilePathId) && entry.data_file.upper_bounds.contains(kFilePathId)) {
+        const std::vector<uint8_t>& min_bytes = entry.data_file.lower_bounds.at(kFilePathId);
+        const std::vector<uint8_t>& max_bytes = entry.data_file.upper_bounds.at(kFilePathId);
+
+        std::string min_path(min_bytes.begin(), min_bytes.end());
+        std::string max_path(max_bytes.begin(), max_bytes.end());
+
+        min_max_referenced_path.emplace(std::move(min_path), std::move(max_path));
+      }
+      AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path, min_max_referenced_path);
+      break;
+    }
+
+    case ContentFile::FileContent::kEqualityDeletes:
+      // An equality delete file must be applied to a data file when all of the following are true:
+      // - The data file's data sequence number is strictly less than the delete's data sequence number
+      // - The data file's partition (both spec id and partition values) is equal [4] to the delete file's
+      // partition
+      //   or the delete file's partition spec is unpartitioned
+      if (serialized_partition_key.empty()) {
+        AddGlobalEqualityDeletes(sequence_number, entry.data_file.file_path, entry.data_file.equality_ids);
+      } else {
+        AddEqualityDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path,
+                           entry.data_file.equality_ids);
+      }
+      break;
+  }
+}
+
+void ScanMetadataBuilder::AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                                      const std::string& path, std::vector<DataEntry::Segment>&& segments) {
+  partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
+      DataEntry(path, std::move(segments), std::nullopt));
+}
+
+void ScanMetadataBuilder::AddPositionDeletes(
+    const std::string& serialized_partition_key, SequenceNumber sequence_number, const std::string& path,
+    const std::optional<std::pair<std::string, std::string>>& min_max_referenced_path) {
+  partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
+      path, min_max_referenced_path);
+}
+
+void ScanMetadataBuilder::AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
+                                                   const std::vector<int>& equality_ids) {
+  global_equality_deletes[sequence_number - 1].emplace_back(path, equality_ids);
+}
+
+void ScanMetadataBuilder::AddEqualityDeletes(const std::string& serialized_partition_key,
+                                             SequenceNumber sequence_number, const std::string& path,
+                                             const std::vector<int>& equality_ids) {
+  partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(path, equality_ids);
+}
+
+arrow::Status ScanMetadataBuilder::CheckPartitionTupleIsCorrect(const iceberg::ManifestEntry& entry) const {
+  // https://iceberg.apache.org/docs/1.7.1/evolution/
+  // We do not know from which partition the current entry is
+  size_t matching_specifications = 0;
+  const auto& specs = table_metadata_.partition_specs;
+  for (size_t i = 0; i < specs.size(); ++i) {
+    // Matching also should use field-id from partition specification and field-id (as custom attribute) from
+    // avro, but avrocpp does not currently support custom attributes
+    if (MatchesSpecification(*specs[i], schema_, entry.data_file.partition_tuple)) {
+      ++matching_specifications;
+    }
+  }
+
+  if (matching_specifications == 0) {
+    return arrow::Status::ExecutionError("Partiton specification for entry ", entry.data_file.file_path,
+                                         " is not found");
+  }
+  if (matching_specifications > 1) {
+    return arrow::Status::ExecutionError("Multiple (", matching_specifications, ") partiton specifications for entry ",
+                                         entry.data_file.file_path, " are found");
+  }
+
+  return arrow::Status::OK();
+}
+
+std::vector<std::vector<LayerWithExtraInfo>> ScanMetadataBuilder::MapToVec(
+    std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& scan_metadata) {
+  std::vector<std::vector<LayerWithExtraInfo>> result;
+
+  for (auto& [_, partition] : scan_metadata) {
+    std::vector<LayerWithExtraInfo> new_partition;
+    for (auto& [_, layer] : partition) {
+      new_partition.emplace_back(std::move(layer));
+    }
+    result.emplace_back(std::move(new_partition));
+  }
+
+  return result;
+}
+
+namespace {
+
+// Optimizer that uses a scanline algorithm to split positional delete files and data files
+// into non-intersecting groups (buckets).
+//
+// This optimization reduces memory usage: instead of loading all delete files at once
+// (e.g., 1 group with 100 data files and 100 deletes), we can process smaller independent
+// groups sequentially (e.g., 100 groups with 1 data file and 1 delete each).
+// Additionally, if only a subset of data files needs to be read, we can skip loading
+// positional delete files from buckets that are not accessed.
+//
+// Key idea: Positional deletes define ranges [min_referenced_path, max_referenced_path].
+// Data files are points on the path axis. The algorithm finds regions where no delete
+// ranges are "active", using these boundaries to create independent buckets.
+class PositonalDeleteOptimizer {
  public:
-  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
-      : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()), logger_(std::move(logger)) {}
-
-  ScanMetadata GetResult() {
-    ScanMetadata result;
-    result.schema = table_metadata_.GetCurrentSchema();
-
-    for (auto& [partition_key, layers] : partitions) {
-      for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
-        auto& deletes_at_current_layer = layers[seqnum].equality_delete_entries_;
-        deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
-                                        equality_delete_entries.end());
+  static bool CanOptimize(const std::vector<std::vector<LayerWithExtraInfo>>& partitions) {
+    for (const auto& partition : partitions) {
+      if (CanOptimizePartition(partition)) {
+        return true;
       }
     }
 
-    result.partitions = GetPartitions(std::move(partitions), logger_);
-
-    return result;
+    return false;
   }
 
-  arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
-    if (entry.status == ManifestEntry::Status::kDeleted) {
-      return arrow::Status::OK();
+  static std::vector<std::vector<LayerWithExtraInfo>> Optimize(
+      std::vector<std::vector<LayerWithExtraInfo>>&& partitions) {
+    std::vector<std::vector<LayerWithExtraInfo>> result;
+
+    for (auto& partition : partitions) {
+      if (CanOptimizePartition(partition)) {
+        std::vector<std::vector<LayerWithExtraInfo>> new_partitions = OptimizePartition(std::move(partition));
+        for (auto& group : new_partitions) {
+          result.emplace_back(std::move(group));
+        }
+      } else {
+        result.emplace_back(std::move(partition));
+      }
     }
 
-    ARROW_RETURN_NOT_OK(CheckPartitionTupleIsCorrect(entry));
-    std::string serialized_partition_key = SerializePartitionTuple(entry.data_file.partition_tuple);
-
-    StoreEntry(std::move(serialized_partition_key), entry);
-
-    return arrow::Status::OK();
+    return result;
   }
 
  private:
-  void StoreEntry(std::string serialized_partition_key, const iceberg::ManifestEntry& entry) {
-    SequenceNumber sequence_number = entry.sequence_number.value();
-
-    switch (entry.data_file.content) {
-      case ContentFile::FileContent::kData: {
-        std::vector<DataEntry::Segment> segments;
-        const auto& split_offsets = entry.data_file.split_offsets;
-        if (split_offsets.empty()) {
-          segments.emplace_back(4, 0);
-        } else {
-          for (size_t i = 0; i + 1 < split_offsets.size(); ++i) {
-            segments.emplace_back(split_offsets[i], split_offsets[i + 1] - split_offsets[i]);
-          }
-          segments.emplace_back(split_offsets.back(), 0);
-        }
-        AddDataFile(serialized_partition_key, sequence_number, entry.data_file.file_path, std::move(segments));
-        break;
-      }
-      case ContentFile::FileContent::kPositionDeletes: {
-        // A position delete file must be applied to a data file when all of the following are true:
-        // - The data file's file_path is equal to the delete file's referenced_data_file if it is non-null
-        // - The data file's data sequence number is less than or equal to the delete file's data sequence number
-        // - The data file's partition (both spec and partition values) is equal [4] to the delete file's partition
-        // - There is no deletion vector that must be applied to the data file (when added, such a vector must
-        // contain
-        //   all deletes from existing position delete files)
-        std::optional<std::pair<std::string, std::string>> min_max_referenced_path;
-        constexpr uint32_t kFilePathId = 2147483546;
-        if (entry.data_file.lower_bounds.contains(kFilePathId) && entry.data_file.upper_bounds.contains(kFilePathId)) {
-          const std::vector<uint8_t>& min_bytes = entry.data_file.lower_bounds.at(kFilePathId);
-          const std::vector<uint8_t>& max_bytes = entry.data_file.upper_bounds.at(kFilePathId);
-
-          std::string min_path(min_bytes.begin(), min_bytes.end());
-          std::string max_path(max_bytes.begin(), max_bytes.end());
-
-          min_max_referenced_path.emplace(std::move(min_path), std::move(max_path));
-        }
-        AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path,
-                           min_max_referenced_path);
-        break;
-      }
-
-      case ContentFile::FileContent::kEqualityDeletes:
-        // An equality delete file must be applied to a data file when all of the following are true:
-        // - The data file's data sequence number is strictly less than the delete's data sequence number
-        // - The data file's partition (both spec id and partition values) is equal [4] to the delete file's
-        // partition
-        //   or the delete file's partition spec is unpartitioned
-        if (serialized_partition_key.empty()) {
-          AddGlobalEqualityDeletes(sequence_number, entry.data_file.file_path, entry.data_file.equality_ids);
-        } else {
-          AddEqualityDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path,
-                             entry.data_file.equality_ids);
-        }
-        break;
-    }
-  }
-
- protected:
-  virtual void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                           const std::string& path, std::vector<DataEntry::Segment>&& segments) {
-    partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
-        DataEntry(path, std::move(segments)));
-  }
-
-  virtual void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                                  const std::string& path,
-                                  const std::optional<std::pair<std::string, std::string>>& min_max_referenced_path) {
-    partitions[serialized_partition_key][sequence_number].positional_delete_entries_.emplace_back(
-        path, min_max_referenced_path);
-  }
-
-  virtual void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
-                                        const std::vector<int>& equality_ids) {
-    global_equality_deletes[sequence_number - 1].emplace_back(path, equality_ids);
-  }
-
-  virtual void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
-                                  const std::string& path, const std::vector<int>& equality_ids) {
-    partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(path, equality_ids);
-  }
-
-  arrow::Status CheckPartitionTupleIsCorrect(const iceberg::ManifestEntry& entry) const {
-    // https://iceberg.apache.org/docs/1.7.1/evolution/
-    // We do not know from which partition the current entry is
-    size_t matching_specifications = 0;
-    const auto& specs = table_metadata_.partition_specs;
-    for (size_t i = 0; i < specs.size(); ++i) {
-      // Matching also should use field-id from partition specification and field-id (as custom attribute) from
-      // avro, but avrocpp does not currently support custom attributes
-      if (MatchesSpecification(*specs[i], schema_, entry.data_file.partition_tuple)) {
-        ++matching_specifications;
-      }
-    }
-
-    if (matching_specifications == 0) {
-      return arrow::Status::ExecutionError("Partiton specification for entry ", entry.data_file.file_path,
-                                           " is not found");
-    }
-    if (matching_specifications > 1) {
-      return arrow::Status::ExecutionError("Multiple (", matching_specifications,
-                                           ") partiton specifications for entry ", entry.data_file.file_path,
-                                           " are found");
-    }
-
-    return arrow::Status::OK();
-  }
-
-  const TableMetadataV2& table_metadata_;
-  std::shared_ptr<const iceberg::Schema> schema_;
-
-  struct PositionalDeleteWithExtraInfo {
-    PositionalDeleteInfo positional_delete_;
-    std::optional<std::pair<std::string, std::string>> min_max_referenced_path_;
-
-    PositionalDeleteWithExtraInfo(std::string path,
-                                  std::optional<std::pair<std::string, std::string>> min_max_referenced_path)
-        : positional_delete_(std::move(path)), min_max_referenced_path_(std::move(min_max_referenced_path)) {}
-  };
-
-  struct LayerWithExtraInfo {
-    std::vector<DataEntry> data_entries_;
-    std::vector<PositionalDeleteWithExtraInfo> positional_delete_entries_;
-    std::vector<EqualityDeleteInfo> equality_delete_entries_;
-
-    bool operator==(const LayerWithExtraInfo& layer) const = default;
-
-    bool Empty() const;
-  };
-
-  static std::vector<std::vector<LayerWithExtraInfo>> MapToVec(
-      std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& scan_metadata) {
-    std::vector<std::vector<LayerWithExtraInfo>> result;
-
-    for (auto& [_, partition] : scan_metadata) {
-      std::vector<LayerWithExtraInfo> new_partition;
-      for (auto& [_, layer] : partition) {
-        new_partition.emplace_back(std::move(layer));
-      }
-      result.emplace_back(std::move(new_partition));
-    }
-
-    return result;
-  }
-
-  // Optimizer that uses a scanline algorithm to split positional delete files and data files
-  // into non-intersecting groups (buckets).
-  //
-  // This optimization reduces memory usage: instead of loading all delete files at once
-  // (e.g., 1 group with 100 data files and 100 deletes), we can process smaller independent
-  // groups sequentially (e.g., 100 groups with 1 data file and 1 delete each).
-  // Additionally, if only a subset of data files needs to be read, we can skip loading
-  // positional delete files from buckets that are not accessed.
-  //
-  // Key idea: Positional deletes define ranges [min_referenced_path, max_referenced_path].
-  // Data files are points on the path axis. The algorithm finds regions where no delete
-  // ranges are "active", using these boundaries to create independent buckets.
-  class PositonalDeleteOptimizer {
+  class Event {
    public:
-    static bool CanOptimize(const std::vector<std::vector<LayerWithExtraInfo>>& partitions) {
-      for (const auto& partition : partitions) {
-        if (CanOptimizePartition(partition)) {
-          return true;
-        }
-      }
-
-      return false;
-    }
-
-    static std::vector<std::vector<LayerWithExtraInfo>> Optimize(
-        std::vector<std::vector<LayerWithExtraInfo>>&& partitions) {
-      std::vector<std::vector<LayerWithExtraInfo>> result;
-
-      for (auto& partition : partitions) {
-        if (CanOptimizePartition(partition)) {
-          std::vector<std::vector<LayerWithExtraInfo>> new_partitions = OptimizePartition(std::move(partition));
-          for (auto& group : new_partitions) {
-            result.emplace_back(std::move(group));
-          }
-        } else {
-          result.emplace_back(std::move(partition));
-        }
-      }
-
-      return result;
-    }
-
-   private:
-    class Event {
-     public:
-      // Events for the scanline algorithm.
-      // Event ordering (start < data file < end) is critical: when paths are equal,
-      // we must start delete ranges before processing data files, and end ranges after.
-      enum class Type : uint8_t {
-        kStartPositionalDelete = 0,
-        kDataFile = 1,
-        kEndPositionalDelete = 2,
-      };
-
-      const Type& type() const { return type_; };
-      const std::string& path() const { return path_; };
-
-      static std::pair<Event, Event> CreateFromDelete(const PositionalDeleteWithExtraInfo& del) {
-        iceberg::Ensure(del.min_max_referenced_path_.has_value(),
-                        std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
-
-        Event start(Type::kStartPositionalDelete, del.min_max_referenced_path_->first);
-        Event end(Type::kEndPositionalDelete, del.min_max_referenced_path_->second);
-
-        return std::make_pair(std::move(start), std::move(end));
-      }
-
-      static Event CreateFromData(const DataEntry& data) { return Event(Type::kDataFile, data.path); }
-
-      // compare by path, then by type (to ensure correct event ordering at equal paths).
-      bool operator<(const Event& other) const {
-        return std::tie(path(), type()) < std::tie(other.path(), other.type());
-      }
-
-     private:
-      Event(Type t, std::string p) : type_(t), path_(std::move(p)) {}
-
-      Type type_;
-      std::string path_;
+    // Events for the scanline algorithm.
+    // Event ordering (start < data file < end) is critical: when paths are equal,
+    // we must start delete ranges before processing data files, and end ranges after.
+    enum class Type : uint8_t {
+      kStartPositionalDelete = 0,
+      kDataFile = 1,
+      kEndPositionalDelete = 2,
     };
 
-    // Convert partition data into scanline events.
-    // Each delete range [min, max] generates two events (start and end).
-    // Each data file generates one point event.
-    static std::vector<Event> GetEventsInPartition(const std::vector<LayerWithExtraInfo>& partition) {
-      std::vector<Event> events;
-      for (const auto& layer : partition) {
-        for (const auto& del : layer.positional_delete_entries_) {
-          auto [start, end] = Event::CreateFromDelete(del);
-          events.emplace_back(std::move(start));
-          events.emplace_back(std::move(end));
-        }
-        for (const auto& data : layer.data_entries_) {
-          events.emplace_back(Event::CreateFromData(data));
-        }
-      }
+    const Type& type() const { return type_; };
+    const std::string& path() const { return path_; };
 
-      return events;
-    }
-
-    static std::vector<std::string> FindBucketLowerBounds(const std::vector<LayerWithExtraInfo>& partition) {
-      std::vector<Event> events = GetEventsInPartition(partition);
-      std::sort(events.begin(), events.end());
-
-      return FindBucketLowerBounds(events);
-    }
-
-    // Core scanline algorithm: find bucket boundaries where no delete ranges overlap.
-    //
-    // Uses a "balance" counter tracking active delete ranges (like bracket matching):
-    // - kStartPositionalDelete: increment balance (opening bracket)
-    // - kEndPositionalDelete: decrement balance (closing bracket)
-    // - kDataFile: no change to balance
-    //
-    // When balance == 0, no delete ranges are active, so we can start a new bucket.
-    // This creates non-intersecting groups: files in different buckets have no common deletes.
-    //
-    // Example:
-    //   Input:
-    //     Delete ranges: Del([A-C]), Del([E-G])
-    //     Data files: Data(B), Data(D), Data(F)
-    //   After sorting events:
-    //     Start[A], B, End[C], D, Start[E], F, End[G]
-    //   Bucket boundaries:
-    //     A, D, E
-    //   Result (computed by RedistributeDataIntoBuckets):
-    //     Bucket[A]: [Data(B), Del([A-C])]
-    //     Bucket[D]: [Data(D)]
-    //     Bucket[E]: [Data(F), Del([E-G])]
-    static std::vector<std::string> FindBucketLowerBounds(const std::vector<Event>& events) {
-      uint64_t balance = 0;
-      std::vector<std::string> bucket_lower_bounds;
-
-      for (const auto& event : events) {
-        if (balance == 0) {
-          bucket_lower_bounds.emplace_back(event.path());
-        }
-
-        switch (event.type()) {
-          case Event::Type::kStartPositionalDelete:
-            ++balance;
-            break;
-          case Event::Type::kDataFile:
-            break;
-          case Event::Type::kEndPositionalDelete:
-            iceberg::Ensure(balance > 0, std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) +
-                                             "): internal error");
-            --balance;
-            break;
-        }
-      }
-
-      iceberg::Ensure(balance == 0,
+    static std::pair<Event, Event> CreateFromDelete(const PositionalDeleteWithExtraInfo& del) {
+      iceberg::Ensure(del.min_max_referenced_path_.has_value(),
                       std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
 
-      return bucket_lower_bounds;
+      Event start(Type::kStartPositionalDelete, del.min_max_referenced_path_->first);
+      Event end(Type::kEndPositionalDelete, del.min_max_referenced_path_->second);
+
+      return std::make_pair(std::move(start), std::move(end));
     }
 
-    static size_t CalculateBucketByPath(const std::vector<std::string>& bucket_lower_bounds, const std::string& path) {
-      auto it = std::upper_bound(bucket_lower_bounds.begin(), bucket_lower_bounds.end(), path);
-      iceberg::Ensure(it != bucket_lower_bounds.begin(),
-                      std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
-      --it;
+    static Event CreateFromData(const DataEntry& data) { return Event(Type::kDataFile, data.path); }
 
-      return it - bucket_lower_bounds.begin();
-    }
+    // compare by path, then by type (to ensure correct event ordering at equal paths).
+    bool operator<(const Event& other) const { return std::tie(path(), type()) < std::tie(other.path(), other.type()); }
 
-    static void AppendDataFileToBucket(std::vector<LayerWithExtraInfo>& bucket, DataEntry data) {
-      // Delete files in layer X are applied to data files in layers <= X
-      // Already processed delete files must NOT be applied to the new data file
-      // If the last layer contains delete files, a new layer must be created for the new data file
-      if (bucket.empty() || !bucket.back().positional_delete_entries_.empty()) {
-        bucket.emplace_back();
-      }
-      bucket.back().data_entries_.emplace_back(std::move(data));
-    }
+   private:
+    Event(Type t, std::string p) : type_(t), path_(std::move(p)) {}
 
-    static void AppendDeleteFileToBucket(std::vector<LayerWithExtraInfo>& bucket, PositionalDeleteWithExtraInfo del) {
-      if (bucket.empty()) {
-        bucket.emplace_back();
-      }
-      bucket.back().positional_delete_entries_.emplace_back(std::move(del));
-    }
-
-    // Distribute data and delete files into buckets based on computed boundaries.
-    static std::vector<std::vector<LayerWithExtraInfo>> RedistributeDataIntoBuckets(
-        const std::vector<std::string>& bucket_lower_bounds, std::vector<LayerWithExtraInfo>&& partition) {
-      const size_t groups = bucket_lower_bounds.size();
-      std::vector<std::vector<LayerWithExtraInfo>> new_partitions(groups);
-
-      for (auto& layer : partition) {
-        for (auto& data : layer.data_entries_) {
-          size_t group = CalculateBucketByPath(bucket_lower_bounds, data.path);
-          AppendDataFileToBucket(new_partitions[group], std::move(data));
-        }
-
-        for (const auto& del : layer.positional_delete_entries_) {
-          const auto& [min, max] = del.min_max_referenced_path_.value();
-          size_t bucket_1 = CalculateBucketByPath(bucket_lower_bounds, min);
-          size_t bucket_2 = CalculateBucketByPath(bucket_lower_bounds, max);
-
-          iceberg::Ensure(bucket_1 == bucket_2,
-                          std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
-
-          AppendDeleteFileToBucket(new_partitions[bucket_1], std::move(del));
-        }
-      }
-
-      return new_partitions;
-    }
-
-    static bool CanOptimizePartition(const std::vector<LayerWithExtraInfo>& partitions) {
-      bool has_positional_delete = false;
-      bool has_positional_delete_without_stats = false;
-      bool has_equality_delete = false;
-
-      for (const auto& layer : partitions) {
-        if (!layer.equality_delete_entries_.empty()) {
-          has_equality_delete = true;
-        }
-        if (!layer.positional_delete_entries_.empty()) {
-          has_positional_delete = true;
-
-          for (const auto& entry : layer.positional_delete_entries_) {
-            if (!entry.min_max_referenced_path_.has_value()) {
-              has_positional_delete_without_stats = true;
-            }
-          }
-        }
-      }
-
-      return has_positional_delete && !has_positional_delete_without_stats && !has_equality_delete;
-    }
-
-    static std::vector<std::vector<LayerWithExtraInfo>> OptimizePartition(std::vector<LayerWithExtraInfo>&& partition) {
-      std::vector<std::string> bucket_lower_bounds = FindBucketLowerBounds(partition);
-
-      return RedistributeDataIntoBuckets(bucket_lower_bounds, std::move(partition));
-    }
+    Type type_;
+    std::string path_;
   };
 
-  static std::vector<ScanMetadata::Partition> RemoveDanglingDeletes(
-      std::vector<std::vector<LayerWithExtraInfo>>&& partitions, std::shared_ptr<ILogger> logger) {
-    std::vector<ScanMetadata::Partition> result;
-
-    for (auto& layers : partitions) {
-      ScanMetadata::Partition partition;
-
-      bool is_empty =
-          std::all_of(layers.begin(), layers.end(), [](const auto& layer) { return layer.data_entries_.empty(); });
-      if (is_empty) {
-        if (logger) {
-          int64_t dangling_positional_delete_files = 0;
-          for (auto& elem : layers) {
-            dangling_positional_delete_files += elem.positional_delete_entries_.size();
-          }
-
-          logger->Log(std::to_string(dangling_positional_delete_files), "metrics:plan:dangling_positional_files");
-        }
-        continue;
+  // Convert partition data into scanline events.
+  // Each delete range [min, max] generates two events (start and end).
+  // Each data file generates one point event.
+  static std::vector<Event> GetEventsInPartition(const std::vector<LayerWithExtraInfo>& partition) {
+    std::vector<Event> events;
+    for (const auto& layer : partition) {
+      for (const auto& del : layer.positional_delete_entries_) {
+        auto [start, end] = Event::CreateFromDelete(del);
+        events.emplace_back(std::move(start));
+        events.emplace_back(std::move(end));
       }
-
-      std::set<std::string> data_paths;
-
-      // to remove dangling positional delete file, we need to make sure that there are no data files in the range
-      // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers less
-      // than or equal to X. To find all dangling deletes in one pass, we start from max layer
-      for (auto it = layers.begin(); it != layers.end(); ++it) {
-        auto& layer = *it;
-
-        for (const auto& data_entry : layer.data_entries_) {
-          data_paths.insert(data_entry.path);
-        }
-
-        ScanMetadata::Layer result_layer;
-        result_layer.data_entries_ = std::move(layer.data_entries_);
-        result_layer.equality_delete_entries_ = std::move(layer.equality_delete_entries_);
-        // TODO(gmusya): add tests with equality deletes
-
-        int64_t dangling_positional_delete_files = 0;
-        for (const auto& pos_delete : layer.positional_delete_entries_) {
-          bool has_stats = pos_delete.min_max_referenced_path_.has_value();
-          if (has_stats) {
-            const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
-            auto iter1 = data_paths.lower_bound(min_referenced_path);  // first matching
-            auto iter2 = data_paths.upper_bound(max_referenced_path);  // first non-matching
-            if (iter1 == iter2) {
-              ++dangling_positional_delete_files;
-              continue;
-            }
-          }
-          result_layer.positional_delete_entries_.emplace_back(std::move(pos_delete.positional_delete_.path));
-        }
-
-        if (logger) {
-          auto log_if_not_null = [logger](int64_t value, const std::string& name) {
-            if (value > 0) {
-              logger->Log(std::to_string(value), name);
-            }
-          };
-
-          log_if_not_null(dangling_positional_delete_files, "metrics:plan:dangling_positional_files");
-          log_if_not_null(result_layer.data_entries_.size(), "metrics:plan:data_files");
-          log_if_not_null(result_layer.positional_delete_entries_.size(), "metrics:plan:positional_files");
-          log_if_not_null(result_layer.equality_delete_entries_.size(), "metrics:plan:equality_files");
-        }
-
-        if (!result_layer.data_entries_.empty() || !result_layer.positional_delete_entries_.empty() ||
-            !result_layer.equality_delete_entries_.empty()) {
-          partition.emplace_back(std::move(result_layer));
-        }
+      for (const auto& data : layer.data_entries_) {
+        events.emplace_back(Event::CreateFromData(data));
       }
-
-      result.emplace_back(std::move(partition));
     }
 
-    return result;
+    return events;
   }
 
-  static std::vector<ScanMetadata::Partition> GetPartitions(
-      std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& partitions,
-      std::shared_ptr<ILogger> logger) {
-    std::vector<std::vector<LayerWithExtraInfo>> meta_as_vec = MapToVec(std::move(partitions));
+  // Core scanline algorithm: find bucket boundaries where no delete ranges overlap.
+  //
+  // Uses a "balance" counter tracking active delete ranges (like bracket matching):
+  // - kStartPositionalDelete: increment balance (opening bracket)
+  // - kEndPositionalDelete: decrement balance (closing bracket)
+  // - kDataFile: no change to balance
+  //
+  // When balance == 0, no delete ranges are active, so we can start a new bucket.
+  // This creates non-intersecting groups: files in different buckets have no common deletes.
+  //
+  // Example:
+  //   Input:
+  //     Delete ranges: Del([A-C]), Del([E-G])
+  //     Data files: Data(B), Data(D), Data(F)
+  //   After sorting events:
+  //     Start[A], B, End[C], D, Start[E], F, End[G]
+  //   Bucket boundaries:
+  //     A, D, E
+  //   Result (computed by RedistributeDataIntoBuckets):
+  //     Bucket[A]: [Data(B), Del([A-C])]
+  //     Bucket[D]: [Data(D)]
+  //     Bucket[E]: [Data(F), Del([E-G])]
+  static std::vector<std::string> FindBucketLowerBounds(const std::vector<LayerWithExtraInfo>& partition) {
+    std::vector<Event> events = GetEventsInPartition(partition);
+    std::sort(events.begin(), events.end());
 
-    if (PositonalDeleteOptimizer::CanOptimize(meta_as_vec)) {
-      meta_as_vec = PositonalDeleteOptimizer::Optimize(std::move(meta_as_vec));
+    uint64_t balance = 0;
+    std::vector<std::string> bucket_lower_bounds;
+
+    for (const auto& event : events) {
+      if (balance == 0) {
+        bucket_lower_bounds.emplace_back(event.path());
+      }
+
+      switch (event.type()) {
+        case Event::Type::kStartPositionalDelete:
+          ++balance;
+          break;
+        case Event::Type::kDataFile:
+          break;
+        case Event::Type::kEndPositionalDelete:
+          iceberg::Ensure(balance > 0,
+                          std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+          --balance;
+          break;
+      }
     }
 
-    return RemoveDanglingDeletes(std::move(meta_as_vec), logger);
+    iceberg::Ensure(balance == 0,
+                    std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+
+    return bucket_lower_bounds;
   }
 
-  std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>> partitions;
-  // if there are k partitions and t global equality delete entries, k * t entries will be created
-  // TODO(gmusya): improve
-  std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
-  std::shared_ptr<ILogger> logger_;
+  static size_t CalculateBucketByPath(const std::vector<std::string>& bucket_lower_bounds, const std::string& path) {
+    auto it = std::upper_bound(bucket_lower_bounds.begin(), bucket_lower_bounds.end(), path);
+    iceberg::Ensure(it != bucket_lower_bounds.begin(),
+                    std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+    --it;
+
+    return it - bucket_lower_bounds.begin();
+  }
+
+  static void AppendDataFileToBucket(std::vector<LayerWithExtraInfo>& bucket, DataEntry data) {
+    // Delete files in layer X are applied to data files in layers <= X
+    // Already processed delete files must NOT be applied to the new data file
+    // If the last layer contains delete files, a new layer must be created for the new data file
+    if (bucket.empty() || !bucket.back().positional_delete_entries_.empty()) {
+      bucket.emplace_back();
+    }
+    bucket.back().data_entries_.emplace_back(std::move(data));
+  }
+
+  static void AppendDeleteFileToBucket(std::vector<LayerWithExtraInfo>& bucket, PositionalDeleteWithExtraInfo del) {
+    if (bucket.empty()) {
+      bucket.emplace_back();
+    }
+    bucket.back().positional_delete_entries_.emplace_back(std::move(del));
+  }
+
+  // Distribute data and delete files into buckets based on computed boundaries.
+  static std::vector<std::vector<LayerWithExtraInfo>> RedistributeDataIntoBuckets(
+      const std::vector<std::string>& bucket_lower_bounds, std::vector<LayerWithExtraInfo>&& partition) {
+    const size_t groups = bucket_lower_bounds.size();
+    std::vector<std::vector<LayerWithExtraInfo>> new_partitions(groups);
+
+    for (auto& layer : partition) {
+      for (auto& data : layer.data_entries_) {
+        size_t group = CalculateBucketByPath(bucket_lower_bounds, data.path);
+        AppendDataFileToBucket(new_partitions[group], std::move(data));
+      }
+
+      for (const auto& del : layer.positional_delete_entries_) {
+        const auto& [min, max] = del.min_max_referenced_path_.value();
+        size_t bucket_1 = CalculateBucketByPath(bucket_lower_bounds, min);
+        size_t bucket_2 = CalculateBucketByPath(bucket_lower_bounds, max);
+
+        iceberg::Ensure(bucket_1 == bucket_2,
+                        std::string(__PRETTY_FUNCTION__) + "(line " + std::to_string(__LINE__) + "): internal error");
+
+        AppendDeleteFileToBucket(new_partitions[bucket_1], std::move(del));
+      }
+    }
+
+    return new_partitions;
+  }
+
+  static bool CanOptimizePartition(const std::vector<LayerWithExtraInfo>& partitions) {
+    bool has_positional_delete = false;
+    bool has_positional_delete_without_stats = false;
+    bool has_equality_delete = false;
+
+    for (const auto& layer : partitions) {
+      if (!layer.equality_delete_entries_.empty()) {
+        has_equality_delete = true;
+      }
+      if (!layer.positional_delete_entries_.empty()) {
+        has_positional_delete = true;
+
+        for (const auto& entry : layer.positional_delete_entries_) {
+          if (!entry.min_max_referenced_path_.has_value()) {
+            has_positional_delete_without_stats = true;
+          }
+        }
+      }
+    }
+
+    return has_positional_delete && !has_positional_delete_without_stats && !has_equality_delete;
+  }
+
+  static std::vector<std::vector<LayerWithExtraInfo>> OptimizePartition(std::vector<LayerWithExtraInfo>&& partition) {
+    std::vector<std::string> bucket_lower_bounds = FindBucketLowerBounds(partition);
+
+    return RedistributeDataIntoBuckets(bucket_lower_bounds, std::move(partition));
+  }
 };
+}  // namespace
+
+std::vector<ScanMetadata::Partition> ScanMetadataBuilder::RemoveDanglingDeletes(
+    std::vector<std::vector<LayerWithExtraInfo>>&& partitions, std::shared_ptr<ILogger> logger) {
+  std::vector<ScanMetadata::Partition> result;
+
+  for (auto& layers : partitions) {
+    ScanMetadata::Partition partition;
+
+    bool is_empty =
+        std::all_of(layers.begin(), layers.end(), [](const auto& layer) { return layer.data_entries_.empty(); });
+    if (is_empty) {
+      if (logger) {
+        int64_t dangling_positional_delete_files = 0;
+        for (auto& elem : layers) {
+          dangling_positional_delete_files += elem.positional_delete_entries_.size();
+        }
+
+        logger->Log(std::to_string(dangling_positional_delete_files), "metrics:plan:dangling_positional_files");
+      }
+      continue;
+    }
+
+    std::set<std::string> data_paths;
+
+    // to remove dangling positional delete file, we need to make sure that there are no data files in the range
+    // [min_referenced_file, max_referenced_file]. Delete files in layer X are applied to data files in layers less
+    // than or equal to X. To find all dangling deletes in one pass, we start from max layer
+    for (auto it = layers.begin(); it != layers.end(); ++it) {
+      auto& layer = *it;
+
+      for (const auto& data_entry : layer.data_entries_) {
+        data_paths.insert(data_entry.path);
+      }
+
+      ScanMetadata::Layer result_layer;
+      result_layer.data_entries_ = std::move(layer.data_entries_);
+      result_layer.equality_delete_entries_ = std::move(layer.equality_delete_entries_);
+      // TODO(gmusya): add tests with equality deletes
+
+      int64_t dangling_positional_delete_files = 0;
+      for (const auto& pos_delete : layer.positional_delete_entries_) {
+        bool has_stats = pos_delete.min_max_referenced_path_.has_value();
+        if (has_stats) {
+          const auto& [min_referenced_path, max_referenced_path] = *pos_delete.min_max_referenced_path_;
+          auto iter1 = data_paths.lower_bound(min_referenced_path);  // first matching
+          auto iter2 = data_paths.upper_bound(max_referenced_path);  // first non-matching
+          if (iter1 == iter2) {
+            ++dangling_positional_delete_files;
+            continue;
+          }
+        }
+        result_layer.positional_delete_entries_.emplace_back(std::move(pos_delete.positional_delete_.path));
+      }
+
+      if (logger) {
+        auto log_if_not_null = [logger](int64_t value, const std::string& name) {
+          if (value > 0) {
+            logger->Log(std::to_string(value), name);
+          }
+        };
+
+        log_if_not_null(dangling_positional_delete_files, "metrics:plan:dangling_positional_files");
+        log_if_not_null(result_layer.data_entries_.size(), "metrics:plan:data_files");
+        log_if_not_null(result_layer.positional_delete_entries_.size(), "metrics:plan:positional_files");
+        log_if_not_null(result_layer.equality_delete_entries_.size(), "metrics:plan:equality_files");
+      }
+
+      if (!result_layer.Empty()) {
+        partition.emplace_back(std::move(result_layer));
+      }
+    }
+
+    result.emplace_back(std::move(partition));
+  }
+
+  return result;
+}
+
+std::vector<ScanMetadata::Partition> ScanMetadataBuilder::GetPartitions(
+    std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& partitions, std::shared_ptr<ILogger> logger) {
+  std::vector<std::vector<LayerWithExtraInfo>> meta_as_vec = MapToVec(std::move(partitions));
+
+  if (PositonalDeleteOptimizer::CanOptimize(meta_as_vec)) {
+    meta_as_vec = PositonalDeleteOptimizer::Optimize(std::move(meta_as_vec));
+  }
+
+  return RemoveDanglingDeletes(std::move(meta_as_vec), logger);
+}
 
 class ScanMetadataBuilderMT : public ScanMetadataBuilder {
  public:

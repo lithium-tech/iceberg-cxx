@@ -17,6 +17,8 @@
 
 namespace iceberg::ice_tea {
 
+using SequenceNumber = int64_t;
+
 struct DataEntry {
   struct Segment {
     Segment() = delete;
@@ -147,5 +149,73 @@ class AllEntriesStream : public IcebergEntriesStream {
 
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
                                             std::shared_ptr<ILogger> logger);
+
+struct PositionalDeleteWithExtraInfo {
+  PositionalDeleteInfo positional_delete_;
+  std::optional<std::pair<std::string, std::string>> min_max_referenced_path_;
+
+  PositionalDeleteWithExtraInfo(std::string path,
+                                std::optional<std::pair<std::string, std::string>> min_max_referenced_path)
+      : positional_delete_(std::move(path)), min_max_referenced_path_(std::move(min_max_referenced_path)) {}
+};
+
+struct LayerWithExtraInfo {
+  std::vector<DataEntry> data_entries_;
+  std::vector<PositionalDeleteWithExtraInfo> positional_delete_entries_;
+  std::vector<EqualityDeleteInfo> equality_delete_entries_;
+
+  bool operator==(const LayerWithExtraInfo& layer) const = default;
+
+  bool Empty() const {
+    return data_entries_.empty() && positional_delete_entries_.empty() && equality_delete_entries_.empty()
+  }
+};
+
+class ScanMetadataBuilder {
+ public:
+  explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
+      : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()), logger_(std::move(logger)) {}
+
+  virtual ~ScanMetadataBuilder() = default;
+
+  ScanMetadata GetResult();
+
+  arrow::Status AddEntry(const iceberg::ManifestEntry& entry);
+
+  virtual void AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                           const std::string& path, std::vector<DataEntry::Segment>&& segments);
+
+  virtual void AddPositionDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                                  const std::string& path,
+                                  const std::optional<std::pair<std::string, std::string>>& min_max_referenced_path);
+
+  virtual void AddGlobalEqualityDeletes(SequenceNumber sequence_number, const std::string& path,
+                                        const std::vector<int>& equality_ids);
+
+  virtual void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                                  const std::string& path, const std::vector<int>& equality_ids);
+
+ protected:
+  arrow::Status CheckPartitionTupleIsCorrect(const iceberg::ManifestEntry& entry) const;
+
+  static std::vector<std::vector<LayerWithExtraInfo>> MapToVec(
+      std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& scan_metadata);
+
+  std::vector<ScanMetadata::Partition> GetPartitions(
+      std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>>&& partitions,
+      std::shared_ptr<ILogger> logger);
+
+  std::vector<ScanMetadata::Partition> RemoveDanglingDeletes(std::vector<std::vector<LayerWithExtraInfo>>&& partitions,
+                                                             std::shared_ptr<ILogger> logger);
+
+  std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>> partitions;
+  std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
+  const TableMetadataV2& table_metadata_;
+  std::shared_ptr<const iceberg::Schema> schema_;
+  std::shared_ptr<ILogger> logger_;
+
+ private:
+  void StoreEntry(std::string serialized_partition_key, const iceberg::ManifestEntry& entry);
+};
 
 }  // namespace iceberg::ice_tea
