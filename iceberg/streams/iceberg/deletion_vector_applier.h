@@ -3,6 +3,7 @@
 #include <iceberg/common/logger.h>
 #include <iceberg/deletion_vector.h>
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -25,7 +26,9 @@ class DeletionVectorApplier : public IcebergStream {
 
   std::shared_ptr<IcebergBatch> ReadNext() override {
     auto batch = input_->ReadNext();
-    if (!batch) return nullptr;
+    if (!batch) {
+      return nullptr;
+    }
 
     if (logger_) logger_->Log("", "events:deletion_vector:start_batch");
     Defer defer([&]() {
@@ -39,6 +42,8 @@ class DeletionVectorApplier : public IcebergStream {
 
  private:
   static std::vector<int32_t> GetRelativeElems(const DeletionVector& dv, uint64_t start, uint64_t end) {
+    Ensure(end - start <= static_cast<uint64_t>(std::numeric_limits<int32_t>::max()), "batch is too large");
+
     auto abs_elems = dv.GetElems(start, end);
     std::vector<int32_t> relative;
     relative.reserve(abs_elems.size());

@@ -1,15 +1,19 @@
 #include "iceberg/streams/iceberg/deletion_vector_applier.h"
 
 #include <arrow/record_batch.h>
-#include <iceberg/common/logger.h>
-#include <iceberg/tea_scan.h>
 
 #include <fstream>
+#include <functional>
+
+#include <iceberg/common/logger.h>
+#include <iceberg/tea_scan.h>
 
 #include "arrow/status.h"
 #include "gtest/gtest.h"
 #include "iceberg/common/fs/file_reader_provider_impl.h"
 #include "iceberg/common/fs/filesystem_provider_impl.h"
+#include "iceberg/deletion_vector.h"
+#include "iceberg/puffin.h"
 #include "iceberg/streams/iceberg/iceberg_batch.h"
 #include "iceberg/streams/iceberg/plan.h"
 #include "iceberg/streams/ut/batch_maker.h"
@@ -18,8 +22,6 @@
 #include "iceberg/test_utils/column.h"
 #include "iceberg/test_utils/scoped_temp_dir.h"
 #include "iceberg/test_utils/write.h"
-#include "iceberg/deletion_vector.h"
-#include "iceberg/puffin.h"
 
 namespace iceberg {
 namespace {
@@ -57,15 +59,15 @@ class DeletionVectorApplierTest : public ::testing::Test {
   };
 
   arrow::Result<DVFileInfo> PrepareDeletionVectorFile(const std::vector<uint64_t>& rows_to_delete,
-                                                         const std::string& referenced_data_file) {
+                                                      const std::string& referenced_data_file) {
     // Create DeletionVector
     PuffinFile::Footer::BlobMetadata dummy_meta;
     dummy_meta.type = DeletionVector::kBlobType;
     dummy_meta.properties[std::string(properties_names::kReferencedDataFile)] = referenced_data_file;
-    dummy_meta.properties[std::string(properties_names::kCardinality)] = std::to_string(0); // placeholder
+    dummy_meta.properties[std::string(properties_names::kCardinality)] = std::to_string(0);  // placeholder
     DeletionVector dv(dummy_meta, roaring::Roaring64Map());
     dv.AddMany(rows_to_delete);
-    
+
     std::string blob_data = dv.GetBlob();
     auto properties = dv.GetProperties();
 
@@ -89,8 +91,8 @@ class DeletionVectorApplierTest : public ::testing::Test {
     return DVFileInfo{"file://" + filename, blob_meta.offset, blob_meta.length};
   }
 
-  std::vector<std::shared_ptr<IcebergBatch>> GetResult(IcebergStreamPtr input_stream, 
-                                                         std::shared_ptr<DeletionVector> dv) {
+  std::vector<std::shared_ptr<IcebergBatch>> GetResult(IcebergStreamPtr input_stream,
+                                                       std::shared_ptr<DeletionVector> dv) {
     counting_logger_ = std::make_shared<CountingLogger>();
     auto dv_applier = std::make_shared<DeletionVectorApplier>(input_stream, std::move(dv), counting_logger_);
 
@@ -112,6 +114,17 @@ class DeletionVectorApplierTest : public ::testing::Test {
       const auto& input_selection_vector = expected_selection_vectors[i];
       const auto& result_selection_vector = result_batch->GetSelectionVector();
       EXPECT_EQ(input_selection_vector.GetVector(), result_selection_vector.GetVector()) << "i = " << i << std::endl;
+    }
+  }
+
+  void ExpectThrowWithMessage(std::function<void()> func, const std::string& expected_message) {
+    try {
+      func();
+      FAIL() << "Should have thrown";
+    } catch (const std::runtime_error& e) {
+      EXPECT_STREQ(e.what(), expected_message.c_str());
+    } catch (...) {
+      FAIL() << "Threw something other than std::runtime_error";
     }
   }
 
@@ -173,7 +186,7 @@ TEST_F(DeletionVectorApplierTest, MultipleBatches) {
 
   // Delete rows 1 and 4
   ASSIGN_OR_FAIL(auto dv_file, PrepareDeletionVectorFile({1, 4}, data_path));
-  
+
   auto fs_provider = std::make_shared<FileSystemProvider>(
       std::map<std::string, std::shared_ptr<IFileSystemGetter>>{{"file", std::make_shared<LocalFileSystemGetter>()}});
   auto provider = MakeFileReaderProvider(fs_provider);
@@ -181,13 +194,39 @@ TEST_F(DeletionVectorApplierTest, MultipleBatches) {
 
   std::vector<SelectionVector<int32_t>> expected_selection_vectors = {
       SelectionVector<int32_t>(std::vector<int32_t>{0, 2}),
-      SelectionVector<int32_t>(std::vector<int32_t>{0, 2}), // 0 and 2 are relative to row_position 3 (rows 3 and 5)
+      SelectionVector<int32_t>(std::vector<int32_t>{0, 2}),  // 0 and 2 are relative to row_position 3 (rows 3 and 5)
   };
 
   std::vector<std::shared_ptr<IcebergBatch>> result_batches = GetResult(std::move(input_stream), std::move(dv));
 
   CompareResultWithExpected(arrow_input_batches, result_batches, expected_selection_vectors);
   EXPECT_EQ(counting_logger_->DeletedRowsCount(), 2);
+}
+
+TEST_F(DeletionVectorApplierTest, NullDV) {
+  IcebergStreamPtr input_stream = std::make_shared<MockStream<IcebergBatch>>(std::vector<IcebergBatch>{});
+  ExpectThrowWithMessage([&]() { std::make_shared<DeletionVectorApplier>(input_stream, nullptr); }, "dv is nullptr");
+}
+
+TEST_F(DeletionVectorApplierTest, LargeBatch) {
+  // Use num_rows that exceeds int32_t::max() + 1
+  uint64_t large_num_rows = static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) + 2;
+  auto schema = arrow::schema({});
+  auto arrow_batch = arrow::RecordBatch::Make(schema, static_cast<int64_t>(large_num_rows),
+                                              std::vector<std::shared_ptr<arrow::Array>>{});
+  PartitionLayerFilePosition state(PartitionLayerFile(PartitionLayer(0, 0), "path"), 0);
+  // We can pass an empty SelectionVector since ApplyDeletionVector doesn't check its size relative to batch num_rows
+  IcebergBatch large_batch(BatchWithSelectionVector(arrow_batch, SelectionVector<int32_t>(0)), state);
+
+  auto input_stream = std::make_shared<MockStream<IcebergBatch>>(std::vector<IcebergBatch>{large_batch});
+
+  PuffinFile::Footer::BlobMetadata dummy_meta;
+  dummy_meta.type = DeletionVector::kBlobType;
+  auto dv = std::make_shared<DeletionVector>(dummy_meta, roaring::Roaring64Map());
+
+  auto dv_applier = std::make_shared<DeletionVectorApplier>(input_stream, dv);
+
+  ExpectThrowWithMessage([&]() { dv_applier->ReadNext(); }, "batch is too large");
 }
 
 }  // namespace
