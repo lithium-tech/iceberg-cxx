@@ -819,7 +819,7 @@ void ScanMetadataBuilder::StoreEntry(std::string serialized_partition_key, const
 void ScanMetadataBuilder::AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number,
                                       const std::string& path, std::vector<DataEntry::Segment>&& segments) {
   partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
-      DataEntry(path, std::move(segments), std::nullopt));
+      DataEntry(path, std::move(segments)));
 }
 
 void ScanMetadataBuilder::AddPositionDeletes(

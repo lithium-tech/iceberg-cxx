@@ -167,7 +167,7 @@ struct LayerWithExtraInfo {
   bool operator==(const LayerWithExtraInfo& layer) const = default;
 
   bool Empty() const {
-    return data_entries_.empty() && positional_delete_entries_.empty() && equality_delete_entries_.empty()
+    return data_entries_.empty() && positional_delete_entries_.empty() && equality_delete_entries_.empty();
   }
 };
 
@@ -209,6 +209,8 @@ class ScanMetadataBuilder {
                                                              std::shared_ptr<ILogger> logger);
 
   std::map<std::string, std::map<SequenceNumber, LayerWithExtraInfo>> partitions;
+  // if there are k partitions and t global equality delete entries, k * t entries will be created
+  // TODO(gmusya): improve
   std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
   const TableMetadataV2& table_metadata_;
   std::shared_ptr<const iceberg::Schema> schema_;
