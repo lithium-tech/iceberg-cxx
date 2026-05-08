@@ -7,6 +7,8 @@
 
 namespace iceberg {
 
+constexpr std::string_view kDeletionVectorFormat = "PUFFIN";
+
 namespace properties_names {
 constexpr std::string_view kCardinality = "cardinality";
 constexpr std::string_view kReferencedDataFile = "referenced-data-file";

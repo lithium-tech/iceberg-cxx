@@ -10,7 +10,6 @@
 #include <queue>
 #include <set>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -24,6 +23,7 @@
 #include "iceberg/common/error.h"
 #include "iceberg/common/logger.h"
 #include "iceberg/common/threadpool.h"
+#include "iceberg/deletion_vector.h"
 #include "iceberg/experimental_representations.h"
 #include "iceberg/filter/representation/value.h"
 #include "iceberg/filter/stats_filter/stats.h"
@@ -734,10 +734,54 @@ ScanMetadata ScanMetadataBuilder::GetResult() {
   result.schema = table_metadata_.GetCurrentSchema();
 
   for (auto& [partition_key, layers] : partitions) {
-    for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
-      auto& deletes_at_current_layer = layers[seqnum].equality_delete_entries_;
-      deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
-                                      equality_delete_entries.end());
+    std::unordered_map<std::string, std::pair<DeletionVectorInfo, SequenceNumber>> current_dvs;
+    for (auto& [seqnum, layer] : layers) {
+      for (auto& [path, dv] : layer.dv_entries_) {
+        auto& current = current_dvs[path];
+        if (seqnum >= current.second) {
+          current = {dv, seqnum};
+        }
+      }
+    }
+
+    std::unordered_set<std::string> matched_dv_paths;
+    for (auto& [seqnum, layer] : layers) {
+      auto it_eq = global_equality_deletes.upper_bound(seqnum);
+      for (; it_eq != global_equality_deletes.end(); ++it_eq) {
+        layer.equality_delete_entries_.insert(layer.equality_delete_entries_.end(), it_eq->second.begin(),
+                                              it_eq->second.end());
+      }
+
+      if (current_dvs.empty()) {
+        continue;
+      }
+
+      for (auto& data : layer.data_entries_) {
+        auto it_dv = current_dvs.find(data.path);
+        if (it_dv == current_dvs.end()) {
+          continue;
+        }
+
+        if (seqnum > it_dv->second.second) {
+          continue;
+        }
+
+        Ensure(layer.equality_delete_entries_.empty(),
+               "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " +
+                   std::to_string(seqnum) + " also contains Equality Deletes. Mixed deletes are not allowed.");
+
+        Ensure(layer.positional_delete_entries_.empty(),
+               "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " +
+                   std::to_string(seqnum) + " also contains Positional Deletes. Mixed deletes are not allowed.");
+
+        data.dv = it_dv->second.first;
+        matched_dv_paths.insert(data.path);
+      }
+    }
+
+    if (logger_) {
+      logger_->Log(std::to_string(current_dvs.size() - matched_dv_paths.size()),
+                   "metrics:plan:dangling_deletion_vector_files");
     }
   }
 
@@ -785,18 +829,29 @@ void ScanMetadataBuilder::StoreEntry(std::string serialized_partition_key, const
       // - There is no deletion vector that must be applied to the data file (when added, such a vector must
       // contain
       //   all deletes from existing position delete files)
-      std::optional<std::pair<std::string, std::string>> min_max_referenced_path;
-      constexpr uint32_t kFilePathId = 2147483546;
-      if (entry.data_file.lower_bounds.contains(kFilePathId) && entry.data_file.upper_bounds.contains(kFilePathId)) {
-        const std::vector<uint8_t>& min_bytes = entry.data_file.lower_bounds.at(kFilePathId);
-        const std::vector<uint8_t>& max_bytes = entry.data_file.upper_bounds.at(kFilePathId);
+      if (entry.data_file.file_format == iceberg::kDeletionVectorFormat) {
+        Ensure(entry.data_file.referenced_data_file.has_value(), "Deletion Vector must have referenced_data_file set");
+        Ensure(entry.data_file.content_offset.has_value(), "Deletion Vector must have content_offset set");
+        Ensure(entry.data_file.content_size_in_bytes.has_value(),
+               "Deletion Vector must have content_size_in_bytes set");
+        AddDeletionVector(serialized_partition_key, sequence_number, entry.data_file.file_path,
+                          *entry.data_file.referenced_data_file, *entry.data_file.content_offset,
+                          *entry.data_file.content_size_in_bytes);
+      } else {
+        std::optional<std::pair<std::string, std::string>> min_max_referenced_path;
+        constexpr uint32_t kFilePathId = 2147483546;
+        if (entry.data_file.lower_bounds.contains(kFilePathId) && entry.data_file.upper_bounds.contains(kFilePathId)) {
+          const std::vector<uint8_t>& min_bytes = entry.data_file.lower_bounds.at(kFilePathId);
+          const std::vector<uint8_t>& max_bytes = entry.data_file.upper_bounds.at(kFilePathId);
 
-        std::string min_path(min_bytes.begin(), min_bytes.end());
-        std::string max_path(max_bytes.begin(), max_bytes.end());
+          std::string min_path(min_bytes.begin(), min_bytes.end());
+          std::string max_path(max_bytes.begin(), max_bytes.end());
 
-        min_max_referenced_path.emplace(std::move(min_path), std::move(max_path));
+          min_max_referenced_path.emplace(std::move(min_path), std::move(max_path));
+        }
+        AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path,
+                           min_max_referenced_path);
       }
-      AddPositionDeletes(serialized_partition_key, sequence_number, entry.data_file.file_path, min_max_referenced_path);
       break;
     }
 
@@ -819,7 +874,7 @@ void ScanMetadataBuilder::StoreEntry(std::string serialized_partition_key, const
 void ScanMetadataBuilder::AddDataFile(const std::string& serialized_partition_key, SequenceNumber sequence_number,
                                       const std::string& path, std::vector<DataEntry::Segment>&& segments) {
   partitions[serialized_partition_key][sequence_number].data_entries_.emplace_back(
-      DataEntry(path, std::move(segments)));
+      DataEntry(path, std::move(segments), std::nullopt));
 }
 
 void ScanMetadataBuilder::AddPositionDeletes(
@@ -838,6 +893,13 @@ void ScanMetadataBuilder::AddEqualityDeletes(const std::string& serialized_parti
                                              SequenceNumber sequence_number, const std::string& path,
                                              const std::vector<int>& equality_ids) {
   partitions[serialized_partition_key][sequence_number - 1].equality_delete_entries_.emplace_back(path, equality_ids);
+}
+
+void ScanMetadataBuilder::AddDeletionVector(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                                            const std::string& path, const std::string& referenced_data_file,
+                                            int64_t offset, int64_t length) {
+  partitions[serialized_partition_key][sequence_number].dv_entries_[referenced_data_file] =
+      DeletionVectorInfo{path, offset, length, referenced_data_file};
 }
 
 arrow::Status ScanMetadataBuilder::CheckPartitionTupleIsCorrect(const iceberg::ManifestEntry& entry) const {
@@ -1237,6 +1299,14 @@ class ScanMetadataBuilderMT : public ScanMetadataBuilder {
     ScanMetadataBuilder::AddEqualityDeletes(serialized_partition_key, sequence_number, path, equality_ids);
   }
 
+  void AddDeletionVector(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                         const std::string& path, const std::string& referenced_data_file, int64_t offset,
+                         int64_t length) override {
+    std::lock_guard<std::mutex> guard(mutex_);
+    ScanMetadataBuilder::AddDeletionVector(serialized_partition_key, sequence_number, path, referenced_data_file,
+                                           offset, length);
+  }
+
   // consider making separate mutexes for each variable
   // partitions_mutex_, global_equality_deletes_mutex_
   std::mutex mutex_;
@@ -1327,6 +1397,9 @@ class ReferencedDataFileAwareScanPlanner {
 
   virtual arrow::Status HandlePositionDelete(const ManifestEntry& entry) {
     has_referenced_data_file = true;
+    if (entry.data_file.file_format == iceberg::kDeletionVectorFormat) {
+      return arrow::Status::OK();
+    }
     if (delete_file_path_to_referenced_data_file_path_.contains(entry.data_file.file_path)) {
       return arrow::Status::ExecutionError("Two delete files with same path: " + entry.data_file.file_path);
     }
@@ -1364,7 +1437,8 @@ class ReferencedDataFileAwareScanPlanner {
 
     for (auto&& [data_path, data_entry_with_layer_no] : data_file_name_to_data_entry_) {
       auto& [data_entry, data_layer_no] = data_entry_with_layer_no;
-      if (!data_file_name_to_posdel_entries_.contains(data_path)) {
+      bool has_dv = data_entry.dv.has_value();
+      if (!data_file_name_to_posdel_entries_.contains(data_path) && !has_dv) {
         result.partitions[0][0].data_entries_.emplace_back(std::move(data_entry));
         continue;
       }
@@ -1377,13 +1451,15 @@ class ReferencedDataFileAwareScanPlanner {
       new_layer.data_entries_.emplace_back(std::move(data_entry));
 
       // ignore deletes with sequence number less than sequence number in data file
-      auto& deletes = data_file_name_to_posdel_entries_.at(data_path);
-      for (auto& [del, del_layer_no] : deletes) {
-        if (del_layer_no < data_layer_no) {
-          continue;
-        }
+      if (data_file_name_to_posdel_entries_.contains(data_path)) {
+        auto& deletes = data_file_name_to_posdel_entries_.at(data_path);
+        for (auto& [del, del_layer_no] : deletes) {
+          if (del_layer_no < data_layer_no) {
+            continue;
+          }
 
-        new_layer.positional_delete_entries_.emplace_back(std::move(del));
+          new_layer.positional_delete_entries_.emplace_back(std::move(del));
+        }
       }
     }
 

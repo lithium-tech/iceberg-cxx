@@ -4,6 +4,7 @@
 
 #include "iceberg/streams/arrow/file_reader.h"
 #include "iceberg/streams/arrow/projection_stream.h"
+#include "iceberg/streams/iceberg/deletion_vector_applier.h"
 
 namespace iceberg {
 
@@ -193,8 +194,24 @@ IcebergStreamPtr FileReaderBuilder::Build(const AnnotatedDataPath& annotated_dat
                                      MakeStreamAwareLogger(logger_, "data_stream"));
   auto filter_stream = MakeFinalStream(arrow_reader, matching_row_groups, metadata, field_ids_for_filter,
                                        MakeStreamAwareLogger(logger_, "filter_stream"));
-  return std::make_shared<FilteringStream>(filter_stream, data_stream, row_filter_,
-                                           annotated_data_path.GetPartitionLayerFile(), logger_);
+  IcebergStreamPtr result = std::make_shared<FilteringStream>(filter_stream, data_stream, row_filter_,
+                                                              annotated_data_path.GetPartitionLayerFile(), logger_);
+
+  if (const std::string& path = annotated_data_path.GetPath(); path != last_data_file_path_) {
+    last_data_file_path_ = path;
+    last_dv_ = nullptr;
+
+    if (annotated_data_path.GetDeletionVector().has_value()) {
+      const auto& dv_info = *annotated_data_path.GetDeletionVector();
+      last_dv_ = ValueSafe(file_reader_provider_->OpenDeletionVector(dv_info.path, dv_info.offset, dv_info.length));
+    }
+  }
+
+  if (last_dv_) {
+    result = std::make_shared<DeletionVectorApplier>(result, last_dv_, logger_);
+  }
+
+  return result;
 }
 
 std::vector<FileReaderBuilder::ParquetColumnInfo> FileReaderBuilder::GetParquetColumnInfos(

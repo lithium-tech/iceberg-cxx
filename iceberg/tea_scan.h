@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <string>
 #include <vector>
@@ -18,6 +19,32 @@
 namespace iceberg::ice_tea {
 
 using SequenceNumber = int64_t;
+
+struct PositionalDeleteInfo {
+  std::string path;
+
+  PositionalDeleteInfo(std::string p) : path(std::move(p)) {}
+
+  bool operator==(const PositionalDeleteInfo& other) const = default;
+};
+
+struct EqualityDeleteInfo {
+  std::string path;
+  std::vector<int32_t> field_ids;
+
+  EqualityDeleteInfo(std::string p, std::vector<int32_t> f) : path(std::move(p)), field_ids(std::move(f)) {}
+
+  bool operator==(const EqualityDeleteInfo& other) const = default;
+};
+
+struct DeletionVectorInfo {
+  std::string path;
+  int64_t offset;
+  int64_t length;
+  std::string referenced_data_file;
+
+  bool operator==(const DeletionVectorInfo&) const = default;
+};
 
 struct DataEntry {
   struct Segment {
@@ -36,13 +63,15 @@ struct DataEntry {
   DataEntry& operator=(DataEntry&& other) = default;
   DataEntry() = delete;
   DataEntry(std::string p) : path(std::move(p)) {}
-  DataEntry(std::string other_path, std::vector<Segment> other_parts)
-      : path(std::move(other_path)), parts(std::move(other_parts)) {}
+  DataEntry(std::string other_path, std::vector<Segment> other_parts,
+            std::optional<DeletionVectorInfo> other_dv = std::nullopt)
+      : path(std::move(other_path)), parts(std::move(other_parts)), dv(std::move(other_dv)) {}
 
   DataEntry& operator+=(const DataEntry& other);
 
   std::string path;
   std::vector<Segment> parts;
+  std::optional<DeletionVectorInfo> dv;
 
   bool operator==(const DataEntry& other) const = default;
 
@@ -52,23 +81,6 @@ struct DataEntry {
 };
 
 DataEntry operator+(const DataEntry& lhs, const DataEntry& rhs);
-
-struct PositionalDeleteInfo {
-  std::string path;
-
-  PositionalDeleteInfo(std::string p) : path(std::move(p)) {}
-
-  bool operator==(const PositionalDeleteInfo& other) const = default;
-};
-
-struct EqualityDeleteInfo {
-  std::string path;
-  std::vector<int32_t> field_ids;
-
-  EqualityDeleteInfo(std::string p, std::vector<int32_t> f) : path(std::move(p)), field_ids(std::move(f)) {}
-
-  bool operator==(const EqualityDeleteInfo& other) const = default;
-};
 
 struct ScanMetadata {
   struct Layer {
@@ -163,11 +175,13 @@ struct LayerWithExtraInfo {
   std::vector<DataEntry> data_entries_;
   std::vector<PositionalDeleteWithExtraInfo> positional_delete_entries_;
   std::vector<EqualityDeleteInfo> equality_delete_entries_;
+  std::unordered_map<std::string, DeletionVectorInfo> dv_entries_;
 
   bool operator==(const LayerWithExtraInfo& layer) const = default;
 
   bool Empty() const {
-    return data_entries_.empty() && positional_delete_entries_.empty() && equality_delete_entries_.empty();
+    return data_entries_.empty() && positional_delete_entries_.empty() && equality_delete_entries_.empty() &&
+           dv_entries_.empty();
   }
 };
 
@@ -194,6 +208,10 @@ class ScanMetadataBuilder {
 
   virtual void AddEqualityDeletes(const std::string& serialized_partition_key, SequenceNumber sequence_number,
                                   const std::string& path, const std::vector<int>& equality_ids);
+
+  virtual void AddDeletionVector(const std::string& serialized_partition_key, SequenceNumber sequence_number,
+                                 const std::string& path, const std::string& referenced_data_file, int64_t offset,
+                                 int64_t length);
 
  protected:
   arrow::Status CheckPartitionTupleIsCorrect(const iceberg::ManifestEntry& entry) const;

@@ -66,7 +66,7 @@ class MetaStream : public iceberg::IAnnotatedDataPathStream {
           }
           iceberg::PartitionLayerFile state(iceberg::PartitionLayer(partition_id, layer_id), data_entry.path);
 
-          auto path = iceberg::AnnotatedDataPath(state, std::move(segments));
+          auto path = iceberg::AnnotatedDataPath(state, std::move(segments), data_entry.dv);
           all_data_entries.emplace_back(std::move(path));
         }
       }
