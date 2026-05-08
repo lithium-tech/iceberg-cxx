@@ -20,6 +20,7 @@ class DeletionVectorApplier : public IcebergStream {
                                  std::shared_ptr<ILogger> logger = nullptr)
       : input_(input), dv_(std::move(dv)), logger_(logger) {
     Ensure(input_ != nullptr, "input is nullptr");
+    Ensure(dv_ != nullptr, "dv is nullptr");
   }
 
   std::shared_ptr<IcebergBatch> ReadNext() override {
@@ -31,9 +32,7 @@ class DeletionVectorApplier : public IcebergStream {
       if (logger_) logger_->Log("", "events:deletion_vector:end_batch");
     });
 
-    if (dv_) {
-      ApplyDeletionVector(*batch, *dv_);
-    }
+    ApplyDeletionVector(*batch, *dv_);
 
     return batch;
   }
