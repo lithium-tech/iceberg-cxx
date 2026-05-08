@@ -10,6 +10,7 @@
 #include "arrow/status.h"
 #include "iceberg/common/fs/file_reader_provider.h"
 #include "iceberg/common/fs/filesystem_provider.h"
+#include "iceberg/deletion_vector.h"
 #include "iceberg/puffin.h"
 #include "iceberg/tea_scan.h"
 #include "parquet/arrow/reader.h"
@@ -29,6 +30,25 @@ class FileReaderProvider : public IFileReaderProvider {
     ARROW_RETURN_NOT_OK(reader_builder.Open(input_file));
 
     return reader_builder.Build();
+  }
+
+  arrow::Result<std::shared_ptr<DeletionVector>> OpenDeletionVector(const std::string& path, int64_t offset,
+                                                                    int64_t length) const override {
+    ARROW_ASSIGN_OR_RAISE(auto input_file, opener_(path));
+    ARROW_ASSIGN_OR_RAISE(auto footer, PuffinFile::ReadFooter(input_file));
+
+    auto deserialized_footer = footer.GetDeserializedFooter();
+    auto it =
+        std::find_if(deserialized_footer.blobs.begin(), deserialized_footer.blobs.end(),
+                     [offset, length](const auto& blob) { return blob.offset == offset && blob.length == length; });
+    if (it == deserialized_footer.blobs.end()) {
+      return arrow::Status::IOError("Deletion vector blob not found at offset ", offset);
+    }
+    ARROW_ASSIGN_OR_RAISE(auto buffer, input_file->ReadAt(offset, length));
+
+    // TODO(MeT3ger): reorganize interface to avoid redundant copies of blob data
+    std::string blob_data(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+    return std::make_shared<DeletionVector>(*it, std::move(blob_data));
   }
 
  private:
