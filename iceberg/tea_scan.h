@@ -236,6 +236,8 @@ class ScanMetadataBuilder {
 
  private:
   void StoreEntry(std::string serialized_partition_key, const iceberg::ManifestEntry& entry);
+  void ApplyGlobalEqualityDeletes(std::map<SequenceNumber, LayerWithExtraInfo>& layers) const;
+  void ResolveDeletionVectors(std::map<SequenceNumber, LayerWithExtraInfo>& layers) const;
 };
 
 }  // namespace iceberg::ice_tea

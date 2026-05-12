@@ -734,60 +734,66 @@ ScanMetadata ScanMetadataBuilder::GetResult() {
   result.schema = table_metadata_.GetCurrentSchema();
 
   for (auto& [partition_key, layers] : partitions) {
-    std::unordered_map<std::string, std::pair<DeletionVectorInfo, SequenceNumber>> current_dvs;
-    for (auto& [seqnum, layer] : layers) {
-      for (auto& [path, dv] : layer.dv_entries_) {
-        auto& current = current_dvs[path];
-        if (seqnum >= current.second) {
-          current = {dv, seqnum};
-        }
-      }
-    }
-
-    std::unordered_set<std::string> matched_dv_paths;
-    for (auto& [seqnum, layer] : layers) {
-      auto it_eq = global_equality_deletes.upper_bound(seqnum);
-      for (; it_eq != global_equality_deletes.end(); ++it_eq) {
-        layer.equality_delete_entries_.insert(layer.equality_delete_entries_.end(), it_eq->second.begin(),
-                                              it_eq->second.end());
-      }
-
-      if (current_dvs.empty()) {
-        continue;
-      }
-
-      for (auto& data : layer.data_entries_) {
-        auto it_dv = current_dvs.find(data.path);
-        if (it_dv == current_dvs.end()) {
-          continue;
-        }
-
-        if (seqnum > it_dv->second.second) {
-          continue;
-        }
-
-        Ensure(layer.equality_delete_entries_.empty(),
-               "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " +
-                   std::to_string(seqnum) + " also contains Equality Deletes. Mixed deletes are not allowed.");
-
-        Ensure(layer.positional_delete_entries_.empty(),
-               "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " +
-                   std::to_string(seqnum) + " also contains Positional Deletes. Mixed deletes are not allowed.");
-
-        data.dv = it_dv->second.first;
-        matched_dv_paths.insert(data.path);
-      }
-    }
-
-    if (logger_) {
-      logger_->Log(std::to_string(current_dvs.size() - matched_dv_paths.size()),
-                   "metrics:plan:dangling_deletion_vector_files");
-    }
+    ApplyGlobalEqualityDeletes(layers);
+    ResolveDeletionVectors(layers);
   }
 
   result.partitions = GetPartitions(std::move(partitions), logger_);
 
   return result;
+}
+
+void ScanMetadataBuilder::ApplyGlobalEqualityDeletes(std::map<SequenceNumber, LayerWithExtraInfo>& layers) const {
+  for (auto& [seqnum, layer] : layers) {
+    auto it_eq = global_equality_deletes.upper_bound(seqnum);
+    for (; it_eq != global_equality_deletes.end(); ++it_eq) {
+      layer.equality_delete_entries_.insert(layer.equality_delete_entries_.end(), it_eq->second.begin(),
+                                            it_eq->second.end());
+    }
+  }
+}
+
+void ScanMetadataBuilder::ResolveDeletionVectors(std::map<SequenceNumber, LayerWithExtraInfo>& layers) const {
+  std::unordered_map<std::string, std::pair<DeletionVectorInfo, SequenceNumber>> current_dvs;
+  for (auto& [seqnum, layer] : layers) {
+    for (auto& [path, dv] : layer.dv_entries_) {
+      current_dvs.insert_or_assign(path, std::make_pair(dv, seqnum));
+    }
+  }
+
+  std::unordered_set<std::string> matched_dv_paths;
+  for (auto& [seqnum, layer] : layers) {
+    if (current_dvs.empty()) {
+      continue;
+    }
+
+    for (auto& data : layer.data_entries_) {
+      auto it_dv = current_dvs.find(data.path);
+      if (it_dv == current_dvs.end()) {
+        continue;
+      }
+
+      if (seqnum > it_dv->second.second) {
+        continue;
+      }
+
+      Ensure(layer.equality_delete_entries_.empty(),
+             "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " +
+                 std::to_string(seqnum) + " also contains Equality Deletes. Mixed deletes are not allowed.");
+
+      Ensure(layer.positional_delete_entries_.empty(),
+             "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " +
+                 std::to_string(seqnum) + " also contains Positional Deletes. Mixed deletes are not allowed.");
+
+      data.dv = it_dv->second.first;
+      matched_dv_paths.insert(data.path);
+    }
+  }
+
+  if (logger_) {
+    logger_->Log(std::to_string(current_dvs.size() - matched_dv_paths.size()),
+                 "metrics:plan:dangling_deletion_vector_files");
+  }
 }
 
 arrow::Status ScanMetadataBuilder::AddEntry(const iceberg::ManifestEntry& entry) {

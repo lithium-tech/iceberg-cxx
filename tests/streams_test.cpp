@@ -253,14 +253,23 @@ TEST(StreamsTest, EndToEndDeletionVector) {
   auto data_stream = MakeDataStream(path, field_ids_to_retrieve);
 
   int64_t total_rows = 0;
+  std::vector<int64_t> actual_c1_values;
   while (auto batch = data_stream->ReadNext()) {
-    if (batch->GetRecordBatch()) {
+    if (auto record_batch = batch->GetRecordBatch()) {
+      auto c1_array = std::static_pointer_cast<arrow::Int32Array>(record_batch->GetColumnByName("c1"));
+      for (size_t i = 0; i < batch->GetSelectionVector().Size(); ++i) {
+        auto index = batch->GetSelectionVector().Index(i);
+        actual_c1_values.push_back(c1_array->Value(index));
+      }
       total_rows += batch->GetSelectionVector().Size();
     }
   }
 
-  // 16 records originally, 8 positional deletes applied via Deletion Vector
   EXPECT_EQ(total_rows, 8);
+
+  std::sort(actual_c1_values.begin(), actual_c1_values.end());
+  std::vector<int64_t> expected_c1_values = {2, 5, 8, 9, 11, 12, 14, 15};
+  EXPECT_EQ(actual_c1_values, expected_c1_values);
 }
 
 }  // namespace
