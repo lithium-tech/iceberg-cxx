@@ -778,12 +778,12 @@ void ScanMetadataBuilder::ResolveDeletionVectors(std::map<SequenceNumber, LayerW
       }
 
       Ensure(layer.equality_delete_entries_.empty(),
-             "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " +
-                 std::to_string(seqnum) + " also contains Equality Deletes. Mixed deletes are not allowed.");
+             "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " + std::to_string(seqnum) +
+                 " also contains Equality Deletes. Mixed deletes are not allowed.");
 
       Ensure(layer.positional_delete_entries_.empty(),
-             "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " +
-                 std::to_string(seqnum) + " also contains Positional Deletes. Mixed deletes are not allowed.");
+             "Consistency error: Data file " + data.path + " has Deletion Vector, but layer " + std::to_string(seqnum) +
+                 " also contains Positional Deletes. Mixed deletes are not allowed.");
 
       data.dv = it_dv->second.first;
       matched_dv_paths.insert(data.path);
