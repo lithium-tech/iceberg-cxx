@@ -238,6 +238,17 @@ class Logger : public ILogger {
   std::vector<std::pair<Message, MessageType>> logs_;
 };
 
+void ExpectRuntimeError(std::function<void()> func, const std::string& expected_msg) {
+  try {
+    func();
+    FAIL() << "Expected std::runtime_error";
+  } catch (const std::runtime_error& e) {
+    EXPECT_EQ(std::string(e.what()), expected_msg);
+  } catch (...) {
+    FAIL() << "Expected std::runtime_error, but caught something else";
+  }
+}
+
 TEST(GetScanMetadata, DanglingPositionalDeletes) {
   std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
   fs = std::make_shared<ReplacingFilesystem>(fs);
@@ -270,12 +281,49 @@ TEST(GetScanMetadata, DanglingPositionalDeletes) {
     auto logs = logger->GetLogs();
     std::sort(logs.begin(), logs.end());
 
-    std::vector<std::pair<std::string, std::string>> expected_logs{{"1", "metrics:plan:dangling_positional_files"},
+    std::vector<std::pair<std::string, std::string>> expected_logs{{"0", "metrics:plan:dangling_deletion_vector_files"},
+                                                                   {"1", "metrics:plan:dangling_positional_files"},
                                                                    {"1", "metrics:plan:dangling_positional_files"},
                                                                    {"1", "metrics:plan:data_files"}};
 
     ASSERT_EQ(logs, expected_logs);
   }
+}
+
+TEST(GetScanMetadata, DeletionVectorScanMetadata) {
+  std::shared_ptr<arrow::fs::FileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+  fs = std::make_shared<ReplacingFilesystem>(fs);
+
+  const std::string meta_path =
+      "s3://warehouse/deletion_vectors/metadata/00004-ae0294d0-1de5-4fab-97f1-cd80e0078fa4.metadata.json";
+
+  auto logger = std::make_shared<Logger>();
+
+  auto maybe_scan_metadata =
+      ice_tea::GetScanMetadata(fs, meta_path, [&](iceberg::Schema&) { return false; }, nullptr, 0, {}, logger);
+
+  ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK());
+  auto scan_metadata = maybe_scan_metadata.MoveValueUnsafe();
+
+  ASSERT_EQ(scan_metadata.partitions.size(), 2);
+  size_t data_files_count = 0;
+  size_t dvs_count = 0;
+
+  for (const auto& partition : scan_metadata.partitions) {
+    for (const auto& layer : partition) {
+      data_files_count += layer.data_entries_.size();
+      for (const auto& data_entry : layer.data_entries_) {
+        if (data_entry.dv.has_value()) {
+          dvs_count++;
+          EXPECT_FALSE(data_entry.dv->referenced_data_file.empty());
+          EXPECT_GT(data_entry.dv->length, 0);
+        }
+      }
+    }
+  }
+
+  EXPECT_EQ(data_files_count, 2) << "Expected exactly 2 data files in the table";
+  EXPECT_EQ(dvs_count, 2) << "Expected exactly 2 Deletion Vectors in the table";
 }
 
 TEST(GetScanMetadata, EqualityDataEntries) {
@@ -656,6 +704,98 @@ TEST_F(PartitionPruningTest, Identity) {
   {
     auto maybe_manifest_entry = streamLE->ReadNext();
     EXPECT_FALSE(maybe_manifest_entry.has_value());
+  }
+}
+
+TEST(GetScanMetadata, DeletionVectorSequenceNumberMatching) {
+  std::ifstream input("tables/dangling_deletes/metadata/00000-18b88ef8-0809-4f16-b416-ccf3aefd287d.metadata.json");
+  auto metadata = iceberg::ice_tea::ReadTableMetadataV2(input);
+  ASSERT_NE(metadata, nullptr);
+
+  auto logger = std::make_shared<Logger>();
+  iceberg::ice_tea::ScanMetadataBuilder builder(*metadata, logger);
+
+  std::string partition_key = "";
+  std::string data_path = "s3://bucket/data.parquet";
+
+  // 1. Add older version of the file (SeqNum 10)
+  builder.AddDataFile(partition_key, 10, data_path, {{0, 100}});
+
+  // 2. Add newer version of the file (SeqNum 20)
+  builder.AddDataFile(partition_key, 20, data_path, {{0, 100}});
+
+  // 3. Add Deletion Vector with SeqNum 15 (should match SeqNum 10 but not 20)
+  builder.AddDeletionVector(partition_key, 15, "s3://bucket/dv.bin", data_path, 0, 50);
+
+  auto scan_metadata = builder.GetResult();
+
+  ASSERT_EQ(scan_metadata.partitions.size(), 1);
+  auto& partition = scan_metadata.partitions[0];
+
+  // We expect 2 layers because SeqNum 15 layer is empty and skipped.
+  // Layer 0 corresponds to SeqNum 10, Layer 1 corresponds to SeqNum 20.
+  ASSERT_EQ(partition.size(), 2);
+
+  size_t matched_dvs = 0;
+  size_t files_found = 0;
+
+  // Check Layer 0 (SeqNum 10)
+  for (const auto& entry : partition[0].data_entries_) {
+    if (entry.path == data_path) {
+      files_found++;
+      EXPECT_TRUE(entry.dv.has_value()) << "DV should be matched to file in Layer 0 (SeqNum 10)";
+      if (entry.dv.has_value()) {
+        matched_dvs++;
+        EXPECT_EQ(entry.dv->path, "s3://bucket/dv.bin");
+      }
+    }
+  }
+
+  // Check Layer 1 (SeqNum 20)
+  for (const auto& entry : partition[1].data_entries_) {
+    if (entry.path == data_path) {
+      files_found++;
+      EXPECT_FALSE(entry.dv.has_value()) << "DV should NOT be matched to file in Layer 1 (SeqNum 20)";
+    }
+  }
+
+  EXPECT_EQ(files_found, 2);
+  EXPECT_EQ(matched_dvs, 1);
+}
+
+TEST(GetScanMetadata, MixedDeletesConsistencyError) {
+  std::ifstream input("tables/dangling_deletes/metadata/00000-18b88ef8-0809-4f16-b416-ccf3aefd287d.metadata.json");
+  auto metadata = iceberg::ice_tea::ReadTableMetadataV2(input);
+  auto logger = std::make_shared<Logger>();
+
+  // Test case 1: DV + Equality Deletes
+  {
+    iceberg::ice_tea::ScanMetadataBuilder builder(*metadata, logger);
+    std::string partition_key = "";
+    std::string data_path = "s3://bucket/data.parquet";
+
+    builder.AddDataFile(partition_key, 10, data_path, {{0, 100}});
+    builder.AddDeletionVector(partition_key, 10, "s3://bucket/dv.bin", data_path, 0, 50);
+    builder.AddEqualityDeletes(partition_key, 11, "s3://bucket/eq.bin", {1});
+
+    ExpectRuntimeError([&]() { builder.GetResult(); },
+                       "Consistency error: Data file s3://bucket/data.parquet has Deletion Vector, but layer 10 "
+                       "also contains Equality Deletes. Mixed deletes are not allowed.");
+  }
+
+  // Test case 2: DV + Positional Deletes
+  {
+    iceberg::ice_tea::ScanMetadataBuilder builder(*metadata, logger);
+    std::string partition_key = "";
+    std::string data_path = "s3://bucket/data.parquet";
+
+    builder.AddDataFile(partition_key, 10, data_path, {{0, 100}});
+    builder.AddDeletionVector(partition_key, 10, "s3://bucket/dv.bin", data_path, 0, 50);
+    builder.AddPositionDeletes(partition_key, 10, "s3://bucket/pos.bin", std::nullopt);
+
+    ExpectRuntimeError([&]() { builder.GetResult(); },
+                       "Consistency error: Data file s3://bucket/data.parquet has Deletion Vector, but layer 10 "
+                       "also contains Positional Deletes. Mixed deletes are not allowed.");
   }
 }
 

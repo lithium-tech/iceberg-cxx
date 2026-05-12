@@ -4,6 +4,7 @@
 #include "gtest/gtest.h"
 #include "iceberg/common/fs/file_reader_provider_impl.h"
 #include "iceberg/common/fs/filesystem_provider_impl.h"
+#include "iceberg/common/fs/filesystem_wrapper.h"
 #include "iceberg/literals.h"
 #include "iceberg/streams/iceberg/builder.h"
 #include "iceberg/streams/ut/batch_maker.h"
@@ -43,7 +44,7 @@ class MetaStream : public IAnnotatedDataPathStream {
           }
           PartitionLayerFile state(PartitionLayer(partition_id, layer_id), data_entry.path);
 
-          auto path = AnnotatedDataPath(state, std::move(segments));
+          auto path = AnnotatedDataPath(state, std::move(segments), data_entry.dv);
           all_data_entries.emplace_back(std::move(path));
         }
       }
@@ -76,25 +77,25 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
   Ensure(maybe_scan_metadata.ok(), "Failed to get scan metadata");
 
   auto scan_metadata = maybe_scan_metadata.ValueUnsafe();
-  auto meta_stream = std::make_shared<MetaStream>(std::move(scan_metadata));
-
-  std::shared_ptr<IFileSystemGetter> local_fs_getter = std::make_shared<LocalFileSystemGetter>();
-
-  std::map<std::string, std::shared_ptr<IFileSystemGetter>> schema_to_getter{{"s3a", local_fs_getter}};
-
-  std::shared_ptr<IFileSystemProvider> fs_provider = std::make_shared<FileSystemProvider>(schema_to_getter);
 
   PositionalDeletes pos_del_info;
   EqualityDeletes eq_del_info;
 
   for (size_t partition_id = 0; partition_id < scan_metadata.partitions.size(); ++partition_id) {
-    const auto& partition = scan_metadata.partitions.at(partition_id);
+    auto& partition = scan_metadata.partitions.at(partition_id);
     for (size_t layer_id = 0; layer_id < partition.size(); ++layer_id) {
-      const auto& layer = partition[layer_id];
+      auto& layer = partition[layer_id];
       pos_del_info.delete_entries[partition_id][layer_id] = std::move(layer.positional_delete_entries_);
       eq_del_info.partlayer_to_deletes[partition_id][layer_id] = std::move(layer.equality_delete_entries_);
     }
   }
+
+  auto meta_stream = std::make_shared<MetaStream>(std::move(scan_metadata));
+
+  std::shared_ptr<IFileSystemGetter> local_fs_getter = std::make_shared<LocalFileSystemGetter>();
+  std::map<std::string, std::shared_ptr<IFileSystemGetter>> schema_to_getter{{"s3a", local_fs_getter}};
+
+  std::shared_ptr<IFileSystemProvider> fs_provider = std::make_shared<FileSystemProvider>(schema_to_getter);
 
   EqualityDeleteHandler::Config eq_del_config;
   eq_del_config.use_specialized_deletes = false;
@@ -243,6 +244,32 @@ TEST(StreamsTest, EndToEndWithDefaultValue) {
 
   batch = data_stream->ReadNext();
   ASSERT_TRUE(!batch);
+}
+
+TEST(StreamsTest, EndToEndDeletionVector) {
+  const std::string path =
+      "warehouse/deletion_vectors/metadata/00004-ae0294d0-1de5-4fab-97f1-cd80e0078fa4.metadata.json";
+  std::vector<int> field_ids_to_retrieve{1, 2};  // c1, c2
+  auto data_stream = MakeDataStream(path, field_ids_to_retrieve);
+
+  int64_t total_rows = 0;
+  std::vector<int64_t> actual_c1_values;
+  while (auto batch = data_stream->ReadNext()) {
+    if (auto record_batch = batch->GetRecordBatch()) {
+      auto c1_array = std::static_pointer_cast<arrow::Int32Array>(record_batch->GetColumnByName("c1"));
+      for (size_t i = 0; i < batch->GetSelectionVector().Size(); ++i) {
+        auto index = batch->GetSelectionVector().Index(i);
+        actual_c1_values.push_back(c1_array->Value(index));
+      }
+      total_rows += batch->GetSelectionVector().Size();
+    }
+  }
+
+  EXPECT_EQ(total_rows, 8);
+
+  std::sort(actual_c1_values.begin(), actual_c1_values.end());
+  std::vector<int64_t> expected_c1_values = {2, 5, 8, 9, 11, 12, 14, 15};
+  EXPECT_EQ(actual_c1_values, expected_c1_values);
 }
 
 }  // namespace
