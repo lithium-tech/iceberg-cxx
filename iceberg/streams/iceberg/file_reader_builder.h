@@ -107,6 +107,9 @@ class FileReaderBuilder : public DataScanner::IIcebergStreamBuilder {
   std::optional<SchemaNameMapper> schema_name_mapper_;
   std::shared_ptr<const std::map<int, Literal>> default_value_map_;
   std::shared_ptr<ILogger> logger_;
+
+  std::string last_data_file_path_;
+  std::shared_ptr<DeletionVector> last_dv_;
 };
 
 }  // namespace iceberg
