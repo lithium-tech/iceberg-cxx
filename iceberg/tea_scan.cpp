@@ -744,12 +744,10 @@ ScanMetadata ScanMetadataBuilder::GetResult() {
 }
 
 void ScanMetadataBuilder::ApplyGlobalEqualityDeletes(std::map<SequenceNumber, LayerWithExtraInfo>& layers) const {
-  for (auto& [seqnum, layer] : layers) {
-    auto it_eq = global_equality_deletes.upper_bound(seqnum);
-    for (; it_eq != global_equality_deletes.end(); ++it_eq) {
-      layer.equality_delete_entries_.insert(layer.equality_delete_entries_.end(), it_eq->second.begin(),
-                                            it_eq->second.end());
-    }
+  for (const auto& [seqnum, equality_delete_entries] : global_equality_deletes) {
+    auto& deletes_at_current_layer = layers[seqnum].equality_delete_entries_;
+    deletes_at_current_layer.insert(deletes_at_current_layer.end(), equality_delete_entries.begin(),
+                                    equality_delete_entries.end());
   }
 }
 
