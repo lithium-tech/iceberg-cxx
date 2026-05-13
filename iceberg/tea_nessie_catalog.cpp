@@ -1,4 +1,4 @@
-#include "iceberg/tea_rest_catalog.h"
+#include "iceberg/tea_nessie_catalog.h"
 
 #include <stdexcept>
 #include <string>
@@ -12,10 +12,11 @@
 
 namespace iceberg::ice_tea {
 
-RESTClientImpl::RESTClientImpl(const std::string& host, int port)
+NessieClientImpl::NessieClientImpl(const std::string& host, int port)
     : base_url_("http://" + host + ":" + std::to_string(port) + "/api/v2/trees/main/") {}
 
-std::optional<rapidjson::Document> RESTClientImpl::GetTable(const std::string& db_name, const std::string& table_name) {
+std::optional<rapidjson::Document> NessieClientImpl::GetTable(const std::string& db_name,
+                                                              const std::string& table_name) {
   std::string url = base_url_ + "contents/" + db_name + "." + table_name;
 
   auto response = cpr::Get(cpr::Url{url});
@@ -32,7 +33,7 @@ std::optional<rapidjson::Document> RESTClientImpl::GetTable(const std::string& d
   return doc;
 }
 
-std::string RESTClientImpl::GetMetadataLocation(const std::string& db_name, const std::string& table_name) {
+std::string NessieClientImpl::GetMetadataLocation(const std::string& db_name, const std::string& table_name) {
   rapidjson::Document table_doc = GetTable(db_name, table_name).value();
   Ensure(table_doc.IsObject() && table_doc.HasMember("content"),
          "Incorrect table representation in JSON - should have content field");
@@ -45,7 +46,7 @@ std::string RESTClientImpl::GetMetadataLocation(const std::string& db_name, cons
   throw std::runtime_error("Table '" + table_name + "' has no metadata_location");
 }
 
-bool RESTClientImpl::TableExists(const std::string& db_name, const std::string& table_name) {
+bool NessieClientImpl::TableExists(const std::string& db_name, const std::string& table_name) {
   auto maybe_table_doc = GetTable(db_name, table_name);
   if (!maybe_table_doc.has_value()) {
     return false;
@@ -58,7 +59,7 @@ bool RESTClientImpl::TableExists(const std::string& db_name, const std::string& 
   return false;
 }
 
-RESTCatalog::RESTCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs)
-    : RemoteCatalog(std::make_unique<RESTClientImpl>(host, port), s3fs) {}
+NessieCatalog::NessieCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs)
+    : RemoteCatalog(std::make_unique<NessieClientImpl>(host, port), s3fs) {}
 
 }  // namespace iceberg::ice_tea

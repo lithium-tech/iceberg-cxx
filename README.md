@@ -94,7 +94,7 @@ Not implemented
 
 ### Catalog
 
-| Table Operation           | Rest | Glue | HMS |
+| Table Operation           | Nessie | Glue | HMS |
 |----------------------------|-----|-----|-----|
 | listTable                  | -   | -   | -   |
 | createTable                | -   | -   | -   |

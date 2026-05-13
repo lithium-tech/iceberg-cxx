@@ -48,8 +48,8 @@ set(iceberg_cpp_files
   experimental_representations.h
 )
 
-if (ICECXX_USE_REST)
-  list(APPEND iceberg_cpp_files tea_rest_catalog.cpp)
+if (ICECXX_USE_NESSIE)
+  list(APPEND iceberg_cpp_files tea_nessie_catalog.cpp)
 endif()
 
 add_library(iceberg-cpp STATIC ${iceberg_cpp_files})
@@ -63,7 +63,7 @@ add_subdirectory(streams)
 
 # TODO(gmusya): use private linkage where possible
 target_link_libraries(iceberg-cpp PUBLIC iceberg_common _rapidjson _croaring _avrocpp _boost_iostreams _hivemetastore Parquet::parquet_static Arrow::arrow_static absl::strings stats_filter)
-if (ICECXX_USE_REST)
+if (ICECXX_USE_NESSIE)
   target_link_libraries(iceberg-cpp PUBLIC cpr)
 endif()
 if (ICECXX_USE_SMHASHER)
