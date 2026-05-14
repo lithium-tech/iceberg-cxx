@@ -15,9 +15,9 @@
 
 namespace iceberg::ice_tea {
 
-class RESTClientImpl : public IMetadataClient {
+class NessieClientImpl : public IMetadataClient {
  public:
-  RESTClientImpl(const std::string& host, int port);
+  NessieClientImpl(const std::string& host, int port);
 
   std::string GetMetadataLocation(const std::string& db_name, const std::string& table_name) override;
 
@@ -29,11 +29,11 @@ class RESTClientImpl : public IMetadataClient {
   std::string base_url_;
 };
 
-using RESTTable = RemoteTable;
+using NessieTable = RemoteTable;
 
-class RESTCatalog : public RemoteCatalog {
+class NessieCatalog : public RemoteCatalog {
  public:
-  RESTCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs = {});
+  NessieCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs = {});
 };
 
 }  // namespace iceberg::ice_tea
