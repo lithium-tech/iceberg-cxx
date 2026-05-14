@@ -279,7 +279,7 @@ if(ICECXX_BUILD_ABSEIL)
   FetchContent_MakeAvailable(abseil)
 endif()
 
-if(ICECXX_USE_REST)
+if(ICECXX_USE_NESSIE)
   set(CARES_STATIC ON CACHE BOOL "")
   set(CARES_SHARED OFF CACHE BOOL "")
   set(CARES_BUILD_TOOLS OFF CACHE BOOL "")
