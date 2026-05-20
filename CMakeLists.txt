@@ -14,6 +14,7 @@ endmacro()
 option_v(ICECXX_BUILD_TOOLS "enable & build tools" ON)
 option_v(ICECXX_GENERATOR "enable & build generator" ON)
 option_v(ICECXX_USE_NESSIE "enable Nessie catalog support" OFF)
+option_v(ICECXX_USE_REST "enable REST catalog support" OFF)
 option_v(ICECXX_STATISTICS "enable datasketches based statistics" OFF)
 option_v(ICECXX_COMPUTE "enable compute based on Arrow.Compute" ON)
 # deps options
