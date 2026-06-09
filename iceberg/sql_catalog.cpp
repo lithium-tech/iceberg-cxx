@@ -28,18 +28,6 @@ std::shared_ptr<Table> SqlCatalog::LoadTable(const catalog::TableIdentifier& ide
   return std::make_shared<SqlTable>(identifier, selector.base_dir, locations, fs_);
 }
 
-bool SqlCatalog::TableExists(const catalog::TableIdentifier& identifier) {
-  arrow::fs::FileSelector selector;
-  selector.base_dir = root_dir_ + "/" + identifier.db + "/" + identifier.name;
-  selector.recursive = true;
-
-  arrow::Result<std::vector<arrow::fs::FileInfo>> result = fs_->GetFileInfo(selector);
-  if (!result.ok()) {
-    return false;
-  }
-  return true;
-}
-
 std::shared_ptr<Table> SqlCatalog::CreateTable(const catalog::TableIdentifier& identifier, const Schema& schema,
                                                std::shared_ptr<TableMetadataV2> table_metadata) {
   auto dir_path = root_dir_ + "/" + identifier.db + "/" + identifier.name;

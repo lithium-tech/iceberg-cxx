@@ -102,7 +102,7 @@ Not implemented
 | loadTable                  | +-  | -   | +-  |
 | updateTable                | -   | -   | -   |
 | renameTable                | -   | -   | -   |
-| tableExists                | +-  | -   | +-  |
+| tableExists                | -   | -   | -   |
 | createView                 | -   | -   | -   |
 | dropView                   | -   | -   | -   |
 | listView                   | -   | -   | -   |

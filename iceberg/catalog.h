@@ -40,7 +40,6 @@ class Catalog {
   // virtual bool DropTable(const TableIdentifier& identifier, bool purge) = 0;
   // virtual std::vector<TableIdentifier> ListTables(const Namespace& db) = 0;
   virtual std::shared_ptr<Table> LoadTable(const TableIdentifier& identifier) = 0;
-  virtual bool TableExists(const TableIdentifier& identifier) = 0;
 };
 
 }  // namespace iceberg::catalog

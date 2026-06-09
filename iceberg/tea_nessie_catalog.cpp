@@ -46,19 +46,6 @@ std::string NessieClientImpl::GetMetadataLocation(const std::string& db_name, co
   throw std::runtime_error("Table '" + table_name + "' has no metadata_location");
 }
 
-bool NessieClientImpl::TableExists(const std::string& db_name, const std::string& table_name) {
-  auto maybe_table_doc = GetTable(db_name, table_name);
-  if (!maybe_table_doc.has_value()) {
-    return false;
-  }
-
-  auto table_doc = std::move(*maybe_table_doc);
-  if (table_doc.IsObject() && table_doc.HasMember("content")) {
-    return true;
-  }
-  return false;
-}
-
 NessieCatalog::NessieCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs)
     : RemoteCatalog(std::make_unique<NessieClientImpl>(host, port), s3fs) {}
 
