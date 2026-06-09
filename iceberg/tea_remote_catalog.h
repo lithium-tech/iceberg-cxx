@@ -15,7 +15,6 @@ namespace iceberg::ice_tea {
 
 struct IMetadataClient {
   virtual std::string GetMetadataLocation(const std::string& db_name, const std::string& table_name) = 0;
-  virtual bool TableExists(const std::string& db_name, const std::string& table_name) = 0;
 
   virtual ~IMetadataClient() = default;
 };
@@ -82,7 +81,6 @@ class RemoteCatalog : public catalog::Catalog {
   const std::map<std::string, std::string>& Properties() const override { return properties_; }
 
   std::shared_ptr<Table> LoadTable(const catalog::TableIdentifier& identifier) override;
-  bool TableExists(const catalog::TableIdentifier& identifier) override;
 
   std::shared_ptr<Table> CreateTable(const catalog::TableIdentifier& identifier, const Schema& schema,
                                      std::shared_ptr<TableMetadataV2> table_metadata) override;

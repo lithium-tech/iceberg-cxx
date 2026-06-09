@@ -46,10 +46,6 @@ class HiveClientImpl {
     }
   }
 
-  bool TableExists(const std::string& db_name, const std::string& table_name) {
-    return !GetTable(db_name, table_name).tableName.empty();
-  }
-
  private:
   std::shared_ptr<apache::thrift::transport::TTransport> socket_;
   std::shared_ptr<apache::thrift::transport::TTransport> transport_;
@@ -61,10 +57,6 @@ HiveClient::HiveClient(const std::string& host, int port) : client_(std::make_sh
 
 std::string HiveClient::GetMetadataLocation(const std::string& db_name, const std::string& table_name) {
   return client_->GetMetadataLocation(db_name, table_name);
-}
-
-bool HiveClient::TableExists(const std::string& db_name, const std::string& table_name) {
-  return client_->TableExists(db_name, table_name);
 }
 
 HiveCatalog::HiveCatalog(const std::string& host, int port, std::shared_ptr<arrow::fs::S3FileSystem> s3fs)
