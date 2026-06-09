@@ -20,10 +20,6 @@ RemoteCatalog::RemoteCatalog(std::shared_ptr<IMetadataClient> client, std::share
 
 RemoteCatalog::~RemoteCatalog() = default;
 
-bool RemoteCatalog::TableExists(const catalog::TableIdentifier& identifier) {
-  return impl_->TableExists(identifier.db, identifier.name);
-}
-
 std::shared_ptr<Table> RemoteCatalog::LoadTable(const catalog::TableIdentifier& identifier) {
   auto location = impl_->GetMetadataLocation(identifier.db, identifier.name);
   if (properties_.empty()) {

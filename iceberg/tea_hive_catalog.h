@@ -22,8 +22,6 @@ class HiveClient : public IMetadataClient {
 
   std::string GetMetadataLocation(const std::string& db_name, const std::string& table_name) override;
 
-  bool TableExists(const std::string& db_name, const std::string& table_name) override;
-
  private:
   std::shared_ptr<HiveClientImpl> client_;
 };

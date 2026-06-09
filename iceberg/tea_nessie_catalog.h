@@ -21,8 +21,6 @@ class NessieClientImpl : public IMetadataClient {
 
   std::string GetMetadataLocation(const std::string& db_name, const std::string& table_name) override;
 
-  bool TableExists(const std::string& db_name, const std::string& table_name) override;
-
  private:
   std::optional<rapidjson::Document> GetTable(const std::string& db_name, const std::string& table_name);
 
