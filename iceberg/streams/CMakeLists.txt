@@ -1,8 +1,3 @@
-if(${ICECXX_COMPUTE})
-  add_subdirectory(compute)
-  set(ICE_COMPUTE ice_compute)
-endif()
-
 add_subdirectory(iceberg)
 
 add_executable(iceberg_streams_ut
