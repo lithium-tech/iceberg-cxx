@@ -112,12 +112,11 @@ std::vector<bool> FilterManifests(std::shared_ptr<filter::StatsFilter> stats_fil
                                   const std::vector<std::shared_ptr<PartitionSpec>>& partition_specs,
                                   const std::vector<ManifestFile>& manifest_metadatas);
 
-// threads_num = 0 is usual GetScanMetadata mode, others are multithreaded
 arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSystem> fs,
                                             const std::string& metadata_location,
                                             std::function<bool(iceberg::Schema& schema)> use_avro_reader_schema,
                                             std::shared_ptr<filter::StatsFilter> stats_filter = nullptr,
-                                            uint32_t threads_num = 0, const GetScanMetadataConfig& config = {},
+                                            const GetScanMetadataConfig& config = {},
                                             std::shared_ptr<ILogger> logger = nullptr);
 
 class AllEntriesStream : public IcebergEntriesStream {
