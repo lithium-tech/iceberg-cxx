@@ -116,24 +116,20 @@ TEST(GetScanMetadata, WithPartitionSpecs) {
 
   for (const auto& test_info : path_to_expected_partitions_count) {
     for (const bool use_avro_reader_schema : {false, true}) {
-      for (const size_t threads_num : {0, 5, 30}) {
-        auto maybe_scan_metadata = ice_tea::GetScanMetadata(
-            fs, test_info.meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr,
-            threads_num);
-        ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK()) << test_info.meta_path;
-        EXPECT_EQ(maybe_scan_metadata->partitions.size(), test_info.partitions)
-            << test_info.meta_path << "\n Threads num: " << threads_num;
-        size_t data_entries = 0;
-        size_t del_entries = 0;
-        for (auto& p : maybe_scan_metadata->partitions) {
-          for (auto& l : p) {
-            data_entries += l.data_entries_.size();
-            del_entries += l.positional_delete_entries_.size();
-          }
+      auto maybe_scan_metadata = ice_tea::GetScanMetadata(
+          fs, test_info.meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr);
+      ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK()) << test_info.meta_path;
+      EXPECT_EQ(maybe_scan_metadata->partitions.size(), test_info.partitions) << test_info.meta_path;
+      size_t data_entries = 0;
+      size_t del_entries = 0;
+      for (auto& p : maybe_scan_metadata->partitions) {
+        for (auto& l : p) {
+          data_entries += l.data_entries_.size();
+          del_entries += l.positional_delete_entries_.size();
         }
-        EXPECT_EQ(data_entries, test_info.data_entries) << test_info.meta_path;
-        EXPECT_EQ(del_entries, test_info.delete_entries) << test_info.meta_path;
       }
+      EXPECT_EQ(data_entries, test_info.data_entries) << test_info.meta_path;
+      EXPECT_EQ(del_entries, test_info.delete_entries) << test_info.meta_path;
     }
   }
 }
@@ -150,7 +146,7 @@ TEST(GetScanMetadata, DeletesGranularity) {
 
   for (const bool use_avro_reader_schema : {false, true}) {
     auto maybe_scan_metadata = ice_tea::GetScanMetadata(
-        fs, meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, 0);
+        fs, meta_path, [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr);
     ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK());
     EXPECT_EQ(maybe_scan_metadata->partitions.size(), kExpectedPartitions);
     for (auto& p : maybe_scan_metadata->partitions) {
@@ -173,14 +169,12 @@ TEST(GetScanMetadata, WithNoMatchingPartitionSpec) {
   fs = std::make_shared<ReplacingFilesystem>(fs);
 
   for (const bool use_avro_reader_schema : {false, true}) {
-    for (const size_t threads_num : {0, 5, 30}) {
-      ASSERT_ANY_THROW(ice_tea::GetScanMetadata(
-                           fs,
-                           "s3://warehouse/partitioned_table_with_missing_spec/metadata/"
-                           "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
-                           [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, threads_num)
-                           .ok());
-    }
+    ASSERT_ANY_THROW(ice_tea::GetScanMetadata(
+                         fs,
+                         "s3://warehouse/partitioned_table_with_missing_spec/metadata/"
+                         "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
+                         [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr)
+                         .ok());
   }
 }
 
@@ -209,20 +203,18 @@ TEST(GetScanMetadata, WithMultipleMatchingPartitionSpecs) {
   fs = std::make_shared<ReplacingFilesystem>(fs);
 
   for (const bool use_avro_reader_schema : {false, true}) {
-    for (const size_t threads_num : {0, 5, 30}) {
-      auto maybe_scan_metadata = ice_tea::GetScanMetadata(
-          fs,
-          "s3://warehouse/partitioned_table_with_multiple_spec/metadata/"
-          "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
-          [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, threads_num);
-      ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
-      std::string error_message = maybe_scan_metadata.status().message();
+    auto maybe_scan_metadata = ice_tea::GetScanMetadata(
+        fs,
+        "s3://warehouse/partitioned_table_with_multiple_spec/metadata/"
+        "00001-3ac0dc8d-0a8e-44c2-b786-fff45a265023.metadata.json",
+        [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr);
+    ASSERT_NE(maybe_scan_metadata.status(), arrow::Status::OK());
+    std::string error_message = maybe_scan_metadata.status().message();
 
-      EXPECT_EQ(error_message,
-                "Multiple (2) partiton specifications for entry "
-                "s3a://warehouse/partitioned_table/data/c1=2/c2=2025-03-04/"
-                "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet are found");
-    }
+    EXPECT_EQ(error_message,
+              "Multiple (2) partiton specifications for entry "
+              "s3a://warehouse/partitioned_table/data/c1=2/c2=2025-03-04/"
+              "20250303_133349_00017_es78y-ab06c0f6-2a0b-46c9-b42e-dd27880eb385.parquet are found");
   }
 }
 
@@ -264,7 +256,7 @@ TEST(GetScanMetadata, DanglingPositionalDeletes) {
         fs,
         "s3://warehouse/dangling_deletes/metadata/"
         "00011-31179cfb-920d-47df-af37-7362d4028557.metadata.json",
-        [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, 0, config, logger);
+        [&](iceberg::Schema& schema) { return use_avro_reader_schema; }, nullptr, config, logger);
     ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK());
 
     auto scan_metadata = maybe_scan_metadata.MoveValueUnsafe();
@@ -300,7 +292,7 @@ TEST(GetScanMetadata, DeletionVectorScanMetadata) {
   auto logger = std::make_shared<Logger>();
 
   auto maybe_scan_metadata =
-      ice_tea::GetScanMetadata(fs, meta_path, [&](iceberg::Schema&) { return false; }, nullptr, 0, {}, logger);
+      ice_tea::GetScanMetadata(fs, meta_path, [&](iceberg::Schema&) { return false; }, nullptr, {}, logger);
 
   ASSERT_EQ(maybe_scan_metadata.status(), arrow::Status::OK());
   auto scan_metadata = maybe_scan_metadata.MoveValueUnsafe();
