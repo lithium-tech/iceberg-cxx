@@ -720,7 +720,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
 
 ScanMetadata ScanMetadataBuilder::GetResult() {
   ScanMetadata result;
-  result.schema = table_metadata_.GetCurrentSchema();
+  result.schema = schema_;
 
   for (auto& [partition_key, layers] : partitions) {
     ApplyGlobalEqualityDeletes(layers);
@@ -1266,6 +1266,10 @@ class ReferencedDataFileAwareScanPlanner {
   ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
       : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata, std::move(logger))) {}
 
+  ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata, std::shared_ptr<iceberg::Schema> schema,
+                                     std::shared_ptr<ILogger> logger)
+      : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata, std::move(schema), std::move(logger))) {}
+
   arrow::Status AddEntry(const iceberg::ManifestEntry& entry) {
     if (entry.status == iceberg::ManifestEntry::Status::kDeleted) {
       return arrow::Status::OK();
@@ -1424,7 +1428,12 @@ class ReferencedDataFileAwareScanPlanner {
 
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
                                             std::shared_ptr<ILogger> logger) {
-  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata, logger);
+  return GetScanMetadata(entries_stream, table_metadata, table_metadata.GetCurrentSchema(), logger);
+}
+
+arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
+                                            std::shared_ptr<iceberg::Schema> schema, std::shared_ptr<ILogger> logger) {
+  ReferencedDataFileAwareScanPlanner scan_metadata_builder(table_metadata, schema, logger);
 
   while (true) {
     std::optional<ManifestEntry> maybe_entry = entries_stream.ReadNext();
