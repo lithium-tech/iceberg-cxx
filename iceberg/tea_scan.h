@@ -126,8 +126,8 @@ class AllEntriesStream : public IcebergEntriesStream {
                    std::shared_ptr<iceberg::Schema> schema = {}, const ManifestEntryDeserializerConfig& config = {})
       : fs_(fs),
         manifest_files_(std::move(manifest_files)),
-        partition_specs_(partition_specs),
         schema_(schema),
+        partition_specs_(partition_specs),
         config_(config),
         use_avro_reader_schema_(use_reader_schema) {}
 
@@ -159,7 +159,7 @@ class AllEntriesStream : public IcebergEntriesStream {
 };
 
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
-                                            std::shared_ptr<ILogger> logger);
+                                            std::shared_ptr<iceberg::Schema> schema, std::shared_ptr<ILogger> logger);
 
 struct PositionalDeleteWithExtraInfo {
   PositionalDeleteInfo positional_delete_;
@@ -187,7 +187,11 @@ struct LayerWithExtraInfo {
 class ScanMetadataBuilder {
  public:
   explicit ScanMetadataBuilder(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
-      : table_metadata_(table_metadata), schema_(table_metadata_.GetCurrentSchema()), logger_(std::move(logger)) {}
+      : ScanMetadataBuilder(table_metadata, table_metadata.GetCurrentSchema(), std::move(logger)) {}
+
+  ScanMetadataBuilder(const TableMetadataV2& table_metadata, std::shared_ptr<iceberg::Schema> schema,
+                      std::shared_ptr<ILogger> logger)
+      : table_metadata_(table_metadata), schema_(std::move(schema)), logger_(std::move(logger)) {}
 
   virtual ~ScanMetadataBuilder() = default;
 
@@ -230,7 +234,7 @@ class ScanMetadataBuilder {
   // TODO(gmusya): improve
   std::map<SequenceNumber, std::vector<EqualityDeleteInfo>> global_equality_deletes;
   const TableMetadataV2& table_metadata_;
-  std::shared_ptr<const iceberg::Schema> schema_;
+  std::shared_ptr<iceberg::Schema> schema_;
   std::shared_ptr<ILogger> logger_;
 
  private:
