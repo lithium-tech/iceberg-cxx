@@ -159,9 +159,6 @@ class AllEntriesStream : public IcebergEntriesStream {
 };
 
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
-                                            std::shared_ptr<ILogger> logger);
-
-arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
                                             std::shared_ptr<iceberg::Schema> schema, std::shared_ptr<ILogger> logger);
 
 struct PositionalDeleteWithExtraInfo {

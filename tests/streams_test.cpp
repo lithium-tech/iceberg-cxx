@@ -73,7 +73,8 @@ IcebergStreamPtr MakeDataStream(const std::string& path, const std::vector<int>&
   auto entries_stream = ice_tea::AllEntriesStream::Make(fs, metadata, false);
   Ensure(!!entries_stream, "Failed to make AllEntriesStream");
 
-  auto maybe_scan_metadata = ice_tea::GetScanMetadata(*entries_stream, *metadata, nullptr);
+  auto maybe_scan_metadata =
+      ice_tea::GetScanMetadata(*entries_stream, *metadata, metadata->GetCurrentSchema(), nullptr);
   Ensure(maybe_scan_metadata.ok(), "Failed to get scan metadata");
 
   auto scan_metadata = maybe_scan_metadata.ValueUnsafe();

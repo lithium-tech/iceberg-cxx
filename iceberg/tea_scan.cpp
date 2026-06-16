@@ -715,7 +715,7 @@ arrow::Result<ScanMetadata> GetScanMetadata(std::shared_ptr<arrow::fs::FileSyste
   auto entries_stream =
       AllEntriesStream::Make(fs, table_metadata, use_avro_reader_schema(*table_metadata->GetCurrentSchema()),
                              stats_filter, config.manifest_entry_deserializer_config);
-  return GetScanMetadata(*entries_stream, *table_metadata, logger);
+  return GetScanMetadata(*entries_stream, *table_metadata, table_metadata->GetCurrentSchema(), logger);
 }
 
 ScanMetadata ScanMetadataBuilder::GetResult() {
@@ -1263,9 +1263,6 @@ std::vector<ScanMetadata::Partition> ScanMetadataBuilder::GetPartitions(
 
 class ReferencedDataFileAwareScanPlanner {
  public:
-  ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata, std::shared_ptr<ILogger> logger)
-      : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata, std::move(logger))) {}
-
   ReferencedDataFileAwareScanPlanner(const TableMetadataV2& table_metadata, std::shared_ptr<iceberg::Schema> schema,
                                      std::shared_ptr<ILogger> logger)
       : builder_(std::make_shared<ScanMetadataBuilder>(table_metadata, std::move(schema), std::move(logger))) {}
@@ -1425,11 +1422,6 @@ class ReferencedDataFileAwareScanPlanner {
 
   std::shared_ptr<ScanMetadataBuilder> builder_;
 };
-
-arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
-                                            std::shared_ptr<ILogger> logger) {
-  return GetScanMetadata(entries_stream, table_metadata, table_metadata.GetCurrentSchema(), logger);
-}
 
 arrow::Result<ScanMetadata> GetScanMetadata(IcebergEntriesStream& entries_stream, const TableMetadataV2& table_metadata,
                                             std::shared_ptr<iceberg::Schema> schema, std::shared_ptr<ILogger> logger) {
