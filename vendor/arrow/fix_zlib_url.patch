@@ -1,0 +1,13 @@
+diff --git a/cpp/thirdparty/versions.txt b/cpp/thirdparty/versions.txt
+index dd3f5da84f..cc22529179 100644
+--- a/cpp/thirdparty/versions.txt
++++ b/cpp/thirdparty/versions.txt
+@@ -168,7 +168,7 @@ DEPENDENCIES=(
+   "ARROW_UCX_URL ucx-${ARROW_UCX_BUILD_VERSION}.tar.gz https://github.com/openucx/ucx/archive/v${ARROW_UCX_BUILD_VERSION}.tar.gz"
+   "ARROW_UTF8PROC_URL utf8proc-${ARROW_UTF8PROC_BUILD_VERSION}.tar.gz https://github.com/JuliaStrings/utf8proc/archive/${ARROW_UTF8PROC_BUILD_VERSION}.tar.gz"
+   "ARROW_XSIMD_URL xsimd-${ARROW_XSIMD_BUILD_VERSION}.tar.gz https://github.com/xtensor-stack/xsimd/archive/${ARROW_XSIMD_BUILD_VERSION}.tar.gz"
+-  "ARROW_ZLIB_URL zlib-${ARROW_ZLIB_BUILD_VERSION}.tar.gz https://zlib.net/fossils/zlib-${ARROW_ZLIB_BUILD_VERSION}.tar.gz"
++  "ARROW_ZLIB_URL zlib-${ARROW_ZLIB_BUILD_VERSION}.tar.gz https://github.com/madler/zlib/releases/download/v${ARROW_ZLIB_BUILD_VERSION}/zlib-${ARROW_ZLIB_BUILD_VERSION}.tar.gz"
+   "ARROW_ZSTD_URL zstd-${ARROW_ZSTD_BUILD_VERSION}.tar.gz https://github.com/facebook/zstd/releases/download/v${ARROW_ZSTD_BUILD_VERSION}/zstd-${ARROW_ZSTD_BUILD_VERSION}.tar.gz"
+ )
+ 
