@@ -180,6 +180,7 @@ FetchContent_Declare(
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/arrow-fix-snappy-empty-column.patch
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/arrow_ensure_xsimd.patch
     && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/fix_c-ares_url.patch
+    && git apply ${CMAKE_CURRENT_SOURCE_DIR}/arrow/fix_zlib_url.patch
 )
 
 FetchContent_Declare(
