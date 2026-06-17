@@ -23,6 +23,10 @@ if (ICECXX_USE_NESSIE)
     list(APPEND iceberg_local_test_files nessie/test_nessie_catalog.cpp)
 endif()
 
+if (ICECXX_USE_REST)
+    list(APPEND iceberg_local_test_files rest/test_rest_catalog.cpp)
+endif()
+
 add_executable(iceberg_local_test ${iceberg_local_test_files})
 target_link_libraries(iceberg_local_test PUBLIC gtest iceberg-cpp iceberg-tools iceberg_streams iceberg_common_fs iceberg_test_utils ${CMAKE_DL_LIBS})
 if (ICECXX_USE_NESSIE)
