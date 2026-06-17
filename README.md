@@ -94,27 +94,27 @@ Not implemented
 
 ### Catalog
 
-| Table Operation           | Nessie | Glue | HMS |
-|----------------------------|-----|-----|-----|
-| listTable                  | -   | -   | -   |
-| createTable                | -   | -   | -   |
-| dropTable                  | -   | -   | -   |
-| loadTable                  | +-  | -   | +-  |
-| updateTable                | -   | -   | -   |
-| renameTable                | -   | -   | -   |
-| tableExists                | -   | -   | -   |
-| createView                 | -   | -   | -   |
-| dropView                   | -   | -   | -   |
-| listView                   | -   | -   | -   |
-| viewExists                 | -   | -   | -   |
-| replaceView                | -   | -   | -   |
-| renameView                 | -   | -   | -   |
-| listNamespaces             | -   | -   | -   |
-| createNamespace            | -   | -   | -   |
-| dropNamespace	             | -   | -   | -   |
-| namespaceExists            | -   | -   | -   |
-| updateNamespaceProperties  | -   | -   | -   |
-| loadNamespaceMetadata      | -   | -   | -   |
+| Table Operation           | Nessie | Glue | HMS | REST |
+|----------------------------|-----|-----|-----|-----|
+| listTable                  | -   | -   | -   | -   |
+| createTable                | -   | -   | -   | -   |
+| dropTable                  | -   | -   | -   | -   |
+| loadTable                  | +-  | -   | +-  | +-  |
+| updateTable                | -   | -   | -   | -   |
+| renameTable                | -   | -   | -   | -   |
+| tableExists                | -   | -   | -   | -   |
+| createView                 | -   | -   | -   | -   |
+| dropView                   | -   | -   | -   | -   |
+| listView                   | -   | -   | -   | -   |
+| viewExists                 | -   | -   | -   | -   |
+| replaceView                | -   | -   | -   | -   |
+| renameView                 | -   | -   | -   | -   |
+| listNamespaces             | -   | -   | -   | -   |
+| createNamespace            | -   | -   | -   | -   |
+| dropNamespace	             | -   | -   | -   | -   |
+| namespaceExists            | -   | -   | -   | -   |
+| updateNamespaceProperties  | -   | -   | -   | -   |
+| loadNamespaceMetadata      | -   | -   | -   | -   |
 
 ## Requirements
 
