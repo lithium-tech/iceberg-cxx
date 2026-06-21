@@ -4,6 +4,26 @@ set -e
 GREEN='\033[0;32m'
 NC='\033[0m'
 
+run_all_tests() {
+    echo -e "${GREEN}Running all project tests...${NC}"
+    (cd _build/tests && ./iceberg_local_test)
+    (cd _build && ./iceberg/iceberg-cpp-test)
+    (cd _build && ./iceberg/common/fs/iceberg_common_fs_test)
+    (cd _build && ./iceberg/equality_delete/iceberg_equality_delete_test)
+    (cd _build && ./iceberg/positional_delete/iceberg_positional_delete_test)
+    (cd _build && ./iceberg/streams/iceberg_streams_ut)
+    (cd _build && ./iceberg/filter/stats_filter/stats_filter_ut)
+    (cd _build && ./iceberg/filter/row_filter/row_filter_ut)
+    (cd _build && ./tests/meta_perf/meta_perf_test)
+    echo -e "${GREEN}All tests passed successfully!${NC}"
+}
+
+if [ -x "_build/tests/iceberg_local_test" ]; then
+    echo -e "${GREEN}Project is already built. Skipping setup and running tests directly...${NC}"
+    run_all_tests
+    exit 0
+fi
+
 echo -e "${GREEN}Starting setup of Apache Arrow dependencies...${NC}"
 
 mkdir -p _deps
@@ -32,13 +52,11 @@ if ! grep -q "ARROW_USE_XSIMD must be TRUE" cpp/cmake_modules/ThirdpartyToolchai
 fi
 cd ..
 
-if [ ! -d "arrow-thirdparty" ]; then
-    echo -e "${GREEN}Downloading Arrow third-party dependencies...${NC}"
-    chmod +x ./arrow/cpp/thirdparty/download_dependencies.sh
-    ./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
-else
-    echo "Arrow third-party dependencies already exist in _deps/arrow-thirdparty"
-fi
+# Always run download_dependencies.sh to verify/download missing files in arrow-thirdparty
+mkdir -p arrow-thirdparty
+echo -e "${GREEN}Downloading Arrow third-party dependencies...${NC}"
+chmod +x ./arrow/cpp/thirdparty/download_dependencies.sh
+./arrow/cpp/thirdparty/download_dependencies.sh ./arrow-thirdparty
 
 cd ..
 
@@ -53,12 +71,10 @@ if [ ! -L "arrow-thirdparty" ]; then
     ln -sf ../_deps/arrow-thirdparty arrow-thirdparty
 fi
 
-echo -e "${GREEN}Setup complete! Build the project!${NC}"
+echo -e "${GREEN}Setup complete! Build the project...${NC}"
 cmake -GNinja ..
 ninja
 
-echo -e "${GREEN}Builded!${NC}"
-
-echo -e "${GREEN}To run tests:${NC}"
-echo -e "  cd tests"
-echo -e "  ./iceberg_local_test"
+echo -e "${GREEN}Build complete! Running tests...${NC}"
+cd ..
+run_all_tests
