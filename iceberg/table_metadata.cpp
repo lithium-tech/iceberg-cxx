@@ -481,7 +481,27 @@ class WriterContext {
   }
 };
 
-std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value) {
+const char* JsonTypeName(rapidjson::Type type) {
+  switch (type) {
+    case rapidjson::kNullType:
+      return "null";
+    case rapidjson::kFalseType:
+    case rapidjson::kTrueType:
+      return "boolean";
+    case rapidjson::kObjectType:
+      return "object";
+    case rapidjson::kArrayType:
+      return "array";
+    case rapidjson::kStringType:
+      return "string";
+    case rapidjson::kNumberType:
+      return "number";
+    default:
+      return "unknown";
+  }
+}
+
+std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value, std::string_view field_name) {
   if (value.IsString()) {
     std::string str = value.GetString();
     if (auto maybe_value = types::NameToPrimitiveType(str); maybe_value.has_value()) {
@@ -505,7 +525,7 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
       ss >> size;
       return std::make_shared<types::FixedType>(size);
     }
-    throw std::runtime_error(std::string(__FUNCTION__) + ": unknown type '" + str + "'");
+    throw std::runtime_error("Unsupported type '" + str + "' for field '" + std::string(field_name) + "'");
   }
   if (value.IsObject()) {
     Ensure(value.HasMember(Names::type), std::string(__FUNCTION__) + ": !value.HasMember(\"type\"");
@@ -517,12 +537,14 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
 
       Ensure(value.HasMember(Names::element), std::string(__FUNCTION__) + ": !value.HasMember(\"element\"");
 
-      std::shared_ptr<const types::Type> element_type = JsonToDataType(value[Names::element]);
+      std::shared_ptr<const types::Type> element_type = JsonToDataType(value[Names::element], field_name);
 
       return std::make_shared<types::ListType>(element_field_id, element_required, element_type);
     }
+    throw std::runtime_error("Unsupported type '" + type + "' for field '" + std::string(field_name) + "'");
   }
-  throw std::runtime_error(std::string(__FUNCTION__) + ": unknown type");
+  throw std::runtime_error("Invalid type definition for field '" + std::string(field_name) +
+                           "': expected string or object, but got " + JsonTypeName(value.GetType()));
 }
 
 std::optional<Literal> ExtractOptionalLiteral(const rapidjson::Value& document, const std::string& field_name,
@@ -542,7 +564,8 @@ types::NestedField JsonToField(const rapidjson::Value& document) {
 
   Ensure(document.HasMember(Names::type), std::string(__FUNCTION__) + ": document.HasMember(\"type\")");
 
-  result.type = JsonToDataType(document[Names::type]);
+  result.type = JsonToDataType(document[Names::type], result.name);
+
   result.initial_default = ExtractOptionalLiteral(document, Names::initial_default, result.type);
   result.write_default = ExtractOptionalLiteral(document, Names::write_default, result.type);
   return result;
@@ -567,14 +590,27 @@ std::shared_ptr<Schema> JsonToSchema(const rapidjson::Value& document) {
   return std::make_shared<Schema>(schema_id, fields);
 }
 
-std::vector<std::shared_ptr<Schema>> ExtractSchemas(const rapidjson::Value& document) {
+std::vector<std::shared_ptr<Schema>> ExtractSchemas(const rapidjson::Value& document, int32_t current_schema_id) {
   static constexpr const char* field_name = Names::schemas;
   Ensure(document.HasMember(field_name),
          std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
 
   std::vector<std::shared_ptr<Schema>> result;
-  ProcessArray(document[field_name],
-               [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToSchema(elem)); });
+  ProcessArray(document[field_name], [&](const rapidjson::Value& elem) mutable {
+    int32_t schema_id = -1;
+    if (elem.IsObject() && elem.HasMember(Names::schema_id) && elem[Names::schema_id].IsInt()) {
+      schema_id = elem[Names::schema_id].GetInt();
+    }
+    if (schema_id == current_schema_id) {
+      result.emplace_back(JsonToSchema(elem));
+    } else {
+      try {
+        result.emplace_back(JsonToSchema(elem));
+      } catch (const std::exception&) {
+        // Ignore unparseable historical schema
+      }
+    }
+  });
   return result;
 }
 
@@ -988,8 +1024,8 @@ static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Doc
   builder.last_sequence_number = json_parse::ExtractInt64Field(document, Names::last_sequence_number);
   builder.last_updated_ms = json_parse::ExtractInt64Field(document, Names::last_updated_ms);
   builder.last_column_id = json_parse::ExtractInt32Field(document, Names::last_column_id);
-  builder.schemas = ExtractSchemas(document);
   builder.current_schema_id = json_parse::ExtractInt32Field(document, Names::current_schema_id);
+  builder.schemas = ExtractSchemas(document, builder.current_schema_id.value());
   builder.partition_specs = ExtractPartitionSpecs(document);
   builder.default_spec_id = json_parse::ExtractInt32Field(document, Names::default_spec_id);
   builder.last_partition_id = json_parse::ExtractInt32Field(document, Names::last_partition_id);
