@@ -868,6 +868,34 @@ TEST(Metadata, IgnoreUnknownTypeInHistoricalSchema) {
   ASSERT_EQ(columns.size(), 1);
   EXPECT_EQ(columns[0].name, "valid_field");
   EXPECT_EQ(columns[0].type->TypeId(), iceberg::TypeID::kLong);
+
+  auto schema1 = metadata->GetSchema(1);
+  ASSERT_TRUE(schema1 != nullptr);
+  EXPECT_EQ(schema1->SchemaId(), 1);
+
+  try {
+    metadata->GetSchema(0);
+    FAIL() << "Expected exception when accessing unparsed historical schema";
+  } catch (const std::exception& e) {
+    std::string err = e.what();
+    EXPECT_NE(
+        err.find(
+            "Failed to parse schema with ID 0: Unsupported type 'unsupported_or_unknown_type' for field 'old_field'"),
+        std::string::npos)
+        << "Actual error message was: " << err;
+  }
+
+  try {
+    metadata->GetSchema(999);
+    FAIL() << "Expected exception when accessing non-existent schema";
+  } catch (const std::exception& e) {
+    std::string err = e.what();
+    EXPECT_NE(err.find("Schema with ID 999 not found in table metadata"), std::string::npos)
+        << "Actual error message was: " << err;
+  }
+
+  EXPECT_EQ(metadata->unparsed_historical_schema_errors.size(), 1);
+  EXPECT_EQ(metadata->unparsed_historical_schema_errors.count(0), 1);
 }
 
 TEST(Metadata, HelpfulErrorOnUnknownTypeInCurrentSchema) {

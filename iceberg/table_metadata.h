@@ -115,11 +115,13 @@ struct TableMetadataV2 {
                   std::vector<std::shared_ptr<Snapshot>>&& snapshots_, std::vector<SnapshotLog>&& snapshot_log_,
                   std::vector<MetadataLog>&& metadata_log_, std::vector<std::shared_ptr<SortOrder>>&& sort_orders_,
                   int32_t default_sort_order_id_, std::map<std::string, SnapshotRef>&& refs_,
-                  std::vector<Statistics>&& statistics_);
+                  std::vector<Statistics>&& statistics_,
+                  std::map<int32_t, std::string>&& unparsed_historical_schema_errors_ = {});
 
   std::optional<std::string> GetCurrentManifestListPath() const;
   std::string GetCurrentManifestListPathOrFail() const;
   std::shared_ptr<Schema> GetCurrentSchema() const;
+  std::shared_ptr<Schema> GetSchema(int32_t schema_id) const;
   std::shared_ptr<SortOrder> GetSortOrder() const;
   std::shared_ptr<PartitionSpec> GetCurrentPartitionSpec() const;
   int32_t SetSortOrder(std::shared_ptr<SortOrder> order);
@@ -144,6 +146,7 @@ struct TableMetadataV2 {
   int32_t default_sort_order_id;                        // required
   std::map<std::string, SnapshotRef> refs;
   std::vector<Statistics> statistics;
+  std::map<int32_t, std::string> unparsed_historical_schema_errors;
   // std::vector<PartitionStatistics> partition_statistics_;
 
   template <typename T>
@@ -183,6 +186,7 @@ struct TableMetadataV2Builder {
   std::optional<int32_t> default_sort_order_id;
   std::optional<std::map<std::string, SnapshotRef>> refs;
   std::optional<std::vector<Statistics>> statistics;
+  std::optional<std::map<int32_t, std::string>> unparsed_historical_schema_errors;
 };
 
 namespace ice_tea {

@@ -590,24 +590,31 @@ std::shared_ptr<Schema> JsonToSchema(const rapidjson::Value& document) {
   return std::make_shared<Schema>(schema_id, fields);
 }
 
-std::vector<std::shared_ptr<Schema>> ExtractSchemas(const rapidjson::Value& document, int32_t current_schema_id) {
+struct ExtractedSchemas {
+  std::vector<std::shared_ptr<Schema>> schemas;
+  std::map<int32_t, std::string> unparsed_historical_schema_errors;
+};
+
+ExtractedSchemas ExtractSchemas(const rapidjson::Value& document, int32_t current_schema_id) {
   static constexpr const char* field_name = Names::schemas;
   Ensure(document.HasMember(field_name),
          std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
 
-  std::vector<std::shared_ptr<Schema>> result;
+  ExtractedSchemas result;
   ProcessArray(document[field_name], [&](const rapidjson::Value& elem) mutable {
     int32_t schema_id = -1;
     if (elem.IsObject() && elem.HasMember(Names::schema_id) && elem[Names::schema_id].IsInt()) {
       schema_id = elem[Names::schema_id].GetInt();
     }
     if (schema_id == current_schema_id) {
-      result.emplace_back(JsonToSchema(elem));
+      result.schemas.emplace_back(JsonToSchema(elem));
     } else {
       try {
-        result.emplace_back(JsonToSchema(elem));
-      } catch (const std::exception&) {
-        // Ignore unparseable historical schema
+        result.schemas.emplace_back(JsonToSchema(elem));
+      } catch (const std::exception& e) {
+        if (schema_id != -1) {
+          result.unparsed_historical_schema_errors[schema_id] = e.what();
+        }
       }
     }
   });
@@ -869,7 +876,8 @@ TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_,
                                  std::vector<std::shared_ptr<Snapshot>>&& snapshots_,
                                  std::vector<SnapshotLog>&& snapshot_log_, std::vector<MetadataLog>&& metadata_log_,
                                  std::vector<std::shared_ptr<SortOrder>>&& sort_orders_, int32_t default_sort_order_id_,
-                                 std::map<std::string, SnapshotRef>&& refs_, std::vector<Statistics>&& statistics_)
+                                 std::map<std::string, SnapshotRef>&& refs_, std::vector<Statistics>&& statistics_,
+                                 std::map<int32_t, std::string>&& unparsed_historical_schema_errors_)
     : table_uuid(std::move(table_uuid_)),
       location(std::move(location_)),
       last_sequence_number(last_sequence_number_),
@@ -888,7 +896,8 @@ TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_,
       sort_orders(std::move(sort_orders_)),
       default_sort_order_id(default_sort_order_id_),
       refs(std::move(refs_)),
-      statistics(std::move(statistics_)) {
+      statistics(std::move(statistics_)),
+      unparsed_historical_schema_errors(std::move(unparsed_historical_schema_errors_)) {
   // https://iceberg.apache.org/spec/#assignment-of-snapshot-ids-and-current-snapshot-id
   // Java writes -1 for "no current snapshot" with V1 and V2 tables and considers this equivalent to omitted or null.
   // This has never been formalized in the spec, but for compatibility, other implementations can accept -1 as null.
@@ -920,13 +929,21 @@ std::string TableMetadataV2::GetCurrentManifestListPathOrFail() const {
   return *maybe_manifest_list_path;
 }
 
-std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
+std::shared_ptr<Schema> TableMetadataV2::GetSchema(int32_t schema_id) const {
   for (const auto& schema : schemas) {
-    if (schema->SchemaId() == current_schema_id) {
+    if (schema->SchemaId() == schema_id) {
       return schema;
     }
   }
-  throw std::runtime_error(std::string(__FUNCTION__) + ": no schema with current schema id");
+  auto it = unparsed_historical_schema_errors.find(schema_id);
+  if (it != unparsed_historical_schema_errors.end()) {
+    throw std::runtime_error("Failed to parse schema with ID " + std::to_string(schema_id) + ": " + it->second);
+  }
+  throw std::runtime_error("Schema with ID " + std::to_string(schema_id) + " not found in table metadata");
+}
+
+std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
+  return GetSchema(current_schema_id);
 }
 
 std::shared_ptr<PartitionSpec> TableMetadataV2::GetCurrentPartitionSpec() const {
@@ -1014,7 +1031,9 @@ std::shared_ptr<TableMetadataV2> TableMetadataV2Builder::Build() {
       (metadata_log ? std::move(metadata_log.value()) : std::vector<MetadataLog>{}),
       (sort_orders ? std::move(sort_orders.value()) : std::vector<std::shared_ptr<SortOrder>>{}),
       default_sort_order_id.value(), (refs ? std::move(refs.value()) : std::map<std::string, SnapshotRef>{}),
-      (statistics ? std::move(statistics.value()) : std::vector<Statistics>{}));
+      (statistics ? std::move(statistics.value()) : std::vector<Statistics>{}),
+      (unparsed_historical_schema_errors ? std::move(unparsed_historical_schema_errors.value())
+                                         : std::map<int32_t, std::string>{}));
 }
 
 static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Document& document) {
@@ -1025,7 +1044,9 @@ static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Doc
   builder.last_updated_ms = json_parse::ExtractInt64Field(document, Names::last_updated_ms);
   builder.last_column_id = json_parse::ExtractInt32Field(document, Names::last_column_id);
   builder.current_schema_id = json_parse::ExtractInt32Field(document, Names::current_schema_id);
-  builder.schemas = ExtractSchemas(document, builder.current_schema_id.value());
+  auto extracted_schemas = ExtractSchemas(document, builder.current_schema_id.value());
+  builder.schemas = std::move(extracted_schemas.schemas);
+  builder.unparsed_historical_schema_errors = std::move(extracted_schemas.unparsed_historical_schema_errors);
   builder.partition_specs = ExtractPartitionSpecs(document);
   builder.default_spec_id = json_parse::ExtractInt32Field(document, Names::default_spec_id);
   builder.last_partition_id = json_parse::ExtractInt32Field(document, Names::last_partition_id);
