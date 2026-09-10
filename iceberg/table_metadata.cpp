@@ -481,7 +481,27 @@ class WriterContext {
   }
 };
 
-std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value) {
+const char* JsonTypeName(rapidjson::Type type) {
+  switch (type) {
+    case rapidjson::kNullType:
+      return "null";
+    case rapidjson::kFalseType:
+    case rapidjson::kTrueType:
+      return "boolean";
+    case rapidjson::kObjectType:
+      return "object";
+    case rapidjson::kArrayType:
+      return "array";
+    case rapidjson::kStringType:
+      return "string";
+    case rapidjson::kNumberType:
+      return "number";
+    default:
+      return "unknown";
+  }
+}
+
+std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value, std::string_view field_name) {
   if (value.IsString()) {
     std::string str = value.GetString();
     if (auto maybe_value = types::NameToPrimitiveType(str); maybe_value.has_value()) {
@@ -505,24 +525,35 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value)
       ss >> size;
       return std::make_shared<types::FixedType>(size);
     }
-    throw std::runtime_error(std::string(__FUNCTION__) + ": unknown type '" + str + "'");
+    throw std::runtime_error("Unsupported type '" + str + "' for field '" + std::string(field_name) + "'");
   }
   if (value.IsObject()) {
-    Ensure(value.HasMember(Names::type), std::string(__FUNCTION__) + ": !value.HasMember(\"type\"");
+    Ensure(value.HasMember(Names::type),
+           std::string(__FUNCTION__) + ": !value.HasMember(\"type\") for field '" + std::string(field_name) + "'");
 
     std::string type = json_parse::ExtractStringField(value, Names::type);
     if (type == Names::list) {
+      Ensure(
+          value.HasMember(Names::element_id),
+          std::string(__FUNCTION__) + ": !value.HasMember(\"element-id\") for field '" + std::string(field_name) + "'");
       int32_t element_field_id = json_parse::ExtractInt32Field(value, Names::element_id);
+
+      Ensure(value.HasMember(Names::element_required), std::string(__FUNCTION__) +
+                                                           ": !value.HasMember(\"element-required\") for field '" +
+                                                           std::string(field_name) + "'");
       bool element_required = json_parse::ExtractBooleanField(value, Names::element_required);
 
-      Ensure(value.HasMember(Names::element), std::string(__FUNCTION__) + ": !value.HasMember(\"element\"");
+      Ensure(value.HasMember(Names::element),
+             std::string(__FUNCTION__) + ": !value.HasMember(\"element\") for field '" + std::string(field_name) + "'");
 
-      std::shared_ptr<const types::Type> element_type = JsonToDataType(value[Names::element]);
+      std::shared_ptr<const types::Type> element_type = JsonToDataType(value[Names::element], field_name);
 
       return std::make_shared<types::ListType>(element_field_id, element_required, element_type);
     }
+    throw std::runtime_error("Unsupported type '" + type + "' for field '" + std::string(field_name) + "'");
   }
-  throw std::runtime_error(std::string(__FUNCTION__) + ": unknown type");
+  throw std::runtime_error("Invalid type definition for field '" + std::string(field_name) +
+                           "': expected string or object, but got " + JsonTypeName(value.GetType()));
 }
 
 std::optional<Literal> ExtractOptionalLiteral(const rapidjson::Value& document, const std::string& field_name,
@@ -540,9 +571,11 @@ types::NestedField JsonToField(const rapidjson::Value& document) {
   result.name = json_parse::ExtractStringField(document, Names::name);
   result.is_required = json_parse::ExtractBooleanField(document, Names::required);
 
-  Ensure(document.HasMember(Names::type), std::string(__FUNCTION__) + ": document.HasMember(\"type\")");
+  Ensure(document.HasMember(Names::type),
+         std::string(__FUNCTION__) + ": !document.HasMember(\"type\") for field '" + result.name + "'");
 
-  result.type = JsonToDataType(document[Names::type]);
+  result.type = JsonToDataType(document[Names::type], result.name);
+
   result.initial_default = ExtractOptionalLiteral(document, Names::initial_default, result.type);
   result.write_default = ExtractOptionalLiteral(document, Names::write_default, result.type);
   return result;
@@ -567,14 +600,28 @@ std::shared_ptr<Schema> JsonToSchema(const rapidjson::Value& document) {
   return std::make_shared<Schema>(schema_id, fields);
 }
 
-std::vector<std::shared_ptr<Schema>> ExtractSchemas(const rapidjson::Value& document) {
-  static constexpr const char* field_name = Names::schemas;
-  Ensure(document.HasMember(field_name),
-         std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
+struct ExtractedSchemas {
+  std::vector<std::shared_ptr<Schema>> schemas;
+  std::map<int32_t, std::string> unparsed_historical_schema_errors;
+};
 
-  std::vector<std::shared_ptr<Schema>> result;
-  ProcessArray(document[field_name],
-               [&result](const rapidjson::Value& elem) mutable { result.emplace_back(JsonToSchema(elem)); });
+ExtractedSchemas ExtractSchemas(const rapidjson::Value& document, int32_t current_schema_id) {
+  Ensure(document.HasMember(Names::schemas),
+         std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(Names::schemas) + ")");
+
+  ExtractedSchemas result;
+  ProcessArray(document[Names::schemas], [&](const rapidjson::Value& elem) mutable {
+    int32_t schema_id = json_parse::ExtractInt32Field(elem, Names::schema_id);
+    if (schema_id == current_schema_id) {
+      result.schemas.emplace_back(JsonToSchema(elem));
+    } else {
+      try {
+        result.schemas.emplace_back(JsonToSchema(elem));
+      } catch (const std::exception& e) {
+        result.unparsed_historical_schema_errors[schema_id] = e.what();
+      }
+    }
+  });
   return result;
 }
 
@@ -833,7 +880,8 @@ TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_,
                                  std::vector<std::shared_ptr<Snapshot>>&& snapshots_,
                                  std::vector<SnapshotLog>&& snapshot_log_, std::vector<MetadataLog>&& metadata_log_,
                                  std::vector<std::shared_ptr<SortOrder>>&& sort_orders_, int32_t default_sort_order_id_,
-                                 std::map<std::string, SnapshotRef>&& refs_, std::vector<Statistics>&& statistics_)
+                                 std::map<std::string, SnapshotRef>&& refs_, std::vector<Statistics>&& statistics_,
+                                 std::map<int32_t, std::string>&& unparsed_historical_schema_errors_)
     : table_uuid(std::move(table_uuid_)),
       location(std::move(location_)),
       last_sequence_number(last_sequence_number_),
@@ -852,7 +900,8 @@ TableMetadataV2::TableMetadataV2(std::string table_uuid_, std::string location_,
       sort_orders(std::move(sort_orders_)),
       default_sort_order_id(default_sort_order_id_),
       refs(std::move(refs_)),
-      statistics(std::move(statistics_)) {
+      statistics(std::move(statistics_)),
+      unparsed_historical_schema_errors(std::move(unparsed_historical_schema_errors_)) {
   // https://iceberg.apache.org/spec/#assignment-of-snapshot-ids-and-current-snapshot-id
   // Java writes -1 for "no current snapshot" with V1 and V2 tables and considers this equivalent to omitted or null.
   // This has never been formalized in the spec, but for compatibility, other implementations can accept -1 as null.
@@ -884,14 +933,20 @@ std::string TableMetadataV2::GetCurrentManifestListPathOrFail() const {
   return *maybe_manifest_list_path;
 }
 
-std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
+std::shared_ptr<Schema> TableMetadataV2::GetSchema(int32_t schema_id) const {
   for (const auto& schema : schemas) {
-    if (schema->SchemaId() == current_schema_id) {
+    if (schema->SchemaId() == schema_id) {
       return schema;
     }
   }
-  throw std::runtime_error(std::string(__FUNCTION__) + ": no schema with current schema id");
+  auto it = unparsed_historical_schema_errors.find(schema_id);
+  if (it != unparsed_historical_schema_errors.end()) {
+    throw std::runtime_error("Failed to parse schema with ID " + std::to_string(schema_id) + ": " + it->second);
+  }
+  throw std::runtime_error("Schema with ID " + std::to_string(schema_id) + " not found in table metadata");
 }
+
+std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const { return GetSchema(current_schema_id); }
 
 std::shared_ptr<PartitionSpec> TableMetadataV2::GetCurrentPartitionSpec() const {
   for (const auto& partition_spec : partition_specs) {
@@ -978,7 +1033,9 @@ std::shared_ptr<TableMetadataV2> TableMetadataV2Builder::Build() {
       (metadata_log ? std::move(metadata_log.value()) : std::vector<MetadataLog>{}),
       (sort_orders ? std::move(sort_orders.value()) : std::vector<std::shared_ptr<SortOrder>>{}),
       default_sort_order_id.value(), (refs ? std::move(refs.value()) : std::map<std::string, SnapshotRef>{}),
-      (statistics ? std::move(statistics.value()) : std::vector<Statistics>{}));
+      (statistics ? std::move(statistics.value()) : std::vector<Statistics>{}),
+      (unparsed_historical_schema_errors ? std::move(unparsed_historical_schema_errors.value())
+                                         : std::map<int32_t, std::string>{}));
 }
 
 static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Document& document) {
@@ -988,8 +1045,10 @@ static std::shared_ptr<TableMetadataV2> MakeTableMetadataV2(const rapidjson::Doc
   builder.last_sequence_number = json_parse::ExtractInt64Field(document, Names::last_sequence_number);
   builder.last_updated_ms = json_parse::ExtractInt64Field(document, Names::last_updated_ms);
   builder.last_column_id = json_parse::ExtractInt32Field(document, Names::last_column_id);
-  builder.schemas = ExtractSchemas(document);
   builder.current_schema_id = json_parse::ExtractInt32Field(document, Names::current_schema_id);
+  auto extracted_schemas = ExtractSchemas(document, builder.current_schema_id.value());
+  builder.schemas = std::move(extracted_schemas.schemas);
+  builder.unparsed_historical_schema_errors = std::move(extracted_schemas.unparsed_historical_schema_errors);
   builder.partition_specs = ExtractPartitionSpecs(document);
   builder.default_spec_id = json_parse::ExtractInt32Field(document, Names::default_spec_id);
   builder.last_partition_id = json_parse::ExtractInt32Field(document, Names::last_partition_id);

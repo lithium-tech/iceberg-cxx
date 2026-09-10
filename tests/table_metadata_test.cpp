@@ -814,4 +814,173 @@ TEST(Metadata, EmptyTable) {
   EXPECT_EQ(metadata->properties.at("write.format.default"), "PARQUET");
 }
 
+// Note: The input metadata JSON skeleton for these tests was adapted from
+// tests/metadata/00003-ca406d8e-6c7b-4672-87ff-bfd76f84f949.metadata.json
+
+TEST(Metadata, IgnoreUnknownTypeInHistoricalSchema) {
+  std::string input = R"({
+    "format-version" : 2,
+    "table-uuid" : "4412d001-c6df-4adb-8854-d3b9e762440c",
+    "location" : "s3://warehouse/test",
+    "last-sequence-number" : 1,
+    "last-updated-ms" : 1713951998102,
+    "last-column-id" : 2,
+    "current-schema-id" : 1,
+    "schemas" : [ {
+      "type" : "struct",
+      "schema-id" : 0,
+      "fields" : [ {
+        "id" : 1,
+        "name" : "old_field",
+        "required" : false,
+        "type" : "unsupported_or_unknown_type"
+      } ]
+    }, {
+      "type" : "struct",
+      "schema-id" : 1,
+      "fields" : [ {
+        "id" : 1,
+        "name" : "valid_field",
+        "required" : false,
+        "type" : "long"
+      } ]
+    } ],
+    "default-spec-id" : 0,
+    "partition-specs" : [ {
+      "spec-id" : 0,
+      "fields" : [ ]
+    } ],
+    "last-partition-id" : 999,
+    "default-sort-order-id" : 0,
+    "sort-orders" : [ {
+      "order-id" : 0,
+      "fields" : [ ]
+    } ]
+  })";
+
+  auto metadata = ice_tea::ReadTableMetadataV2(input);
+  ASSERT_TRUE(metadata != nullptr);
+  EXPECT_EQ(metadata->current_schema_id, 1);
+  auto schema = metadata->GetCurrentSchema();
+  ASSERT_TRUE(schema != nullptr);
+  EXPECT_EQ(schema->SchemaId(), 1);
+  const auto& columns = schema->Columns();
+  ASSERT_EQ(columns.size(), 1);
+  EXPECT_EQ(columns[0].name, "valid_field");
+  EXPECT_EQ(columns[0].type->TypeId(), iceberg::TypeID::kLong);
+
+  auto schema1 = metadata->GetSchema(1);
+  ASSERT_TRUE(schema1 != nullptr);
+  EXPECT_EQ(schema1->SchemaId(), 1);
+
+  try {
+    metadata->GetSchema(0);
+    FAIL() << "Expected exception when accessing unparsed historical schema";
+  } catch (const std::exception& e) {
+    std::string err = e.what();
+    EXPECT_NE(
+        err.find(
+            "Failed to parse schema with ID 0: Unsupported type 'unsupported_or_unknown_type' for field 'old_field'"),
+        std::string::npos)
+        << "Actual error message was: " << err;
+  }
+
+  try {
+    metadata->GetSchema(999);
+    FAIL() << "Expected exception when accessing non-existent schema";
+  } catch (const std::exception& e) {
+    std::string err = e.what();
+    EXPECT_NE(err.find("Schema with ID 999 not found in table metadata"), std::string::npos)
+        << "Actual error message was: " << err;
+  }
+
+  EXPECT_EQ(metadata->unparsed_historical_schema_errors.size(), 1);
+  EXPECT_EQ(metadata->unparsed_historical_schema_errors.count(0), 1);
+}
+
+TEST(Metadata, HelpfulErrorOnUnknownTypeInCurrentSchema) {
+  std::string input = R"({
+    "format-version" : 2,
+    "table-uuid" : "4412d001-c6df-4adb-8854-d3b9e762440c",
+    "location" : "s3://warehouse/test",
+    "last-sequence-number" : 1,
+    "last-updated-ms" : 1713951998102,
+    "last-column-id" : 1,
+    "current-schema-id" : 0,
+    "schemas" : [ {
+      "type" : "struct",
+      "schema-id" : 0,
+      "fields" : [ {
+        "id" : 1,
+        "name" : "complex_col",
+        "required" : false,
+        "type" : "map"
+      } ]
+    } ],
+    "default-spec-id" : 0,
+    "partition-specs" : [ {
+      "spec-id" : 0,
+      "fields" : [ ]
+    } ],
+    "last-partition-id" : 999,
+    "default-sort-order-id" : 0,
+    "sort-orders" : [ {
+      "order-id" : 0,
+      "fields" : [ ]
+    } ]
+  })";
+
+  try {
+    ice_tea::ReadTableMetadataV2(input);
+    FAIL() << "Expected exception when parsing unknown type in current schema";
+  } catch (const std::exception& e) {
+    std::string err = e.what();
+    EXPECT_NE(err.find("Unsupported type 'map' for field 'complex_col'"), std::string::npos)
+        << "Actual error message was: " << err;
+  }
+}
+
+TEST(Metadata, HelpfulErrorOnNonStringOrObjectInCurrentSchema) {
+  std::string input = R"({
+    "format-version" : 2,
+    "table-uuid" : "4412d001-c6df-4adb-8854-d3b9e762440c",
+    "location" : "s3://warehouse/test",
+    "last-sequence-number" : 1,
+    "last-updated-ms" : 1713951998102,
+    "last-column-id" : 1,
+    "current-schema-id" : 0,
+    "schemas" : [ {
+      "type" : "struct",
+      "schema-id" : 0,
+      "fields" : [ {
+        "id" : 1,
+        "name" : "invalid_col",
+        "required" : false,
+        "type" : 123
+      } ]
+    } ],
+    "default-spec-id" : 0,
+    "partition-specs" : [ {
+      "spec-id" : 0,
+      "fields" : [ ]
+    } ],
+    "last-partition-id" : 999,
+    "default-sort-order-id" : 0,
+    "sort-orders" : [ {
+      "order-id" : 0,
+      "fields" : [ ]
+    } ]
+  })";
+
+  try {
+    ice_tea::ReadTableMetadataV2(input);
+    FAIL() << "Expected exception when parsing non-string/non-object type in current schema";
+  } catch (const std::exception& e) {
+    std::string err = e.what();
+    EXPECT_NE(err.find("Invalid type definition for field 'invalid_col': expected string or object, but got number"),
+              std::string::npos)
+        << "Actual error message was: " << err;
+  }
+}
+
 }  // namespace iceberg
