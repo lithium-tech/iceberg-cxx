@@ -45,4 +45,59 @@ TEST(RowFilter, Test) {
   EXPECT_EQ(selection_vector->GetIndex(1), 4);
 }
 
+TEST(RowFilter, TimestampNsComparison) {
+  auto lhs = std::make_shared<iceberg::filter::VariableNode>(ValueType::kTimestamp, "ts");
+  auto rhs = std::make_shared<iceberg::filter::ConstNode>(Value::Make<ValueType::kTimestamp>(3000000000LL));
+
+  auto root_node = std::make_shared<iceberg::filter::FunctionNode>(
+      iceberg::filter::FunctionSignature{.function_id = iceberg::filter::FunctionID::kGreaterThan,
+                                         .return_type = ValueType::kBool,
+                                         .argument_types = std::vector<ValueType>{ValueType::kTimestamp, ValueType::kTimestamp}},
+      std::vector<iceberg::filter::NodePtr>{lhs, rhs});
+
+  arrow::TimestampBuilder ts_builder(arrow::timestamp(arrow::TimeUnit::NANO), arrow::default_memory_pool());
+  ASSERT_OK(ts_builder.AppendValues(std::vector<int64_t>{1000000000LL, 2000000000LL, 3000000000LL, 4000000000LL, 5000000000LL}));
+  ASSIGN_OR_FAIL(auto ts_array, ts_builder.Finish());
+
+  arrow::FieldVector fields{std::make_shared<arrow::Field>("ts", arrow::timestamp(arrow::TimeUnit::NANO))};
+  auto batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), 5, {ts_array});
+
+  RowFilter row_filter(root_node);
+  ASSERT_OK(row_filter.BuildFilter(std::make_shared<TrivialArrowFieldResolver>(batch->schema()),
+                                   std::make_shared<GandivaFunctionRegistry>(0), batch->schema()));
+
+  ASSIGN_OR_FAIL(auto selection_vector, row_filter.ApplyFilter(batch));
+  EXPECT_EQ(selection_vector->GetNumSlots(), 2);
+  EXPECT_EQ(selection_vector->GetIndex(0), 3);
+  EXPECT_EQ(selection_vector->GetIndex(1), 4);
+}
+
+TEST(RowFilter, TimestamptzNsComparison) {
+  auto lhs = std::make_shared<iceberg::filter::VariableNode>(ValueType::kTimestamptz, "ts");
+  auto rhs = std::make_shared<iceberg::filter::ConstNode>(Value::Make<ValueType::kTimestamptz>(3000000000LL));
+
+  auto root_node = std::make_shared<iceberg::filter::FunctionNode>(
+      iceberg::filter::FunctionSignature{.function_id = iceberg::filter::FunctionID::kLessThanOrEqualTo,
+                                         .return_type = ValueType::kBool,
+                                         .argument_types = std::vector<ValueType>{ValueType::kTimestamptz, ValueType::kTimestamptz}},
+      std::vector<iceberg::filter::NodePtr>{lhs, rhs});
+
+  arrow::TimestampBuilder ts_builder(arrow::timestamp(arrow::TimeUnit::NANO, "UTC"), arrow::default_memory_pool());
+  ASSERT_OK(ts_builder.AppendValues(std::vector<int64_t>{1000000000LL, 2000000000LL, 3000000000LL, 4000000000LL, 5000000000LL}));
+  ASSIGN_OR_FAIL(auto ts_array, ts_builder.Finish());
+
+  arrow::FieldVector fields{std::make_shared<arrow::Field>("ts", arrow::timestamp(arrow::TimeUnit::NANO, "UTC"))};
+  auto batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), 5, {ts_array});
+
+  RowFilter row_filter(root_node);
+  ASSERT_OK(row_filter.BuildFilter(std::make_shared<TrivialArrowFieldResolver>(batch->schema()),
+                                   std::make_shared<GandivaFunctionRegistry>(0), batch->schema()));
+
+  ASSIGN_OR_FAIL(auto selection_vector, row_filter.ApplyFilter(batch));
+  EXPECT_EQ(selection_vector->GetNumSlots(), 3);
+  EXPECT_EQ(selection_vector->GetIndex(0), 0);
+  EXPECT_EQ(selection_vector->GetIndex(1), 1);
+  EXPECT_EQ(selection_vector->GetIndex(2), 2);
+}
+
 }  // namespace iceberg::filter

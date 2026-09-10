@@ -8,6 +8,7 @@
 #include <variant>
 
 #include "arrow/status.h"
+#include "arrow/type.h"
 #include "arrow/type_fwd.h"
 #include "gandiva/tree_expr_builder.h"
 #include "iceberg/filter/representation/function.h"
@@ -52,6 +53,27 @@ void GandivaFunctionRegistry::PromoteLtoR(gandiva::NodePtr& a, gandiva::NodePtr&
   if (a->return_type()->Equals(ArrowTimestamptzType()) &&
       (b->return_type()->Equals(ArrowTimestampType()) || (b->return_type() == arrow::date32()))) {
     PromoteToTimestamp(a);
+  }
+  if (b->return_type()->Equals(arrow::timestamp(arrow::TimeUnit::NANO))) {
+    if (a->return_type()->Equals(arrow::timestamp(arrow::TimeUnit::MICRO))) {
+      a = gandiva::TreeExprBuilder::MakeFunction("castTIMESTAMP", {a}, arrow::timestamp(arrow::TimeUnit::NANO));
+    } else if (a->return_type()->Equals(ArrowTimestamptzType()) ||
+               a->return_type()->Equals(arrow::timestamp(arrow::TimeUnit::NANO, "UTC"))) {
+      auto shift_gnode = gandiva::TreeExprBuilder::MakeLiteral(-timestamp_to_timestamptz_shift_us_ * 1000);
+      a = gandiva::TreeExprBuilder::MakeFunction("castTIMESTAMP", {a, shift_gnode},
+                                                 arrow::timestamp(arrow::TimeUnit::NANO));
+    }
+  }
+  if (b->return_type()->Equals(arrow::timestamp(arrow::TimeUnit::NANO, "UTC"))) {
+    if (a->return_type()->Equals(arrow::timestamp(arrow::TimeUnit::MICRO, "UTC"))) {
+      a = gandiva::TreeExprBuilder::MakeFunction("castTIMESTAMPTZ", {a},
+                                                 arrow::timestamp(arrow::TimeUnit::NANO, "UTC"));
+    } else if (a->return_type()->Equals(ArrowTimestampType()) ||
+               a->return_type()->Equals(arrow::timestamp(arrow::TimeUnit::NANO))) {
+      auto shift_gnode = gandiva::TreeExprBuilder::MakeLiteral(timestamp_to_timestamptz_shift_us_ * 1000);
+      a = gandiva::TreeExprBuilder::MakeFunction("castTIMESTAMPTZ", {a, shift_gnode},
+                                                 arrow::timestamp(arrow::TimeUnit::NANO, "UTC"));
+    }
   }
 }
 

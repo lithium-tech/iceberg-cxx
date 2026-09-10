@@ -95,7 +95,8 @@ bool ValdateLogicalType<ValueType::kTimestamp>(LogicalTypePtr type) {
   if (type->is_timestamp()) {
     auto timestamp_type = std::static_pointer_cast<const parquet::TimestampLogicalType>(type);
     return !timestamp_type->is_adjusted_to_utc() &&
-           timestamp_type->time_unit() == parquet::LogicalType::TimeUnit::MICROS;
+           (timestamp_type->time_unit() == parquet::LogicalType::TimeUnit::MICROS ||
+            timestamp_type->time_unit() == parquet::LogicalType::TimeUnit::NANOS);
   }
   return false;
 }
@@ -105,7 +106,8 @@ bool ValdateLogicalType<ValueType::kTimestamptz>(LogicalTypePtr type) {
   if (type->is_timestamp()) {
     auto timestamp_type = std::static_pointer_cast<const parquet::TimestampLogicalType>(type);
     return timestamp_type->is_adjusted_to_utc() &&
-           timestamp_type->time_unit() == parquet::LogicalType::TimeUnit::MICROS;
+           (timestamp_type->time_unit() == parquet::LogicalType::TimeUnit::MICROS ||
+            timestamp_type->time_unit() == parquet::LogicalType::TimeUnit::NANOS);
   }
   return false;
 }

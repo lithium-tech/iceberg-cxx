@@ -296,6 +296,44 @@ TEST_F(ParquetStatsGetterTest, Timestamptz) {
   }
 }
 
+TEST_F(ParquetStatsGetterTest, TimestampNs) {
+  auto column1 = MakeTimestampNsColumn("col1", 1, OptionalVector<int64_t>{std::nullopt, -2, 14});
+  PrepareData({column1});
+
+  for (const auto& value_type : GenerateAllValueTypes()) {
+    auto result = stats_getter_->GetStats("col1", value_type);
+
+    std::visit(
+        [&]<ValueType val_type>(Tag<val_type>) -> void {
+          if constexpr (val_type == ValueType::kTimestamp) {
+            Check<val_type>(result, -2, 14);
+          } else {
+            EXPECT_FALSE(result.has_value()) << "value type " << static_cast<int>(val_type);
+          }
+        },
+        DispatchTag(value_type));
+  }
+}
+
+TEST_F(ParquetStatsGetterTest, TimestamptzNs) {
+  auto column1 = MakeTimestamptzNsColumn("col1", 1, OptionalVector<int64_t>{std::nullopt, -2, 14});
+  PrepareData({column1});
+
+  for (const auto& value_type : GenerateAllValueTypes()) {
+    auto result = stats_getter_->GetStats("col1", value_type);
+
+    std::visit(
+        [&]<ValueType val_type>(Tag<val_type>) -> void {
+          if constexpr (val_type == ValueType::kTimestamptz) {
+            Check<val_type>(result, -2, 14);
+          } else {
+            EXPECT_FALSE(result.has_value()) << "value type " << static_cast<int>(val_type);
+          }
+        },
+        DispatchTag(value_type));
+  }
+}
+
 TEST_F(ParquetStatsGetterTest, Date) {
   auto column1 = MakeDateColumn("col1", 1, OptionalVector<int32_t>{std::nullopt, -2, 14});
   PrepareData({column1});

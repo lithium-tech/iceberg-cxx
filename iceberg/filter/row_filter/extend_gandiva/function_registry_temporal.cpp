@@ -20,6 +20,7 @@ arrow::Status RegisterTemporalFunctions() {
   using arrow::int64;
   using arrow::timestamp;
   using arrow::TimeUnit::MICRO;
+  using arrow::TimeUnit::NANO;
   using gandiva::DataTypeVector;
   using gandiva::kResultNullIfNull;
   using gandiva::NativeFunction;
@@ -68,6 +69,54 @@ arrow::Status RegisterTemporalFunctions() {
   ARROW_RETURN_NOT_OK(func_registry->Register(NativeFunction("DateDiff", {}, DataTypeVector{date32(), date32()},
                                                              arrow::int32(), kResultNullIfNull, "DateDiff_int32_int32"),
                                               reinterpret_cast<void*>(DateDiff)));
+
+  ARROW_RETURN_NOT_OK(func_registry->Register(NativeFunction("isnull", {}, DataTypeVector{timestamp(NANO)}, boolean(),
+                                                             gandiva::kResultNullNever, "isnull_timestamp_ns"),
+                                              reinterpret_cast<void*>(IsNullTimestamp)));
+
+  ARROW_RETURN_NOT_OK(
+      func_registry->Register(NativeFunction("isnotnull", {}, DataTypeVector{timestamp(NANO)}, boolean(),
+                                             gandiva::kResultNullNever, "isnotnull_timestamp_ns"),
+                              reinterpret_cast<void*>(IsNotNullTimestamp)));
+
+  ARROW_RETURN_NOT_OK(func_registry->Register(NativeFunction("isnull", {}, DataTypeVector{timestamp(NANO, "UTC")}, boolean(),
+                                                             gandiva::kResultNullNever, "isnull_timestamptz_ns"),
+                                              reinterpret_cast<void*>(IsNullTimestamp)));
+
+  ARROW_RETURN_NOT_OK(
+      func_registry->Register(NativeFunction("isnotnull", {}, DataTypeVector{timestamp(NANO, "UTC")}, boolean(),
+                                             gandiva::kResultNullNever, "isnotnull_timestamptz_ns"),
+                              reinterpret_cast<void*>(IsNotNullTimestamp)));
+
+  ARROW_RETURN_NOT_OK(
+      func_registry->Register(NativeFunction("castTIMESTAMP", {}, DataTypeVector{int64()}, timestamp(NANO),
+                                             kResultNullIfNull, "castTIMESTAMP_int64_to_nano"),
+                              reinterpret_cast<void*>(CastTimestamp)));
+
+  ARROW_RETURN_NOT_OK(
+      func_registry->Register(NativeFunction("castTIMESTAMPTZ", {}, DataTypeVector{int64()}, timestamp(NANO, "UTC"),
+                                             kResultNullIfNull, "castTIMESTAMPTZ_int64_to_nano"),
+                              reinterpret_cast<void*>(CastTimestamp)));
+
+  ARROW_RETURN_NOT_OK(
+      func_registry->Register(NativeFunction("castTIMESTAMP", {}, DataTypeVector{timestamp(MICRO)}, timestamp(NANO),
+                                             kResultNullIfNull, "castTIMESTAMP_micro_to_nano"),
+                              reinterpret_cast<void*>(CastTimestamp)));
+
+  ARROW_RETURN_NOT_OK(
+      func_registry->Register(NativeFunction("castTIMESTAMPTZ", {}, DataTypeVector{timestamp(MICRO, "UTC")},
+                                             timestamp(NANO, "UTC"), kResultNullIfNull, "castTIMESTAMPTZ_micro_to_nano"),
+                              reinterpret_cast<void*>(CastTimestamp)));
+
+  ARROW_RETURN_NOT_OK(
+      func_registry->Register(NativeFunction("castTIMESTAMP", {}, DataTypeVector{timestamp(NANO, "UTC"), int64()},
+                                             timestamp(NANO), kResultNullIfNull, "castTIMESTAMP_nano_tz_shift"),
+                              reinterpret_cast<void*>(CastTimestampFromTimestamptz)));
+
+  ARROW_RETURN_NOT_OK(
+      func_registry->Register(NativeFunction("castTIMESTAMPTZ", {}, DataTypeVector{timestamp(NANO), int64()},
+                                             timestamp(NANO, "UTC"), kResultNullIfNull, "castTIMESTAMPTZ_nano_tz_shift"),
+                              reinterpret_cast<void*>(CastTimestamptzFromTimestamp)));
 
 #define EXTRACT_FUNC_PTR(UNIT) reinterpret_cast<void*>(Extract##UNIT)
 
@@ -140,9 +189,52 @@ arrow::Status RegisterTemporalFunctions() {
   REGISTER_COMPARISON_TIMESTAMPTZ_TIMESTAMPTZ(equal, Equal);
   REGISTER_COMPARISON_TIMESTAMPTZ_TIMESTAMPTZ(not_equal, NotEqual);
 
-#undef REGISTER_COMPARISON_TIMESTAMP_TIMESTAMP
-#undef SIGNATURE_COMPARSION_TIMESTAMP_TIMESTAMP
-#undef COMPARISON_TIMESTAMP_TIMESTAMP_FUNC_PTR
+#undef REGISTER_COMPARISON_TIMESTAMPTZ_TIMESTAMPTZ
+#undef SIGNATURE_COMPARSION_TIMESTAMPTZ_TIMESTAMPTZ
+#undef COMPARISON_TIMESTAMPTZ_TIMESTAMPTZ_FUNC_PTR
+
+#define COMPARISON_TIMESTAMP_NS_FUNC_PTR(COMPARISON) reinterpret_cast<void*>(COMPARISON<int64_t>)
+
+#define SIGNATURE_COMPARSION_TIMESTAMP_NS_TIMESTAMP_NS(COMPARISON)                                                  \
+  NativeFunction(#COMPARISON, {}, DataTypeVector{timestamp(NANO), timestamp(NANO)}, boolean(), kResultNullIfNull,   \
+                 #COMPARISON + std::string("_timestamp[ns]_timestamp[ns]"))
+
+#define REGISTER_COMPARISON_TIMESTAMP_NS_TIMESTAMP_NS(GDV_NAME, FUNC_NAME)                                \
+  do {                                                                                                     \
+    ARROW_RETURN_NOT_OK(func_registry->Register(SIGNATURE_COMPARSION_TIMESTAMP_NS_TIMESTAMP_NS(GDV_NAME),  \
+                                                COMPARISON_TIMESTAMP_NS_FUNC_PTR(FUNC_NAME)));             \
+  } while (false)
+
+  REGISTER_COMPARISON_TIMESTAMP_NS_TIMESTAMP_NS(less_than, LessThan);
+  REGISTER_COMPARISON_TIMESTAMP_NS_TIMESTAMP_NS(less_than_or_equal_to, LessThanOrEqualTo);
+  REGISTER_COMPARISON_TIMESTAMP_NS_TIMESTAMP_NS(greater_than, GreaterThan);
+  REGISTER_COMPARISON_TIMESTAMP_NS_TIMESTAMP_NS(greater_than_or_equal_to, GreaterThanOrEqualTo);
+  REGISTER_COMPARISON_TIMESTAMP_NS_TIMESTAMP_NS(equal, Equal);
+  REGISTER_COMPARISON_TIMESTAMP_NS_TIMESTAMP_NS(not_equal, NotEqual);
+
+#undef REGISTER_COMPARISON_TIMESTAMP_NS_TIMESTAMP_NS
+#undef SIGNATURE_COMPARSION_TIMESTAMP_NS_TIMESTAMP_NS
+
+#define SIGNATURE_COMPARSION_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(COMPARISON)                                             \
+  NativeFunction(#COMPARISON, {}, DataTypeVector{timestamp(NANO, "UTC"), timestamp(NANO, "UTC")}, boolean(),     \
+                 kResultNullIfNull, #COMPARISON + std::string("_timestamp[ns, tz=UTC]_timestamp[ns, tz=UTC]"))
+
+#define REGISTER_COMPARISON_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(GDV_NAME, FUNC_NAME)                                \
+  do {                                                                                                         \
+    ARROW_RETURN_NOT_OK(func_registry->Register(SIGNATURE_COMPARSION_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(GDV_NAME),  \
+                                                COMPARISON_TIMESTAMP_NS_FUNC_PTR(FUNC_NAME)));                 \
+  } while (false)
+
+  REGISTER_COMPARISON_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(less_than, LessThan);
+  REGISTER_COMPARISON_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(less_than_or_equal_to, LessThanOrEqualTo);
+  REGISTER_COMPARISON_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(greater_than, GreaterThan);
+  REGISTER_COMPARISON_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(greater_than_or_equal_to, GreaterThanOrEqualTo);
+  REGISTER_COMPARISON_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(equal, Equal);
+  REGISTER_COMPARISON_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS(not_equal, NotEqual);
+
+#undef REGISTER_COMPARISON_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS
+#undef SIGNATURE_COMPARSION_TIMESTAMPTZ_NS_TIMESTAMPTZ_NS
+#undef COMPARISON_TIMESTAMP_NS_FUNC_PTR
 
 #define COMPARISON_DATE_TIMESTAMP_FUNC_PTR(COMPARISON) reinterpret_cast<void*>(COMPARISON##DateTimestamp)
 
