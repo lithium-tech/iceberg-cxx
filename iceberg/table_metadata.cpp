@@ -528,14 +528,14 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value,
     throw std::runtime_error("Unsupported type '" + str + "' for field '" + std::string(field_name) + "'");
   }
   if (value.IsObject()) {
-    Ensure(value.HasMember(Names::type), std::string(__FUNCTION__) + ": !value.HasMember(\"type\") for field '" +
-                                             std::string(field_name) + "'");
+    Ensure(value.HasMember(Names::type),
+           std::string(__FUNCTION__) + ": !value.HasMember(\"type\") for field '" + std::string(field_name) + "'");
 
     std::string type = json_parse::ExtractStringField(value, Names::type);
     if (type == Names::list) {
-      Ensure(value.HasMember(Names::element_id), std::string(__FUNCTION__) +
-                                                     ": !value.HasMember(\"element-id\") for field '" +
-                                                     std::string(field_name) + "'");
+      Ensure(
+          value.HasMember(Names::element_id),
+          std::string(__FUNCTION__) + ": !value.HasMember(\"element-id\") for field '" + std::string(field_name) + "'");
       int32_t element_field_id = json_parse::ExtractInt32Field(value, Names::element_id);
 
       Ensure(value.HasMember(Names::element_required), std::string(__FUNCTION__) +
@@ -543,9 +543,8 @@ std::shared_ptr<const types::Type> JsonToDataType(const rapidjson::Value& value,
                                                            std::string(field_name) + "'");
       bool element_required = json_parse::ExtractBooleanField(value, Names::element_required);
 
-      Ensure(value.HasMember(Names::element), std::string(__FUNCTION__) +
-                                                  ": !value.HasMember(\"element\") for field '" +
-                                                  std::string(field_name) + "'");
+      Ensure(value.HasMember(Names::element),
+             std::string(__FUNCTION__) + ": !value.HasMember(\"element\") for field '" + std::string(field_name) + "'");
 
       std::shared_ptr<const types::Type> element_type = JsonToDataType(value[Names::element], field_name);
 
