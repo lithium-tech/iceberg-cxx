@@ -596,25 +596,19 @@ struct ExtractedSchemas {
 };
 
 ExtractedSchemas ExtractSchemas(const rapidjson::Value& document, int32_t current_schema_id) {
-  static constexpr const char* field_name = Names::schemas;
-  Ensure(document.HasMember(field_name),
-         std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(field_name) + ")");
+  Ensure(document.HasMember(Names::schemas),
+         std::string(__FUNCTION__) + ": !document.HasMember(" + std::string(Names::schemas) + ")");
 
   ExtractedSchemas result;
-  ProcessArray(document[field_name], [&](const rapidjson::Value& elem) mutable {
-    int32_t schema_id = -1;
-    if (elem.IsObject() && elem.HasMember(Names::schema_id) && elem[Names::schema_id].IsInt()) {
-      schema_id = elem[Names::schema_id].GetInt();
-    }
+  ProcessArray(document[Names::schemas], [&](const rapidjson::Value& elem) mutable {
+    int32_t schema_id = json_parse::ExtractInt32Field(elem, Names::schema_id);
     if (schema_id == current_schema_id) {
       result.schemas.emplace_back(JsonToSchema(elem));
     } else {
       try {
         result.schemas.emplace_back(JsonToSchema(elem));
       } catch (const std::exception& e) {
-        if (schema_id != -1) {
-          result.unparsed_historical_schema_errors[schema_id] = e.what();
-        }
+        result.unparsed_historical_schema_errors[schema_id] = e.what();
       }
     }
   });
@@ -942,9 +936,7 @@ std::shared_ptr<Schema> TableMetadataV2::GetSchema(int32_t schema_id) const {
   throw std::runtime_error("Schema with ID " + std::to_string(schema_id) + " not found in table metadata");
 }
 
-std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const {
-  return GetSchema(current_schema_id);
-}
+std::shared_ptr<Schema> TableMetadataV2::GetCurrentSchema() const { return GetSchema(current_schema_id); }
 
 std::shared_ptr<PartitionSpec> TableMetadataV2::GetCurrentPartitionSpec() const {
   for (const auto& partition_spec : partition_specs) {
